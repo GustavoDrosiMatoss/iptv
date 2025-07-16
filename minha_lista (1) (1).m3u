@@ -1,0 +1,17 @@
+
+#EXTM3U
+
+#EXTINF:-1 tvg-id="globo" tvg-name="Globo" tvg-logo="https://exemplo.com/logos/globo.png" group-title="Canais Abertos",Globo
+http://exemplo.com/streams/globo.m3u8
+
+#EXTINF:-1 tvg-id="sportv" tvg-name="SporTV" tvg-logo="https://exemplo.com/logos/sportv.png" group-title="Esportes",SporTV
+http://exemplo.com/streams/sportv.m3u8
+
+#EXTINF:-1 tvg-id="hbo" tvg-name="HBO" tvg-logo="https://exemplo.com/logos/hbo.png" group-title="Filmes e Séries",HBO
+http://exemplo.com/streams/hbo.m3u8
+
+#EXTINF:-1 tvg-id="discovery" tvg-name="Discovery" tvg-logo="https://exemplo.com/logos/discovery.png" group-title="Documentários",Discovery Channel
+http://exemplo.com/streams/discovery.m3u8
+
+#EXTINF:-1 tvg-id="cartoon" tvg-name="Cartoon Network" tvg-logo="https://exemplo.com/logos/cartoon.png" group-title="Infantis",Cartoon Network
+http://exemplo.com/streams/cartoon.m3u8
