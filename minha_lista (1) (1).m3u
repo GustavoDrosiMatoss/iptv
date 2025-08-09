@@ -1,16 +1,18 @@
-
 local ativarEvento = false
-local ativarDungeon = false  -- variável para Auto Dungeon
+local ativarDungeon = false
 local andarEntrada = 10
 local andarSaida = 1
 local currentFloor = 0
 local configFile = "allan_hub_castelo.json"
 
+local dungeonID = "" -- nova variável para armazenar o ID da dungeon como string
+
 -- Função para salvar configuração
 local function salvarConfig()
     local data = {
         entrada = andarEntrada,
-        saida = andarSaida
+        saida = andarSaida,
+        dungeonID = dungeonID
     }
     writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
     print("💾 Configuração salva!")
@@ -23,7 +25,8 @@ local function carregarConfig()
         local data = game:GetService("HttpService"):JSONDecode(content)
         andarEntrada = tonumber(data.entrada) or andarEntrada
         andarSaida = tonumber(data.saida) or andarSaida
-        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
+        dungeonID = tostring(data.dungeonID or "")
+        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida .. " | DungeonID: " .. dungeonID)
     else
         salvarConfig()
     end
@@ -38,7 +41,7 @@ local Window = Fluent:CreateWindow({
     Title = "Allan Hub",
     SubTitle = "By Allan",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 320),
+    Size = UDim2.fromOffset(580, 400),
     Acrylic = true,
     Theme = "dark",
     MinimizeKey = Enum.KeyCode.End
@@ -136,6 +139,26 @@ local function criarDungeon()
     print("✔ Dungeon criada.")
 end
 
+-- Função para iniciar a dungeon com Dungeon ID variável
+local function iniciarDungeon()
+    if dungeonID == "" then
+        print("⚠️ Por favor, insira o ID da dungeon antes de iniciar!")
+        return
+    end
+    local args = {
+        [1] = {
+            [1] = {
+                ["Dungeon"] = tonumber(dungeonID),
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("▶ Dungeon iniciada com ID: " .. dungeonID)
+end
+
 -- Toggle para ativar/desativar Auto Castelo
 t:AddToggle("ToggleAutoCastelo", {
     Title = "Auto Castelo",
@@ -152,16 +175,47 @@ t:AddToggle("ToggleAutoCastelo", {
     end
 })
 
+-- Caixa de texto para inserir o ID da dungeon
+t:AddTextbox("DungeonIDInput", {
+    Title = "ID da Dungeon",
+    Default = dungeonID,
+    Placeholder = "Insira o ID da dungeon aqui",
+    Numeric = true,
+    Callback = function(value)
+        dungeonID = value
+        salvarConfig()
+        print("ID da Dungeon atualizado para: " .. dungeonID)
+    end
+})
+
+-- Botão para criar dungeon manualmente
+t:AddButton("CriarDungeonBtn", {
+    Text = "Criar Dungeon",
+    Callback = function()
+        criarDungeon()
+    end
+})
+
+-- Botão para iniciar dungeon manualmente
+t:AddButton("IniciarDungeonBtn", {
+    Text = "Iniciar Dungeon",
+    Callback = function()
+        iniciarDungeon()
+    end
+})
+
 -- Toggle para ativar/desativar Auto Dungeon
 t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon",
-    Description = "Ativa ou desativa a criação automática de Dungeon",
+    Description = "Ativa ou desativa a criação e início automático de Dungeon com o ID informado",
     Default = false,
     Callback = function(state)
         ativarDungeon = state
         if ativarDungeon then
             print("✅ Auto Dungeon ativado!")
             criarDungeon()
+            task.wait(1) -- espera um pouco para garantir criação
+            iniciarDungeon()
         else
             print("❌ Auto Dungeon desativado!")
         end
@@ -191,7 +245,6 @@ toggleButton.MouseButton1Click:Connect(function()
     toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100, 100, 255) or Color3.fromRGB(255, 100, 100)
     toggleButton.Text = hubVisivel and "🔼" or "🔽"
 
-    -- Reativar entrada e dungeon se necessário
     if hubVisivel then
         if ativarEvento then
             entrarCastelo()
@@ -199,7 +252,9 @@ toggleButton.MouseButton1Click:Connect(function()
         end
         if ativarDungeon then
             criarDungeon()
-            print("🔁 Reativando criação da dungeon após reabrir o Hub")
+            task.wait(1)
+            iniciarDungeon()
+            print("🔁 Reativando criação e início da dungeon após reabrir o Hub")
         end
     end
 end)
@@ -221,5 +276,3 @@ task.spawn(function()
 end)
 
 
-
-        
