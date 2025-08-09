@@ -5,14 +5,13 @@ local andarSaida = 1
 local currentFloor = 0
 local configFile = "allan_hub_castelo.json"
 
-local dungeonID = nil -- agora será detectado automaticamente
+local dungeonID = "" -- inicializado vazio, será detectado automaticamente
 
 -- Função para salvar configuração
 local function salvarConfig()
     local data = {
         entrada = andarEntrada,
         saida = andarSaida
-        -- Não salva mais dungeonID pois será detectado automaticamente
     }
     writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
     print("💾 Configuração salva!")
@@ -35,27 +34,23 @@ carregarConfig()
 
 -- Função para detectar o DungeonID automaticamente
 local function detectarDungeonID()
-    -- Exemplo comum: variável no Player chamada "DungeonID" ou similar
     local player = game.Players.LocalPlayer
     if player:FindFirstChild("DungeonID") then
         local id = tonumber(player.DungeonID.Value)
         if id then
-            return id
+            return tostring(id)
         end
     end
 
-    -- Alternativa: detectar no workspace ou ReplicatedStorage se existir algo parecido
-    -- Exemplo fictício, ajuste conforme seu jogo
     local dungeonFolder = workspace:FindFirstChild("CurrentDungeon")
     if dungeonFolder and dungeonFolder:FindFirstChild("ID") then
         local id = tonumber(dungeonFolder.ID.Value)
         if id then
-            return id
+            return tostring(id)
         end
     end
 
-    -- Se não encontrar, retorna nil
-    return nil
+    return ""
 end
 
 -- Carregar Fluent GUI
@@ -157,14 +152,14 @@ end
 
 local function iniciarDungeon()
     dungeonID = detectarDungeonID()
-    if not dungeonID then
+    if dungeonID == "" then
         print("⚠️ Não foi possível detectar o ID da dungeon. Aguarde até estar dentro da dungeon.")
         return
     end
     local args = {
         [1] = {
             [1] = {
-                ["Dungeon"] = dungeonID,
+                ["Dungeon"] = tonumber(dungeonID),
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Start"
             },
