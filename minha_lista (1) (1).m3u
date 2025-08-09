@@ -1,3 +1,4 @@
+
 local ativarEvento = false
 local ativarDungeon = false
 local andarEntrada = 10
@@ -5,7 +6,7 @@ local andarSaida = 1
 local currentFloor = 0
 local configFile = "allan_hub_castelo.json"
 
-local dungeonID = "" -- nova variável para armazenar o ID da dungeon como string
+local dungeonID = "" -- variável para armazenar o ID da dungeon
 
 -- Função para salvar configuração
 local function salvarConfig()
@@ -32,7 +33,6 @@ local function carregarConfig()
     end
 end
 
--- Carregar configuração ao iniciar
 carregarConfig()
 
 -- Carregar Fluent GUI
@@ -41,7 +41,7 @@ local Window = Fluent:CreateWindow({
     Title = "Allan Hub",
     SubTitle = "By Allan",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 400),
+    Size = UDim2.fromOffset(580, 400), -- Janela maior para comportar input e botões
     Acrylic = true,
     Theme = "dark",
     MinimizeKey = Enum.KeyCode.End
@@ -52,19 +52,16 @@ local t = Window:AddTab({
     Icon = "home"
 })
 
--- Lista de andares (entrada)
 local andaresEntrada = {}
 for i = 10, 110, 10 do
     table.insert(andaresEntrada, tostring(i))
 end
 
--- Lista de andares (saída)
 local andaresSaida = {}
 for i = 1, 117 do
     table.insert(andaresSaida, tostring(i))
 end
 
--- Dropdown para escolher andar de entrada
 t:AddDropdown("AndarEntrada", {
     Title = "Selecionar Andar de Entrada",
     Values = andaresEntrada,
@@ -77,7 +74,6 @@ t:AddDropdown("AndarEntrada", {
     end
 })
 
--- Dropdown para escolher andar de saída
 t:AddDropdown("AndarSaida", {
     Title = "Selecionar Andar de Saída",
     Values = andaresSaida,
@@ -90,7 +86,6 @@ t:AddDropdown("AndarSaida", {
     end
 })
 
--- Função para entrar no castelo
 local function entrarCastelo()
     local args = {
         [1] = {
@@ -107,7 +102,6 @@ local function entrarCastelo()
     print("Entrando no andar " .. andarEntrada)
 end
 
--- Função para sair do castelo
 local function sairCastelo()
     local args = {
         [1] = {
@@ -124,7 +118,6 @@ local function sairCastelo()
     print("Saindo no andar " .. andarSaida)
 end
 
--- Função para criar a dungeon
 local function criarDungeon()
     local args = {
         [1] = {
@@ -139,7 +132,6 @@ local function criarDungeon()
     print("✔ Dungeon criada.")
 end
 
--- Função para iniciar a dungeon com Dungeon ID variável
 local function iniciarDungeon()
     if dungeonID == "" then
         print("⚠️ Por favor, insira o ID da dungeon antes de iniciar!")
@@ -159,7 +151,6 @@ local function iniciarDungeon()
     print("▶ Dungeon iniciada com ID: " .. dungeonID)
 end
 
--- Toggle para ativar/desativar Auto Castelo
 t:AddToggle("ToggleAutoCastelo", {
     Title = "Auto Castelo",
     Description = "Ativa ou desativa o Auto Castelo Infernal",
@@ -175,11 +166,10 @@ t:AddToggle("ToggleAutoCastelo", {
     end
 })
 
--- Caixa de texto para inserir o ID da dungeon
-t:AddTextbox("DungeonIDInput", {
+t:AddInput("DungeonIDInput", {
     Title = "ID da Dungeon",
-    Default = dungeonID,
     Placeholder = "Insira o ID da dungeon aqui",
+    Default = dungeonID,
     Numeric = true,
     Callback = function(value)
         dungeonID = value
@@ -188,7 +178,6 @@ t:AddTextbox("DungeonIDInput", {
     end
 })
 
--- Botão para criar dungeon manualmente
 t:AddButton("CriarDungeonBtn", {
     Text = "Criar Dungeon",
     Callback = function()
@@ -196,7 +185,6 @@ t:AddButton("CriarDungeonBtn", {
     end
 })
 
--- Botão para iniciar dungeon manualmente
 t:AddButton("IniciarDungeonBtn", {
     Text = "Iniciar Dungeon",
     Callback = function()
@@ -204,7 +192,6 @@ t:AddButton("IniciarDungeonBtn", {
     end
 })
 
--- Toggle para ativar/desativar Auto Dungeon
 t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon",
     Description = "Ativa ou desativa a criação e início automático de Dungeon com o ID informado",
@@ -214,7 +201,7 @@ t:AddToggle("ToggleAutoDungeon", {
         if ativarDungeon then
             print("✅ Auto Dungeon ativado!")
             criarDungeon()
-            task.wait(1) -- espera um pouco para garantir criação
+            task.wait(1)
             iniciarDungeon()
         else
             print("❌ Auto Dungeon desativado!")
@@ -222,7 +209,6 @@ t:AddToggle("ToggleAutoDungeon", {
     end
 })
 
--- Botão flutuante para mostrar/esconder Hub
 local floatingGui = Instance.new("ScreenGui")
 floatingGui.Name = "AllanHubFloating"
 floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
@@ -259,7 +245,6 @@ toggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Verifica andar atual e sai automaticamente
 task.spawn(function()
     while task.wait(1) do
         if ativarEvento then
@@ -274,5 +259,4 @@ task.spawn(function()
         end
     end
 end)
-
 
