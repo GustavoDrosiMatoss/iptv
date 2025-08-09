@@ -1,9 +1,9 @@
 -- Carrega a Fluent GUI
-local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/source.lua"))()
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
-local Window = Fluent:CreateWindow({
-    Title = "Allan Hub - Dungeon",
-    SubTitle = "Controle de Dungeon Automático",
+local janela = Fluent:CreateWindow({
+    Title = "Allan Hub - Arise",
+    SubTitle = "Dungeon Automática",
     TabWidth = 160,
     Size = UDim2.fromOffset(520, 350),
     Acrylic = true,
@@ -11,14 +11,23 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Aba principal
-local Tab = Window:AddTab({ Title = "Dungeon", Icon = "swords" })
+local guia = janela:AddTab({ Title = "Dungeon", Icon = "sword" })
 
--------------------------------------------------
--- Funções principais
--------------------------------------------------
+-- Função: Ir para o Castelo
+local function irParaCastelo()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "Teleport",
+                ["Place"] = "Castle"
+            }
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("✔ Indo para o Castelo...")
+end
 
--- Função para criar a Dungeon
+-- Função: Criar Dungeon
 local function criarDungeon()
     local args = {
         [1] = {
@@ -26,29 +35,14 @@ local function criarDungeon()
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Create"
             },
-            [2] = ""
+            [2] = "\12"
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
 end
 
--- Função para iniciar a Dungeon
-local function iniciarDungeon()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Start"
-            },
-            [2] = ""
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("▶ Dungeon iniciada.")
-end
-
--- Função para comprar ticket
+-- Função: Comprar Ticket
 local function comprarTicket()
     local args = {
         [1] = {
@@ -61,82 +55,42 @@ local function comprarTicket()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("🎟 Ticket comprado.")
+    print("✔ Ticket comprado.")
 end
 
--- Função para checar se ainda há mobs vivos
+-- Função: Verificar se ainda existem mobs vivos
 local function mobsVivos()
-    local enemiesFolder = workspace:FindFirstChild("__Enemies")
-    if enemiesFolder and #enemiesFolder:GetChildren() > 0 then
-        return true
+    local mobsFolder = workspace:FindFirstChild("__Enemies")
+    if mobsFolder then
+        for _, mob in pairs(mobsFolder:GetChildren()) do
+            if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                return true
+            end
+        end
     end
     return false
 end
 
--- Função do castelo infernal
-local function entrarCastelo()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "EnterCastle",
-                ["Action"] = "Join"
-            },
-            [2] = ""
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("🏰 Entrando no Castelo Infernal.")
+-- Função principal de automação
+local function iniciarDungeonAutomatica()
+    irParaCastelo()
+    task.wait(3)
+    criarDungeon()
+
+    -- Espera até não existir mais mobs vivos
+    print("⏳ Aguardando todos os mobs serem eliminados...")
+    repeat
+        task.wait(2)
+    until not mobsVivos()
+
+    print("✔ Todos os mobs mortos. Reiniciando Dungeon...")
+    comprarTicket()
+    criarDungeon()
 end
 
--------------------------------------------------
--- Botões da GUI
--------------------------------------------------
-
-Tab:AddButton({
-    Title = "Criar + Iniciar Dungeon",
-    Description = "Cria e inicia a Dungeon automaticamente.",
-    Callback = function()
-        criarDungeon()
-        task.wait(2)
-        iniciarDungeon()
-    end
+-- Botão no Fluent
+guia:AddButton({
+    Title = "Iniciar Dungeon Automática",
+    Description = "Vai para o castelo, cria dungeon e repete só quando não tiver mobs.",
+    Callback = iniciarDungeonAutomatica
 })
-
-Tab:AddButton({
-    Title = "Comprar Ticket",
-    Description = "Compra ticket para Dungeon com Gems.",
-    Callback = function()
-        comprarTicket()
-    end
-})
-
-Tab:AddButton({
-    Title = "Entrar no Castelo Infernal",
-    Description = "Teleporta para o Castelo Infernal.",
-    Callback = function()
-        entrarCastelo()
-    end
-})
-
-Tab:AddButton({
-    Title = "Loop Automático (Aguardar Mobs)",
-    Description = "Cria, inicia e espera até matar todos os mobs antes de repetir.",
-    Callback = function()
-        while true do
-            criarDungeon()
-            task.wait(2)
-            iniciarDungeon()
-
-            print("⚔ Matando mobs...")
-            repeat
-                task.wait(1)
-            until not mobsVivos()
-
-            print("✔ Todos os mobs mortos. Reiniciando...")
-            comprarTicket()
-        end
-    end
-})
-
-Window:SelectTab(1)
-Fluent:Notify({ Title = "Allan Hub", Content = "Script carregado com sucesso!", Duration = 5 })
