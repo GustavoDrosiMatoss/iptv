@@ -1,18 +1,4 @@
-Claro, Allan! Aqui está o script completo e corrigido, com o sistema de ataque automático ao mob mais próximo já integrado e funcional, incluindo o botão no Fluent GUI para ativar/desativar.
 
----
-
-🛠️ Alterações incluídas:
-- atacarMob como variável global
-- Funções mobMaisProximo() e atacarMobProximo()
-- Loop de ataque automático
-- Botão no Fluent GUI: "Ataque Automático"
-
----
-
-📄 Script completo com ataque automático:
-
-`lua
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -21,286 +7,284 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local currentFloor = 0
 
-local ativarEvento = false -- Auto Castelo
-local ativarDungeon = false -- Auto Dungeon
+local ativarEvento = false
+local ativarDungeon = false
 local dungeonAtiva = false
 local dungeonFinalizada = false
-local atacarMob = false -- Auto Ataque
+local teleportarMob = false
 
 local andarEntrada = 10
 local andarSaida = 1
 local configFile = "allanhubcastelo.json"
-local mobsFolder = workspace:FindFirstChild("Enemies") or workspace:FindFirstChild("Npcs")
+
+-- Detecta pasta de mobs automaticamente
+local mobsFolder
+for _, obj in pairs(workspace:GetChildren()) do
+	if obj:IsA("Folder") then
+		for _, mob in pairs(obj:GetChildren()) do
+			if mob:FindFirstChild("Humanoid") and mob:FindFirstChild("HumanoidRootPart") then
+				mobsFolder = obj
+				break
+			end
+		end
+	end
+	if mobsFolder then break end
+end
+
 if not mobsFolder then
-    warn("❌ Pasta de inimigos não encontrada. Verifique se 'Enemies' ou 'Npcs' existe no Workspace.")
-    return
+	warn("❌ Nenhuma pasta de mobs encontrada no workspace.")
+	return
 end
 
 -- Função para salvar configuração
 local function salvarConfig()
-    local data = {
-        entrada = andarEntrada,
-        saida = andarSaida
-    }
-    writefile(configFile, HttpService:JSONEncode(data))
-    print("💾 Configuração salva!")
+	local data = {
+		entrada = andarEntrada,
+		saida = andarSaida
+	}
+	writefile(configFile, HttpService:JSONEncode(data))
+	print("💾 Configuração salva!")
 end
 
 -- Função para carregar configuração
 local function carregarConfig()
-    if isfile(configFile) then
-        local content = readfile(configFile)
-        local data = HttpService:JSONDecode(content)
-        andarEntrada = tonumber(data.entrada) or andarEntrada
-        andarSaida = tonumber(data.saida) or andarSaida
-        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
-    else
-        salvarConfig()
-    end
+	if isfile(configFile) then
+		local content = readfile(configFile)
+		local data = HttpService:JSONDecode(content)
+		andarEntrada = tonumber(data.entrada) or andarEntrada
+		andarSaida = tonumber(data.saida) or andarSaida
+		print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
+	else
+		salvarConfig()
+	end
 end
 
 carregarConfig()
 
 -- Funções do Castelo
 local function entrarCastelo()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Check"] = true,
-                ["Floor"] = tostring(andarEntrada),
-                ["Event"] = "CastleAction",
-                ["Action"] = "Join"
-            },
-            [2] = "\12"
-        }
-    }
-    ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("Entrando no andar " .. andarEntrada)
+	local args = {
+		[1] = {
+			[1] = {
+				["Check"] = true,
+				["Floor"] = tostring(andarEntrada),
+				["Event"] = "CastleAction",
+				["Action"] = "Join"
+		 },
+		 [2] = "\12"
+		}
+	}
+	ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+	print("Entrando no andar " .. andarEntrada)
 end
 
 local function sairCastelo()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Check"] = true,
-                ["Floor"] = tostring(andarSaida),
-                ["Event"] = "CastleAction",
-                ["Action"] = "LeaveDungeon"
-            },
-            [2] = "\12"
-        }
-    }
-    ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("Saindo no andar " .. andarSaida)
+	local args = {
+		[1] = {
+			[1] = {
+				["Check"] = true,
+				["Floor"] = tostring(andarSaida),
+				["Event"] = "CastleAction",
+				["Action"] = "LeaveDungeon"
+		 },
+		 [2] = "\12"
+		}
+	}
+	ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+	print("Saindo no andar " .. andarSaida)
 end
 
 -- Funções da Dungeon
 local function criarEIniciarDungeon()
-    local createArgs = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\12"
-        }
-    }
-    ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(createArgs))
-    print("✔ Dungeon criada.")
+	local createArgs = {
+		[1] = {
+			[1] = {
+				["Event"] = "DungeonAction",
+				["Action"] = "Create"
+		 },
+		 [2] = "\12"
+		}
+	}
+	ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(createArgs))
+	print("✔ Dungeon criada.")
 
-    task.wait(1)
+	task.wait(1)
 
-    local startArgs = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\12"
-        }
-    }
-    ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
-    print("▶ Dungeon iniciada.")
+	local startArgs = {
+		[1] = {
+			[1] = {
+				["Event"] = "DungeonAction",
+				["Action"] = "Start"
+		 },
+		 [2] = "\12"
+		}
+	}
+	ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
+	print("▶ Dungeon iniciada.")
 
-    dungeonAtiva = true
-    dungeonFinalizada = false
+	dungeonAtiva = true
+	dungeonFinalizada = false
 end
 
 local function comprarTicket()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Type"] = "Gems",
-                ["Event"] = "DungeonAction",
-                ["Action"] = "BuyTicket"
-            },
-            [2] = "\12"
-        }
-    }
-    ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("🎟 Ticket comprado para nova dungeon.")
-    dungeonFinalizada = false
+	local args = {
+		[1] = {
+			[1] = {
+				["Type"] = "Gems",
+				["Event"] = "DungeonAction",
+				["Action"] = "BuyTicket"
+		 },
+		 [2] = "\12"
+		}
+	}
+	ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+	print("🎟 Ticket comprado para nova dungeon.")
+	dungeonFinalizada = false
 end
 
 -- Verificar mobs vivos
 local function mobsVivos()
-    for _, mob in pairs(mobsFolder:GetChildren()) do
-        if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-            return true
-        end
-    end
-    return false
+	for _, mob in pairs(mobsFolder:GetChildren()) do
+		if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+			return true
+		end
+	end
+	return false
 end
-
--- Encontrar mob mais próximo
-local function mobMaisProximo()
-    local menorDistancia = math.huge
-    local mobAlvo = nil
-
-    for _, mob in pairs(mobsFolder:GetChildren()) do
-        local humanoid = mob:FindFirstChild("Humanoid")
-        local root = mob:FindFirstChild("HumanoidRootPart")
-        if humanoid and humanoid.Health > 0 and root then
-            local distancia = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
-            if distancia < menorDistancia then
-                menorDistancia = distancia
-                mobAlvo = root
-            end
-        end
-    end
-
-    return mobAlvo
-end
-
--- Atacar mob mais próximo
-local function atacarMobProximo()
-    local alvo = mobMaisProximo()
-    if not alvo then return end
-
-    local distancia = (player.Character.HumanoidRootPart.Position - alvo.Position).Magnitude
-    if distancia <= 10 then
-        local args = {
-            [1] = {
-                [1] = {
-                    ["Event"] = "CombatEvent",
-                    ["Action"] = "Attack"
-                },
-                [2] = "\12"
-            }
-        }
-        ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        print("💥 Ataque automático executado!")
-    end
-end
-
--- Loop de ataque automático
-task.spawn(function()
-    while task.wait(0.3) do
-        if atacarMob then
-            atacarMobProximo()
-        end
-    end
-end)
 
 -- Monitorar mobs vivos
 local mobsEstaoVivos = false
 RunService.Heartbeat:Connect(function()
-    local temMobVivo = mobsVivos()
-    if mobsEstaoVivos ~= temMobVivo then
-        mobsEstaoVivos = temMobVivo
-        if temMobVivo then
-            print("⚔️ Mobs vivos detectados!")
-        else
-            print("✅ Todos os mobs foram eliminados!")
-            if dungeonAtiva then
-                dungeonFinalizada = true
-                dungeonAtiva = false
-                print("Dungeon finalizada detectada via mobs mortos!")
-                comprarTicket()
-            end
-        end
-    end
+	local temMobVivo = mobsVivos()
+	if mobsEstaoVivos ~= temMobVivo then
+		mobsEstaoVivos = temMobVivo
+		if temMobVivo then
+			print("⚔️ Mobs vivos detectados!")
+		else
+			print("✅ Todos os mobs foram eliminados!")
+			if dungeonAtiva then
+				dungeonFinalizada = true
+				dungeonAtiva = false
+				print("Dungeon finalizada detectada via mobs mortos!")
+				comprarTicket()
+			end
+		end
+	end
 end)
 
 -- Monitorar andar atual
 task.spawn(function()
-    while task.wait(1) do
-        if ativarEvento then
-            local floorValue = player:FindFirstChild("CurrentFloor")
-            if floorValue then
-                local floor = tonumber(floorValue.Value)
-                if floor ~= currentFloor then
-                    currentFloor = floor
-                    print("Andar atual: " .. currentFloor)
-                    if currentFloor == andarSaida then
-                        sairCastelo()
-                    end
-                end
-            end
-        end
-    end
+	while task.wait(1) do
+		if ativarEvento then
+			local floorValue = player:FindFirstChild("CurrentFloor")
+			if floorValue then
+				local floor = tonumber(floorValue.Value)
+				if floor ~= currentFloor then
+					currentFloor = floor
+					print("Andar atual: " .. currentFloor)
+					if currentFloor == andarSaida then
+						sairCastelo()
+					end
+				end
+			end
+		end
+	end
 end)
 
 -- Loop Auto Dungeon
 task.spawn(function()
-    while task.wait(5) do
-        if ativarDungeon then
-            if not dungeonAtiva and dungeonFinalizada then
-                task.wait(2)
-                criarEIniciarDungeon()
-            elseif not dungeonAtiva and not dungeonFinalizada then
-                criarEIniciarDungeon()
-            end
-        else
-            dungeonAtiva = false
-            dungeonFinalizada = false
-        end
-    end
+	while task.wait(5) do
+		if ativarDungeon then
+			if not dungeonAtiva and dungeonFinalizada then
+				task.wait(2)
+				criarEIniciarDungeon()
+			elseif not dungeonAtiva and not dungeonFinalizada then
+				criarEIniciarDungeon()
+			end
+		else
+			dungeonAtiva = false
+			dungeonFinalizada = false
+		end
+	end
+end)
+
+-- Teleporte automático entre mobs vivos
+local indexMob = 1
+local tempoUltimoTeleport = 0
+local intervaloTeleport = 2
+
+local function getMobsVivos()
+	local vivos = {}
+	for _, mob in pairs(mobsFolder:GetChildren()) do
+		if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 and mob:FindFirstChild("HumanoidRootPart") then
+			table.insert(vivos, mob)
+		end
+	end
+	return vivos
+end
+
+local function teleportarParaMob()
+	local mobs = getMobsVivos()
+	if #mobs == 0 then return end
+
+	local mob = mobs[indexMob]
+	player.Character:MoveTo(mob.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+
+	indexMob = indexMob + 1
+	if indexMob > #mobs then
+		indexMob = 1
+	end
+end
+
+RunService.RenderStepped:Connect(function()
+	if teleportarMob and tick() - tempoUltimoTeleport >= intervaloTeleport then
+		teleportarParaMob()
+		tempoUltimoTeleport = tick()
+	end
 end)
 
 -- GUI Fluent
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub",
-    SubTitle = "By Allan",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(580, 320),
-    Acrylic = true,
-    Theme = "dark",
-    MinimizeKey = Enum.KeyCode.End
+	Title = "Allan Hub",
+	SubTitle = "By Allan",
+	TabWidth = 160,
+	Size = UDim2.fromOffset(580, 320),
+	Acrylic = true,
+	Theme = "dark",
+	MinimizeKey = Enum.KeyCode.End
 })
 
 local t = Window:AddTab({
-    Title = "Auto Castelo & Dungeon",
-    Icon = "home"
+	Title = "Auto Castelo & Dungeon",
+	Icon = "home"
 })
 
 local andaresEntrada = {}
 for i = 10, 110, 10 do
-    table.insert(andaresEntrada, tostring(i))
+	table.insert(andaresEntrada, tostring(i))
 end
 
 local andaresSaida = {}
 for i = 1, 117 do
-    table.insert(andaresSaida, tostring(i))
+	table.insert(andaresSaida, tostring(i))
 end
 
 t:AddDropdown("AndarEntrada", {
-    Title = "Selecionar Andar de Entrada",
-    Values = andaresEntrada,
-    Multi = false,
-    Default = tostring(andarEntrada),
-    Callback = function(value)
-        andarEntrada = tonumber(value)
-        salvarConfig()
-        print("Andar de entrada selecionado: " .. andarEntrada)
-    end
+	Title = "Selecionar Andar de Entrada",
+	Values = andaresEntrada,
+	Multi = false,
+	Default = tostring(andarEntrada),
+	Callback = function(value)
+		andarEntrada = tonumber(value)
+		salvarConfig()
+		print("Andar de entrada selecionado: " .. andarEntrada)
+	end
 })
 
 t:AddDropdown("AndarSaida", {
-    Title = "Selecionar Andar de Saída",
-    Values = andaresSaida,
-    Multi = false,
-    Default = tostring(andarSaida),
-    Callback = function(value)
-        andarSaida = tonumber(value
+	Title = "Selecionar Andar de Saída",
+	Values = andaresSaida,
+	Multi = false,
+	Default = tostring(andarSaida),
+	Callback = function(value)
