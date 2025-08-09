@@ -1,4 +1,3 @@
-
 local ativarEvento = false
 local ativarDungeon = false
 local andarEntrada = 10
@@ -6,14 +5,11 @@ local andarSaida = 1
 local currentFloor = 0
 local configFile = "allan_hub_castelo.json"
 
-local dungeonID = "" -- variável para armazenar o ID da dungeon
-
 -- Função para salvar configuração
 local function salvarConfig()
     local data = {
         entrada = andarEntrada,
-        saida = andarSaida,
-        dungeonID = dungeonID
+        saida = andarSaida
     }
     writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
     print("💾 Configuração salva!")
@@ -26,8 +22,7 @@ local function carregarConfig()
         local data = game:GetService("HttpService"):JSONDecode(content)
         andarEntrada = tonumber(data.entrada) or andarEntrada
         andarSaida = tonumber(data.saida) or andarSaida
-        dungeonID = tostring(data.dungeonID or "")
-        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida .. " | DungeonID: " .. dungeonID)
+        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
     else
         salvarConfig()
     end
@@ -35,13 +30,13 @@ end
 
 carregarConfig()
 
--- Carregar Fluent GUI
+-- Fluent GUI
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub",
-    SubTitle = "By Allan",
+    Title = "Allan Hub - Arise",
+    SubTitle = "Dungeon Automática",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 400), -- Janela maior para comportar input e botões
+    Size = UDim2.fromOffset(580, 400),
     Acrylic = true,
     Theme = "dark",
     MinimizeKey = Enum.KeyCode.End
@@ -130,17 +125,15 @@ local function criarDungeon()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
+
+    task.wait(1)
+    iniciarDungeon()
 end
 
 local function iniciarDungeon()
-    if dungeonID == "" then
-        print("⚠️ Por favor, insira o ID da dungeon antes de iniciar!")
-        return
-    end
     local args = {
         [1] = {
             [1] = {
-                ["Dungeon"] = tonumber(dungeonID),
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Start"
             },
@@ -148,7 +141,50 @@ local function iniciarDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("▶ Dungeon iniciada com ID: " .. dungeonID)
+    print("▶ Dungeon iniciada.")
+end
+
+local function resetarDungeon()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "DungeonAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("♻️ Dungeon resetada (ticket comprado).")
+end
+
+local function mobsVivos()
+    local mobsFolder = workspace:FindFirstChild("__Enemies")
+    if mobsFolder then
+        for _, mob in pairs(mobsFolder:GetChildren()) do
+            if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function autoDungeonLoop()
+    while ativarDungeon do
+        criarDungeon()
+
+        print("⏳ Aguardando mobs serem eliminados...")
+        repeat
+            task.wait(3)
+        until not mobsVivos()
+
+        print("✔ Todos os mobs mortos, resetando dungeon...")
+        resetarDungeon()
+
+        task.wait(3) -- espera antes de começar a próxima
+    end
 end
 
 t:AddToggle("ToggleAutoCastelo", {
@@ -166,49 +202,22 @@ t:AddToggle("ToggleAutoCastelo", {
     end
 })
 
-t:AddInput("DungeonIDInput", {
-    Title = "ID da Dungeon",
-    Placeholder = "Insira o ID da dungeon aqui",
-    Default = dungeonID,
-    Numeric = true,
-    Callback = function(value)
-        dungeonID = value
-        salvarConfig()
-        print("ID da Dungeon atualizado para: " .. dungeonID)
-    end
-})
-
-t:AddButton("CriarDungeonBtn", {
-    Text = "Criar Dungeon",
-    Callback = function()
-        criarDungeon()
-    end
-})
-
-t:AddButton("IniciarDungeonBtn", {
-    Text = "Iniciar Dungeon",
-    Callback = function()
-        iniciarDungeon()
-    end
-})
-
 t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon",
-    Description = "Ativa ou desativa a criação e início automático de Dungeon com o ID informado",
+    Description = "Ativa ou desativa o ciclo automático de criar, iniciar e resetar dungeon",
     Default = false,
     Callback = function(state)
         ativarDungeon = state
         if ativarDungeon then
             print("✅ Auto Dungeon ativado!")
-            criarDungeon()
-            task.wait(1)
-            iniciarDungeon()
+            task.spawn(autoDungeonLoop)
         else
             print("❌ Auto Dungeon desativado!")
         end
     end
 })
 
+-- Botão flutuante para abrir/fechar o Hub
 local floatingGui = Instance.new("ScreenGui")
 floatingGui.Name = "AllanHubFloating"
 floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
@@ -237,10 +246,7 @@ toggleButton.MouseButton1Click:Connect(function()
             print("🔁 Reativando entrada no castelo após reabrir o Hub")
         end
         if ativarDungeon then
-            criarDungeon()
-            task.wait(1)
-            iniciarDungeon()
-            print("🔁 Reativando criação e início da dungeon após reabrir o Hub")
+            print("🔁 Continuando Auto Dungeon após reabrir o Hub")
         end
     end
 end)
@@ -259,4 +265,3 @@ task.spawn(function()
         end
     end
 end)
-
