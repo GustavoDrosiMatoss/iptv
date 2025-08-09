@@ -113,6 +113,20 @@ local function sairCastelo()
     print("Saindo no andar " .. andarSaida)
 end
 
+local function iniciarDungeon()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("▶ Tentando iniciar a dungeon.")
+end
+
 local function criarDungeon()
     local args = {
         [1] = {
@@ -126,22 +140,9 @@ local function criarDungeon()
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
 
-    task.wait(1)
+    -- Espera 3 segundos para garantir que o servidor processe a criação antes de iniciar
+    task.wait(3)
     iniciarDungeon()
-end
-
-local function iniciarDungeon()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\12"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("▶ Dungeon iniciada.")
 end
 
 local function resetarDungeon()
