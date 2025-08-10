@@ -5,8 +5,6 @@ local andarSaida = 1
 local currentFloor = 0
 local configFile = "allan_hub_castelo.json"
 
-local DUNGEON_ID_FIXO = 7368292297 -- ID fixo para iniciar a dungeon
-
 -- Função para salvar configuração
 local function salvarConfig()
     local data = {
@@ -115,6 +113,20 @@ local function sairCastelo()
     print("Saindo no andar " .. andarSaida)
 end
 
+local function iniciarDungeon()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("▶ Tentando iniciar a dungeon.")
+end
+
 local function criarDungeon()
     local args = {
         [1] = {
@@ -128,23 +140,8 @@ local function criarDungeon()
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
 
-    task.wait(1)
+    task.wait(3)
     iniciarDungeon()
-end
-
-local function iniciarDungeon()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Dungeon"] = DUNGEON_ID_FIXO,
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\12"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("▶ Dungeon iniciada com ID fixo: " .. DUNGEON_ID_FIXO)
 end
 
 local function resetarDungeon()
@@ -178,15 +175,41 @@ local function autoDungeonLoop()
     while ativarDungeon do
         criarDungeon()
 
-        print("⏳ Aguardando mobs serem eliminados...")
-        repeat
-            task.wait(3)
-        until not mobsVivos()
+        print("⏳ Aguardando mobs aparecerem...")
+        task.wait(5)
 
-        print("✔ Todos os mobs mortos, resetando dungeon...")
+        print("⚔️ Iniciando ataque aos inimigos...")
+        local mobsFolder = workspace:FindFirstChild("__Enemies")
+        if mobsFolder then
+            while mobsVivos() do
+                for _, mob in pairs(mobsFolder:GetChildren()) do
+                    if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                        local enemyId = mob:GetAttribute("EnemyID") or mob.Name
+                        local args = {
+                            [1] = {
+                                [1] = {
+                                    ["PetPos"] = {},
+                                    ["AttackType"] = "All",
+                                    ["Event"] = "Attack",
+                                    ["Enemy"] = enemyId
+                                },
+                                [2] = "\5"
+                            }
+                        }
+                        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+                        print("🔫 Atacando: " .. enemyId)
+                    end
+                end
+                task.wait(2)
+            end
+        else
+            print("❌ Pasta '__Enemies' não encontrada.")
+        end
+
+        print("✅ Dungeon limpa! Resetando...")
         resetarDungeon()
 
-        task.wait(3) -- espera antes de começar a próxima
+        task.wait(3)
     end
 end
 
@@ -255,16 +278,4 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 task.spawn(function()
-    while task.wait(1) do
-        if ativarEvento then
-            local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
-            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
-                currentFloor = tonumber(floorValue.Value)
-                print("Andar atual: " .. currentFloor)
-                if currentFloor == andarSaida then
-                    sairCastelo()
-                end
-            end
-        end
-    end
-end)
+    while task
