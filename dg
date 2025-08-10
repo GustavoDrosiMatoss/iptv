@@ -42,20 +42,13 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.End
 })
 
-local t = Window:AddTab({
-    Title = "Auto Castelo",
-    Icon = "home"
-})
+local t = Window:AddTab({ Title = "Auto Castelo", Icon = "home" })
 
 local andaresEntrada = {}
-for i = 10, 110, 10 do
-    table.insert(andaresEntrada, tostring(i))
-end
+for i = 10, 110, 10 do table.insert(andaresEntrada, tostring(i)) end
 
 local andaresSaida = {}
-for i = 1, 117 do
-    table.insert(andaresSaida, tostring(i))
-end
+for i = 1, 117 do table.insert(andaresSaida, tostring(i)) end
 
 t:AddDropdown("AndarEntrada", {
     Title = "Selecionar Andar de Entrada",
@@ -139,32 +132,26 @@ local function criarDungeon()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
-
-    -- Espera 3 segundos para garantir que o servidor processe a criação antes de iniciar
     task.wait(3)
     iniciarDungeon()
 end
--- 📦 Módulo DungeonCleaner
+
+-- 🔧 Módulo de limpeza
 local DungeonCleaner = {}
 
--- 🔧 Configurações
 local config = {
-    mobsFolderName = "Mobs",
-    attackRemotePath = {"ReplicatedStorage", "Remotes", "Attack"},
+    mobsFolderName = "__Enemies",
     attackDelay = 0.3,
     teleportOffset = Vector3.new(0, 2, 0),
     debug = true
 }
 
--- 🧹 Função principal
 function DungeonCleaner:Limpar()
     local mobsFolder = game.Workspace:FindFirstChild(config.mobsFolderName)
     local player = game.Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
-    local attackRemote = game:GetService(config.attackRemotePath[1])
-        :WaitForChild(config.attackRemotePath[2])
-        :WaitForChild(config.attackRemotePath[3])
+    local attackRemote = game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent
 
     if not mobsFolder then
         warn("❌ Pasta de mobs não encontrada.")
@@ -183,7 +170,17 @@ function DungeonCleaner:Limpar()
             if humanoid and mobHRP and humanoid.Health > 0 then
                 mobsVivos = true
                 hrp.CFrame = mobHRP.CFrame + config.teleportOffset
-                attackRemote:FireServer(mob)
+                attackRemote:FireServer({
+                    [1] = {
+                        [1] = {
+                            ["PetPos"] = {},
+                            ["AttackType"] = "All",
+                            ["Event"] = "Attack",
+                            ["Enemy"] = mob:GetAttribute("EnemyID") or mob.Name
+                        },
+                        [2] = "\5"
+                    }
+                })
                 if config.debug then print("⚔️ Atacando: " .. mob.Name) end
                 task.wait(config.attackDelay)
             end
@@ -196,11 +193,6 @@ function DungeonCleaner:Limpar()
 
         task.wait(0.5)
     end
-end
-
-return DungeonCleaner
-        end
-    else
 end
 
 local function resetarDungeon()
@@ -218,31 +210,14 @@ local function resetarDungeon()
     print("♻️ Dungeon resetada (ticket comprado).")
 end
 
-local function mobsVivos()
-    local mobsFolder = workspace:FindFirstChild("__Enemies")
-    if mobsFolder then
-        for _, mob in pairs(mobsFolder:GetChildren()) do
-            if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 local function autoDungeonLoop()
     while ativarDungeon do
         criarDungeon()
-
-        print("⏳ Aguardando mobs serem eliminados...")
-        repeat
-            task.wait(3)
-        until not mobsVivos()
-
-        print("✔ Todos os mobs mortos, resetando dungeon...")
+        print("🧹 Limpando dungeon...")
+        DungeonCleaner:Limpar()
+        print("✔ Dungeon limpa! Resetando...")
         resetarDungeon()
-
-        task.wait(3) -- espera antes de começar a próxima
+        task.wait(3)
     end
 end
 
@@ -296,31 +271,4 @@ local hubVisivel = true
 toggleButton.MouseButton1Click:Connect(function()
     hubVisivel = not hubVisivel
     Window.Frame.Visible = hubVisivel
-    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100, 100, 255) or Color3.fromRGB(255, 100, 100)
-    toggleButton.Text = hubVisivel and "🔼" or "🔽"
-
-    if hubVisivel then
-        if ativarEvento then
-            entrarCastelo()
-            print("🔁 Reativando entrada no castelo após reabrir o Hub")
-        end
-        if ativarDungeon then
-            print("🔁 Continuando Auto Dungeon após reabrir o Hub")
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(1) do
-        if ativarEvento then
-            local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
-            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
-                currentFloor = tonumber(floorValue.Value)
-                print("Andar atual: " .. currentFloor)
-                if currentFloor == andarSaida then
-                    sairCastelo()
-                end
-            end
-        end
-    end
-end)
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100, 100, 255) or
