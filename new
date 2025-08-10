@@ -139,7 +139,6 @@ local function criarDungeon()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
-
     task.wait(3)
     iniciarDungeon()
 end
@@ -174,7 +173,6 @@ end
 local function autoDungeonLoop()
     while ativarDungeon do
         criarDungeon()
-
         print("⏳ Aguardando mobs aparecerem...")
         task.wait(5)
 
@@ -208,7 +206,6 @@ local function autoDungeonLoop()
 
         print("✅ Dungeon limpa! Resetando...")
         resetarDungeon()
-
         task.wait(3)
     end
 end
@@ -243,9 +240,7 @@ t:AddToggle("ToggleAutoDungeon", {
     end
 })
 
--- [SEU SCRIPT ORIGINAL ATÉ O FINAL DO toggleButton.MouseButton1Click permanece igual]
-
--- Substitui o botão flutuante anterior por uma janela separada
+-- Janela flutuante separada para controle da GUI
 local guiControl = Instance.new("ScreenGui")
 guiControl.Name = "AllanHubControl"
 guiControl.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
@@ -265,34 +260,12 @@ controlButton.Draggable = true
 
 local guiVisivel = true
 controlButton.MouseButton1Click:Connect(function()
-    guiVisivel = not guiVisivel
+    guiVisivel = not Window.Frame.Visible
     Window.Frame.Visible = guiVisivel
     controlButton.BackgroundColor3 = guiVisivel and Color3.fromRGB(50, 50, 200) or Color3.fromRGB(200, 50, 50)
     controlButton.Text = guiVisivel and "🧭" or "🚫"
-end)
 
--- Monitoramento de andar atual para saída automática
-task.spawn(function()
-    while task.wait(1) do
+    if guiVisivel then
         if ativarEvento then
-            local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
-            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
-                currentFloor = tonumber(floorValue.Value)
-                print("Andar atual: " .. currentFloor)
-                if currentFloor == andarSaida then
-                    sairCastelo()
-                end
-            end
-        end
-    end
-end)
-            print("🔁 Reativando entrada no castelo após reabrir o Hub")
-        end
-        if ativarDungeon then
-            print("🔁 Continuando Auto Dungeon após reabrir o Hub")
-        end
-    end
-end)
-
-task.spawn(function()
-    while task
+            entrarCastelo()
+            print("🔁
