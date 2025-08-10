@@ -1,139 +1,326 @@
+local ativarEvento = false
+local ativarDungeon = false
+local andarEntrada = 10
+local andarSaida = 1
+local currentFloor = 0
+local configFile = "allan_hub_castelo.json"
+
+-- Função para salvar configuração
+local function salvarConfig()
+    local data = {
+        entrada = andarEntrada,
+        saida = andarSaida
+    }
+    writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
+    print("💾 Configuração salva!")
+end
+
+-- Função para carregar configuração
+local function carregarConfig()
+    if isfile(configFile) then
+        local content = readfile(configFile)
+        local data = game:GetService("HttpService"):JSONDecode(content)
+        andarEntrada = tonumber(data.entrada) or andarEntrada
+        andarSaida = tonumber(data.saida) or andarSaida
+        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
+    else
+        salvarConfig()
+    end
+end
+
+carregarConfig()
+
+-- Fluent GUI
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub",
-    SubTitle = "By Allan",
+    Title = "Allan Hub - Arise",
+    SubTitle = "Dungeon Automática",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 320),
+    Size = UDim2.fromOffset(580, 400),
     Acrylic = true,
     Theme = "dark",
     MinimizeKey = Enum.KeyCode.End
 })
 
-local tab = Window:AddTab({
-    Title = "Auto Dungeon",
-    Icon = "dungeon"
+local t = Window:AddTab({
+    Title = "Auto Castelo",
+    Icon = "home"
 })
 
--- Variáveis para os estados
-local isDungeonActive = false
-local isAutoAttackActive = false
-local autoAttackLoop = nil
+local andaresEntrada = {}
+for i = 10, 110, 10 do
+    table.insert(andaresEntrada, tostring(i))
+end
 
--- Função para detectar inimigos próximos
-local function detectarInimigosProximos()
-    local Players = game:GetService("Players")
-    local Workspace = game:GetService("Workspace")
-    local LocalPlayer = Players.LocalPlayer
+local andaresSaida = {}
+for i = 1, 117 do
+    table.insert(andaresSaida, tostring(i))
+end
 
-    local inimigosDetectados = {}
-    local meuPersonagem = LocalPlayer.Character
-    if not meuPersonagem then return end
+t:AddDropdown("AndarEntrada", {
+    Title = "Selecionar Andar de Entrada",
+    Values = andaresEntrada,
+    Multi = false,
+    Default = tostring(andarEntrada),
+    Callback = function(value)
+        andarEntrada = tonumber(value)
+        salvarConfig()
+        print("Andar de entrada selecionado: " .. andarEntrada)
+    end
+})
 
-    local minhaPosicao = meuPersonagem.PrimaryPart.Position
-    local distanciaMaxima = 20
+t:AddDropdown("AndarSaida", {
+    Title = "Selecionar Andar de Saída",
+    Values = andaresSaida,
+    Multi = false,
+    Default = tostring(andarSaida),
+    Callback = function(value)
+        andarSaida = tonumber(value)
+        salvarConfig()
+        print("Andar de saída selecionado: " .. andarSaida)
+    end
+})
 
-    for _, objeto in ipairs(Workspace:GetChildren()) do
-        -- Lógica de identificação do inimigo (substitua conforme a estrutura do seu jogo)
-        if objeto.Name:find("Enemy") and objeto:IsA("Model") then
-            local distancia = (objeto.PrimaryPart.Position - minhaPosicao).Magnitude
-            if distancia <= distanciaMaxima then
-                local enemyId = objeto:GetAttribute("EnemyId") or objeto.Name
-                if enemyId then
-                    table.insert(inimigosDetectados, enemyId)
+local function entrarCastelo()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Check"] = true,
+                ["Floor"] = tostring(andarEntrada),
+                ["Event"] = "CastleAction",
+                ["Action"] = "Join"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("Entrando no andar " .. andarEntrada)
+end
+
+local function sairCastelo()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Check"] = true,
+                ["Floor"] = tostring(andarSaida),
+                ["Event"] = "CastleAction",
+                ["Action"] = "LeaveDungeon"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("Saindo no andar " .. andarSaida)
+end
+
+local function iniciarDungeon()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("▶ Tentando iniciar a dungeon.")
+end
+
+local function criarDungeon()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("✔ Dungeon criada.")
+
+    -- Espera 3 segundos para garantir que o servidor processe a criação antes de iniciar
+    task.wait(3)
+    iniciarDungeon()
+end
+-- 📦 Módulo DungeonCleaner
+local DungeonCleaner = {}
+
+-- 🔧 Configurações
+local config = {
+    mobsFolderName = "Mobs",
+    attackRemotePath = {"ReplicatedStorage", "Remotes", "Attack"},
+    attackDelay = 0.3,
+    teleportOffset = Vector3.new(0, 2, 0),
+    debug = true
+}
+
+-- 🧹 Função principal
+function DungeonCleaner:Limpar()
+    local mobsFolder = game.Workspace:FindFirstChild(config.mobsFolderName)
+    local player = game.Players.LocalPlayer
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    local attackRemote = game:GetService(config.attackRemotePath[1])
+        :WaitForChild(config.attackRemotePath[2])
+        :WaitForChild(config.attackRemotePath[3])
+
+    if not mobsFolder then
+        warn("❌ Pasta de mobs não encontrada.")
+        return
+    end
+
+    if config.debug then print("🧹 Iniciando limpeza da dungeon...") end
+
+    while true do
+        local mobsVivos = false
+
+        for _, mob in pairs(mobsFolder:GetChildren()) do
+            local humanoid = mob:FindFirstChild("Humanoid")
+            local mobHRP = mob:FindFirstChild("HumanoidRootPart")
+
+            if humanoid and mobHRP and humanoid.Health > 0 then
+                mobsVivos = true
+                hrp.CFrame = mobHRP.CFrame + config.teleportOffset
+                attackRemote:FireServer(mob)
+                if config.debug then print("⚔️ Atacando: " .. mob.Name) end
+                task.wait(config.attackDelay)
+            end
+        end
+
+        if not mobsVivos then
+            if config.debug then print("✅ Dungeon limpa!") end
+            break
+        end
+
+        task.wait(0.5)
+    end
+end
+
+return DungeonCleaner
+        end
+    else
+end
+
+local function resetarDungeon()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "DungeonAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\12"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("♻️ Dungeon resetada (ticket comprado).")
+end
+
+local function mobsVivos()
+    local mobsFolder = workspace:FindFirstChild("__Enemies")
+    if mobsFolder then
+        for _, mob in pairs(mobsFolder:GetChildren()) do
+            if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function autoDungeonLoop()
+    while ativarDungeon do
+        criarDungeon()
+
+        print("⏳ Aguardando mobs serem eliminados...")
+        repeat
+            task.wait(3)
+        until not mobsVivos()
+
+        print("✔ Todos os mobs mortos, resetando dungeon...")
+        resetarDungeon()
+
+        task.wait(3) -- espera antes de começar a próxima
+    end
+end
+
+t:AddToggle("ToggleAutoCastelo", {
+    Title = "Auto Castelo",
+    Description = "Ativa ou desativa o Auto Castelo Infernal",
+    Default = false,
+    Callback = function(state)
+        ativarEvento = state
+        if ativarEvento then
+            print("✅ Auto Castelo ativado!")
+            entrarCastelo()
+        else
+            print("❌ Auto Castelo desativado!")
+        end
+    end
+})
+
+t:AddToggle("ToggleAutoDungeon", {
+    Title = "Auto Dungeon",
+    Description = "Ativa ou desativa o ciclo automático de criar, iniciar e resetar dungeon",
+    Default = false,
+    Callback = function(state)
+        ativarDungeon = state
+        if ativarDungeon then
+            print("✅ Auto Dungeon ativado!")
+            task.spawn(autoDungeonLoop)
+        else
+            print("❌ Auto Dungeon desativado!")
+        end
+    end
+})
+
+-- Botão flutuante para abrir/fechar o Hub
+local floatingGui = Instance.new("ScreenGui")
+floatingGui.Name = "AllanHubFloating"
+floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+floatingGui.ResetOnSpawn = false
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+toggleButton.Text = "⚙"
+toggleButton.TextScaled = true
+toggleButton.Parent = floatingGui
+toggleButton.Active = true
+toggleButton.Draggable = true
+
+local hubVisivel = true
+toggleButton.MouseButton1Click:Connect(function()
+    hubVisivel = not hubVisivel
+    Window.Frame.Visible = hubVisivel
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100, 100, 255) or Color3.fromRGB(255, 100, 100)
+    toggleButton.Text = hubVisivel and "🔼" or "🔽"
+
+    if hubVisivel then
+        if ativarEvento then
+            entrarCastelo()
+            print("🔁 Reativando entrada no castelo após reabrir o Hub")
+        end
+        if ativarDungeon then
+            print("🔁 Continuando Auto Dungeon após reabrir o Hub")
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(1) do
+        if ativarEvento then
+            local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
+            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
+                currentFloor = tonumber(floorValue.Value)
+                print("Andar atual: " .. currentFloor)
+                if currentFloor == andarSaida then
+                    sairCastelo()
                 end
             end
         end
     end
-    return inimigosDetectados
-end
-
--- Função de ataque
-local function atacarInimigos()
-    local inimigos = detectarInimigosProximos()
-    if #inimigos > 0 then
-        for _, enemyId in ipairs(inimigos) do
-            print("Atacando inimigo com ID:", enemyId)
-            local args = {
-                [1] = {
-                    [1] = {
-                        ["PetPos"] = {},
-                        ["AttackType"] = "All",
-                        ["Event"] = "Attack",
-                        ["Enemy"] = enemyId
-                    },
-                    [2] = "\5"
-                }
-            }
-            game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        end
-    else
-        print("Nenhum inimigo a menos de 20 metros para atacar.")
-    end
-end
-
----
-
-### **Controles da Dungeon**
-
--- Botão para ativar/desativar a dungeon
-tab:AddToggle({
-    Title = "Dungeon",
-    Description = "Ativa/Desativa o sistema de criação da Dungeon",
-    Default = false,
-    Callback = function(value)
-        isDungeonActive = value
-        if isDungeonActive then
-            print("Dungeon ativada!")
-            local args = {
-                [1] = {
-                    [1] = {
-                        ["Type"] = "Gems",
-                        ["Event"] = "DungeonAction",
-                        ["Action"] = "BuyTicket"
-                    },
-                    [2] = "\12",
-                    [3] = {
-                        ["Event"] = "DungeonAction",
-                        ["Action"] = "Create"
-                    },
-                    [4] = "\12",
-                    [5] = {
-                        ["Event"] = "DungeonAction",
-                        ["Action"] = "Start"
-                    },
-                    [6] = "\12"
-                }
-            }
-            game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        else
-            print("Dungeon desativada!")
-            -- Adicione aqui a lógica para sair ou resetar a dungeon, se necessário
-        end
-    end
-})
-
----
-
-### **Controles de Ataque Automático**
-
--- Botão para ativar/desativar o ataque automático
-tab:AddToggle({
-    Title = "Auto Ataque",
-    Description = "Ativa/Desativa o ataque automático em inimigos próximos",
-    Default = false,
-    Callback = function(value)
-        isAutoAttackActive = value
-        if isAutoAttackActive then
-            print("Auto ataque ativado!")
-            autoAttackLoop = coroutine.wrap(function()
-                while isAutoAttackActive do
-                    atacarInimigos()
-                    wait(1) -- Espera 1 segundo antes de atacar novamente
-                end
-            end)
-            autoAttackLoop()
-        else
-            print("Auto ataque desativado!")
-        end
-    end
-})
+end)
