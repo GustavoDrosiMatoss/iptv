@@ -6,11 +6,30 @@ local player = Players.LocalPlayer
 
 -- ===== Verificações de segurança =====
 local function waitForChild(parent, childName, timeout)
-    timeout = timeout or 10
+    if not parent then return nil end
+    
+    timeout = timeout or 5
+    local child = parent:FindFirstChild(childName)
+    
+    if child then
+        return child
+    end
+    
     local startTime = tick()
+    local connection
+    
+    connection = parent.ChildAdded:Connect(function(newChild)
+        if newChild.Name == childName then
+            connection:Disconnect()
+        end
+    end)
     
     while not parent:FindFirstChild(childName) and tick() - startTime < timeout do
         task.wait(0.1)
+    end
+    
+    if connection then
+        connection:Disconnect()
     end
     
     return parent:FindFirstChild(childName)
@@ -30,7 +49,7 @@ end
 
 -- ===== Detecção de Dungeon melhorada =====
 local isInDungeon = function()
-    local playerGui = player:WaitForChild("PlayerGui", 5)
+    local playerGui = waitForChild(player, "PlayerGui", 3)
     if not playerGui then 
         print("❌ PlayerGui não encontrada")
         return false 
@@ -164,6 +183,31 @@ local teleportToNearestMob = function()
     local closest = nil
     local bestDistance = math.huge
     
+    -- Se ainda não encontrou remote, tentar apenas ClickDetector
+    if not remote then
+        print("⚠️ Nenhum remote encontrado - usando apenas ClickDetector")
+        
+        for _, mobInfo in pairs(mobList) do
+            print("🖱️ Tentando ClickDetector em:", mobInfo.name)
+            
+            local clickDetector = mobInfo.model:FindFirstChildOfClass("ClickDetector")
+            if clickDetector then
+                local success, error = pcall(function()
+                    fireclickdetector(clickDetector)
+                end)
+                if success then
+                    print("✅ ClickDetector ativado para:", mobInfo.name)
+                    attacked = attacked + 1
+                else
+                    print("❌ Erro no ClickDetector:", error)
+                end
+            else
+                print("❌ Nenhum ClickDetector encontrado em:", mobInfo.name)
+            end
+            task.wait(0.1)
+        end
+        
+    -- Usar remote se encontrado
     for _, mobInfo in pairs(mobList) do
         local mob = mobInfo.model
         local mobRoot = mob:FindFirstChild("HumanoidRootPart") or 
@@ -199,14 +243,30 @@ local atacarMobs = function()
     if count == 0 then return 0 end
     
     local attacked = 0
-    local remote = ReplicatedStorage:FindFirstChild("BridgeNet2")
-    if remote then
-        remote = remote:FindFirstChild("dataRemoteEvent")
+    
+    -- Verificar se o BridgeNet2 existe
+    local bridgeNet = ReplicatedStorage:FindFirstChild("BridgeNet2")
+    local remote = nil
+    
+    if bridgeNet then
+        remote = bridgeNet:FindFirstChild("dataRemoteEvent")
     end
     
     if not remote then
-        print("❌ Remote de ataque não encontrado")
-        return 0
+        print("❌ Remote de ataque não encontrado - tentando métodos alternativos")
+        
+        -- Procurar outros possíveis remotes
+        for _, child in pairs(ReplicatedStorage:GetDescendants()) do
+            if child:IsA("RemoteEvent") and (
+                child.Name:lower():find("attack") or 
+                child.Name:lower():find("combat") or
+                child.Name:lower():find("dungeon")
+            ) then
+                remote = child
+                print("🔍 Remote alternativo encontrado:", child.Name)
+                break
+            end
+        end
     end
     
     for _, mobInfo in pairs(mobList) do
@@ -374,8 +434,12 @@ local solarDungeon = function()
 end
 
 -- ===== Interface de controle =====
--- Assumindo que 't' é sua aba da GUI
-if t then
+-- Verificar se 't' existe antes de adicionar botões
+local function addButtons()
+    if not t then
+        print("⚠️ Variável 't' não encontrada - botões não serão adicionados")
+        return
+    end
     t:AddButton({
         Title = "🔍 Debug Dungeon",
         Description = "Mostrar informações detalhadas",
@@ -412,6 +476,9 @@ if t then
         end
     })
 end
+
+-- Tentar adicionar botões
+pcall(addButtons)
 
 print("✅ Script de dungeon carregado com sucesso!")
 
