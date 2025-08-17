@@ -1,51 +1,88 @@
--- 📌 Configuração
-local ativarEvento = false
-local ativarDungeon = true
-local ativarGems = false
-local andarEntrada = 10
-local andarSaida = 1
-local configFile = "allan_hub_castelo.json"
-local tempFile = "temp_dungeon.json"
+--[[  Allan Hub - Arise Crossover (Auto Dungeon + GUI)
+     - Corrige "attempt to call a nil value" (ordem/pré-declaração)
+     - Não recria dungeon após trocar de servidor (tempFile)
+     - Kill Aura simples (ataca todos os mobs vivos)
+     - Fluent GUI mantido
+--]]
 
--- Flag para teleporte
+-- ===== Configs persistentes =====
+local ativarEvento   = false
+local ativarDungeon  = false
+local ativarGems     = false
+local andarEntrada   = 10
+local andarSaida     = 1
+local currentFloor   = 0
+local configFile     = "allan_hub_castelo.json"
+local tempFile       = "temp_dungeon.json"
+
+-- ===== Compat de arquivos (delfile/deletefile) =====
+local function safeDelete(path)
+    if isfile and isfile(path) then
+        if delfile then delfile(path)
+        elseif deletefile then deletefile(path)
+        else writefile(path, "") end
+    end
+end
+
+-- ===== Flag de teleporte entre servidores (persistente) =====
 local justTeleported = false
-if isfile(tempFile) then
+if isfile and isfile(tempFile) then
     justTeleported = true
     print("📌 Detectado teleporte para dungeon, não criar outra.")
 end
 
--- 🔹 Salvar e carregar configuração
+-- ===== Salvar/Carregar =====
+local HttpService = game:GetService("HttpService")
 local function salvarConfig()
     local data = {
-        entrada = andarEntrada,
-        saida = andarSaida,
-        evento = ativarEvento,
-        dungeon = ativarDungeon,
-        gems = ativarGems
+        entrada = andarEntrada, saida = andarSaida,
+        evento = ativarEvento, dungeon = ativarDungeon, gems = ativarGems
     }
-    writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
+    writefile(configFile, HttpService:JSONEncode(data))
+    print("💾 Configuração salva.")
 end
-
 local function carregarConfig()
-    if isfile(configFile) then
-        local data = game:GetService("HttpService"):JSONDecode(readfile(configFile))
-        andarEntrada = tonumber(data.entrada) or andarEntrada
-        andarSaida = tonumber(data.saida) or andarSaida
-        ativarEvento = data.evento or false
+    if isfile and isfile(configFile) then
+        local data = HttpService:JSONDecode(readfile(configFile))
+        andarEntrada  = tonumber(data.entrada) or andarEntrada
+        andarSaida    = tonumber(data.saida) or andarSaida
+        ativarEvento  = data.evento or false
         ativarDungeon = data.dungeon or false
-        ativarGems = data.gems or false
+        ativarGems    = data.gems or false
+        print(("📂 Config: E%s | S%s | Evento:%s | Dungeon:%s | Gems:%s")
+            :format(andarEntrada, andarSaida, tostring(ativarEvento), tostring(ativarDungeon), tostring(ativarGems)))
     else
         salvarConfig()
     end
 end
-
 carregarConfig()
 
--- 🔹 Funções principais
-local function entrarCastelo()
+-- ======== PRÉ-DECLARAÇÃO para evitar "nil value" ========
+local isInDungeon, mobsVivos, atacarInimigos, teleportToNearestMob, solarDungeon
+local entrarCastelo, sairCastelo, criarDungeon, iniciarDungeon, resetarDungeon
+-- =======================================================
+
+-- ===== Utilidades de estado =====
+isInDungeon = function()
+    -- Heurística simples: a pasta de mobs só aparece em instância de dungeon
+    return workspace:FindFirstChild("__Enemies") ~= nil
+end
+
+mobsVivos = function()
+    local f = workspace:FindFirstChild("__Enemies")
+    if not f then return false end
+    for _, mob in ipairs(f:GetChildren()) do
+        local h = mob:FindFirstChild("Humanoid")
+        if h and h.Health > 0 then return true end
+    end
+    return false
+end
+
+-- ===== Ações de castelo/dungeon =====
+entrarCastelo = function()
     local args = {
         [1] = {
-            [1] = {["Check"] = true, ["Floor"] = tostring(andarEntrada), ["Event"] = "CastleAction", ["Action"] = "Join"},
+            [1] = { Check = true, Floor = tostring(andarEntrada), Event = "CastleAction", Action = "Join" },
             [2] = "\12"
         }
     }
@@ -53,22 +90,22 @@ local function entrarCastelo()
     print("🏰 Entrando no andar", andarEntrada)
 end
 
-local function sairCastelo()
+sairCastelo = function()
     local args = {
         [1] = {
-            [1] = {["Check"] = true, ["Floor"] = tostring(andarSaida), ["Event"] = "CastleAction", ["Action"] = "LeaveDungeon"},
+            [1] = { Check = true, Floor = tostring(andarSaida), Event = "CastleAction", Action = "LeaveDungeon" },
             [2] = "\12"
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("🚪 Saindo no andar", andarSaida)
-    if isfile(tempFile) then delfile(tempFile) end
+    safeDelete(tempFile) -- libera para próxima criação
 end
 
-local function iniciarDungeon()
+iniciarDungeon = function()
     local args = {
         [1] = {
-            [1] = {["Event"] = "DungeonAction", ["Action"] = "Start"},
+            [1] = { Event = "DungeonAction", Action = "Start" },
             [2] = "\12"
         }
     }
@@ -76,88 +113,108 @@ local function iniciarDungeon()
     print("▶ Iniciando a dungeon.")
 end
 
-local function criarDungeon()
+criarDungeon = function()
     if isInDungeon() then
-        print("⚠ Já dentro de uma dungeon, não criar outra!")
+        print("⚠️ Já está numa dungeon, não criar outra.")
+        return
+    end
+    if isfile and isfile(tempFile) then
+        print("⚠️ tempFile existe (provável reconexão). Não criar outra dungeon.")
         return
     end
     local args = {
         [1] = {
-            [1] = {["Event"] = "DungeonAction", ["Action"] = "Create"},
+            [1] = { Event = "DungeonAction", Action = "Create" },
             [2] = "\12"
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
-    writefile(tempFile, "1") -- Marca dungeon ativa
+    writefile(tempFile, "1") -- marca a criação antes do swap de servidor
     task.wait(3)
     iniciarDungeon()
 end
 
-local function resetarDungeon()
+resetarDungeon = function()
     local args = {
         [1] = {
-            [1] = {["Type"] = "Gems", ["Event"] = "DungeonAction", ["Action"] = "BuyTicket"},
+            [1] = { Type = "Gems", Event = "DungeonAction", Action = "BuyTicket" },
             [2] = "\12"
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("♻️ Dungeon resetada com Gems.")
-    if isfile(tempFile) then delfile(tempFile) end
+    print("♻️ Dungeon resetada com Gems (ticket).")
+    safeDelete(tempFile)
 end
 
--- 🔹 Funções de combate
-local function mobsVivos()
-    local mobsFolder = workspace:FindFirstChild("__Enemies")
-    if mobsFolder then
-        for _, mob in pairs(mobsFolder:GetChildren()) do
-            if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                return true
-            end
+-- ===== Combate =====
+teleportToNearestMob = function()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if not character then return end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then return end
+
+    local closest, best = nil, math.huge
+    for _, mob in ipairs(folder:GetChildren()) do
+        local h = mob:FindFirstChild("Humanoid")
+        local hrp = mob:FindFirstChild("HumanoidRootPart")
+        if h and hrp and h.Health > 0 then
+            local d = (root.Position - hrp.Position).Magnitude
+            if d < best then best = d; closest = hrp end
         end
     end
-    return false
+    if closest and best > 5 then
+        root.CFrame = closest.CFrame * CFrame.new(0, 0, 5)
+    end
 end
 
-local function atacarInimigos()
-    local mobsFolder = workspace:FindFirstChild("__Enemies")
-    if not mobsFolder then return end
-    for _, mob in ipairs(mobsFolder:GetChildren()) do
-        if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+atacarInimigos = function()
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then return end
+    for _, mob in ipairs(folder:GetChildren()) do
+        local h = mob:FindFirstChild("Humanoid")
+        if h and h.Health > 0 then
             local args = {
                 [1] = {
-                    [1] = {
-                        ["Event"] = "Attack",
-                        ["Enemy"] = mob.Name,
-                        ["AttackType"] = "All"
-                    },
+                    [1] = { Event = "Attack", Enemy = mob.Name, AttackType = "All" },
                     [2] = "\5"
                 }
             }
             game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-            task.wait(0.15) -- Pausa pequena
+            task.wait(0.12) -- anti-spam
         end
     end
 end
 
-local function solarDungeon()
-    while mobsVivos() do
-        atacarInimigos()
-        task.wait(0.5)
+solarDungeon = function()
+    -- aguarda spawn até 30s
+    local t0 = tick()
+    while not mobsVivos() and tick() - t0 < 30 do
+        task.wait(1)
     end
-    print("✔ Todos os mobs foram mortos!")
+    if not mobsVivos() then
+        print("⚠️ Nenhum mob spawnou neste ciclo.")
+        return
+    end
+
+    print("⚔️ Solando mobs...")
+    while mobsVivos() do
+        teleportToNearestMob()
+        atacarInimigos()
+        task.wait(0.4)
+    end
+    print("✅ Dungeon limpa.")
 end
 
-local function isInDungeon()
-    return workspace:FindFirstChild("__Enemies") ~= nil
-end
-
--- 🔹 Loop principal Auto Dungeon
+-- ===== Loop principal =====
 local function autoDungeonLoop()
     while ativarDungeon do
         task.wait(3)
 
-        -- Evita recriar dungeon após teleporte
+        -- Não criar dungeon se acabou de trocar de servidor ou já estiver dentro
         if not justTeleported and not isInDungeon() then
             if ativarEvento then
                 entrarCastelo()
@@ -168,11 +225,8 @@ local function autoDungeonLoop()
         end
         justTeleported = false
 
-        -- Solar mobs
         if isInDungeon() then
-            print("⚔️ Solando dungeon...")
             solarDungeon()
-
             if ativarGems then
                 resetarDungeon()
                 task.wait(3)
@@ -186,5 +240,99 @@ local function autoDungeonLoop()
     end
 end
 
--- 🔹 Inicia loop
-task.spawn(autoDungeonLoop)
+-- ===== GUI (Fluent) =====
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local Window = Fluent:CreateWindow({
+    Title = "Allan Hub - Arise",
+    SubTitle = "Dungeon Automática",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 400),
+    Acrylic = true,
+    Theme = "dark",
+    MinimizeKey = Enum.KeyCode.End
+})
+local t = Window:AddTab({ Title = "Auto Castelo", Icon = "home" })
+
+local andaresEntrada = {}
+for i = 10, 110, 10 do table.insert(andaresEntrada, tostring(i)) end
+local andaresSaida = {}
+for i = 1, 117 do table.insert(andaresSaida, tostring(i)) end
+
+t:AddDropdown("AndarEntrada", {
+    Title = "Selecionar Andar de Entrada",
+    Values = andaresEntrada, Multi = false, Default = tostring(andarEntrada),
+    Callback = function(v) andarEntrada = tonumber(v); salvarConfig() end
+})
+t:AddDropdown("AndarSaida", {
+    Title = "Selecionar Andar de Saída",
+    Values = andaresSaida, Multi = false, Default = tostring(andarSaida),
+    Callback = function(v) andarSaida = tonumber(v); salvarConfig() end
+})
+t:AddToggle("ToggleAutoCastelo", {
+    Title = "Auto Castelo",
+    Description = "Ativa/Desativa o Auto Castelo",
+    Default = ativarEvento,
+    Callback = function(state)
+        ativarEvento = state; salvarConfig()
+        if state then entrarCastelo() end
+    end
+})
+t:AddToggle("ToggleAutoDungeon", {
+    Title = "Auto Dungeon",
+    Description = "Cria/Inicia/Reseta automaticamente",
+    Default = ativarDungeon,
+    Callback = function(state)
+        ativarDungeon = state; salvarConfig()
+        if state then task.spawn(autoDungeonLoop) end
+    end
+})
+t:AddToggle("ToggleUseGems", {
+    Title = "Usar Gems para Reset",
+    Description = "Compra ticket com gems para resetar",
+    Default = ativarGems,
+    Callback = function(state) ativarGems = state; salvarConfig() end
+})
+
+-- Botão flutuante para mostrar/ocultar o Hub
+local floatingGui = Instance.new("ScreenGui")
+floatingGui.Name = "AllanHubFloating"
+floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+floatingGui.ResetOnSpawn = false
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+toggleButton.Text = "⚙"
+toggleButton.TextScaled = true
+toggleButton.Parent = floatingGui
+toggleButton.Active = true
+toggleButton.Draggable = true
+
+local hubVisivel = true
+toggleButton.MouseButton1Click:Connect(function()
+    hubVisivel = not hubVisivel
+    if Window and Window.Frame then
+        Window.Frame.Visible = hubVisivel
+    end
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100,100,255) or Color3.fromRGB(255,100,100)
+    toggleButton.Text = hubVisivel and "🔼" or "🔽"
+end)
+
+-- Watch do andar (opcional)
+task.spawn(function()
+    while task.wait(1) do
+        if ativarEvento then
+            local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
+            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
+                currentFloor = tonumber(floorValue.Value)
+                print("Andar atual:", currentFloor)
+                if currentFloor == andarSaida then sairCastelo() end
+            end
+        end
+    end
+end)
+
+-- Autostart se estiver ativo no config
+if ativarEvento then entrarCastelo() end
+if ativarDungeon then task.spawn(autoDungeonLoop) end
