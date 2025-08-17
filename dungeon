@@ -10,7 +10,10 @@ local configFile = "allan_hub_castelo.json"
 local function salvarConfig()
     local data = {
         entrada = andarEntrada,
-        saida = andarSaida
+        saida = andarSaida,
+        evento = ativarEvento,
+        dungeon = ativarDungeon,
+        gems = ativarGems
     }
     writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
     print("💾 Configuração salva!")
@@ -23,7 +26,10 @@ local function carregarConfig()
         local data = game:GetService("HttpService"):JSONDecode(content)
         andarEntrada = tonumber(data.entrada) or andarEntrada
         andarSaida = tonumber(data.saida) or andarSaida
-        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
+        ativarEvento = data.evento or false
+        ativarDungeon = data.dungeon or false
+        ativarGems = data.gems or false
+        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida .. " | Evento: " .. tostring(ativarEvento) .. " | Dungeon: " .. tostring(ativarDungeon) .. " | Gems: " .. tostring(ativarGems))
     else
         salvarConfig()
     end
@@ -249,7 +255,14 @@ end
 
 local function autoDungeonLoop()
     while ativarDungeon do
-        criarDungeon()
+        if not mobsVivos() then
+            if ativarGems then
+                resetarDungeon()
+                task.wait(3)
+            end
+            criarDungeon()
+            task.wait(3)
+        end
 
         print("⏳ Aguardando mobs serem eliminados...")
         repeat
@@ -258,28 +271,24 @@ local function autoDungeonLoop()
             task.wait(0.5)
         until not mobsVivos()
 
-        print("✔ Todos os mobs mortos, saindo do castelo...")
-        sairCastelo()
-        task.wait(3)
+        print("✔ Todos os mobs mortos...")
 
-        print("Entrando novamente no castelo...")
-        entrarCastelo()
-        task.wait(3)
-
-        if ativarGems then
-            print("Resetando dungeon com gems...")
-            resetarDungeon()
+        if not ativarGems then
+            sairCastelo()
+            task.wait(3)
+            entrarCastelo()
             task.wait(3)
         end
     end
 end
 
-t:AddToggle("ToggleAutoCastelo", {
+local toggleAutoCastelo = t:AddToggle("ToggleAutoCastelo", {
     Title = "Auto Castelo",
     Description = "Ativa ou desativa o Auto Castelo Infernal",
-    Default = false,
+    Default = ativarEvento,
     Callback = function(state)
         ativarEvento = state
+        salvarConfig()
         if ativarEvento then
             print("✅ Auto Castelo ativado!")
             entrarCastelo()
@@ -289,12 +298,13 @@ t:AddToggle("ToggleAutoCastelo", {
     end
 })
 
-t:AddToggle("ToggleAutoDungeon", {
+local toggleAutoDungeon = t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon",
     Description = "Ativa ou desativa o ciclo automático de criar, iniciar e resetar dungeon",
-    Default = false,
+    Default = ativarDungeon,
     Callback = function(state)
         ativarDungeon = state
+        salvarConfig()
         if ativarDungeon then
             print("✅ Auto Dungeon ativado!")
             task.spawn(autoDungeonLoop)
@@ -304,12 +314,13 @@ t:AddToggle("ToggleAutoDungeon", {
     end
 })
 
-t:AddToggle("ToggleUseGems", {
+local toggleUseGems = t:AddToggle("ToggleUseGems", {
     Title = "Usar Gems para Reset",
     Description = "Ativa o uso de gems para comprar ticket e resetar a dungeon (use como última opção)",
-    Default = false,
+    Default = ativarGems,
     Callback = function(state)
         ativarGems = state
+        salvarConfig()
         if ativarGems then
             print("✅ Uso de gems para reset ativado!")
         else
@@ -317,6 +328,14 @@ t:AddToggle("ToggleUseGems", {
         end
     end
 })
+
+-- Inicializar loops se carregados como ativos
+if ativarEvento then
+    entrarCastelo()
+end
+if ativarDungeon then
+    task.spawn(autoDungeonLoop)
+end
 
 -- Botão flutuante para abrir/fechar o Hub
 local floatingGui = Instance.new("ScreenGui")
