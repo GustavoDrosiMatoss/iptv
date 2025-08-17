@@ -5,6 +5,14 @@ local andarEntrada = 10
 local andarSaida = 1
 local currentFloor = 0
 local configFile = "allan_hub_castelo.json"
+local tempFile = "temp_dungeon.json"
+
+local justTeleported = false
+if isfile(tempFile) then
+    deletefile(tempFile)
+    justTeleported = true
+    print("Detected recent dungeon creation, skipping create.")
+end
 
 -- Função para salvar configuração
 local function salvarConfig()
@@ -254,35 +262,31 @@ local function mobsVivos()
 end
 
 local function isInDungeon()
-    local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
-    if floorValue and tonumber(floorValue.Value) > 0 then return true end
+    -- Removido CurrentFloor pois é para castelo
     if workspace:FindFirstChild("__Enemies") then return true end
     return false
 end
 
 local function autoDungeonLoop()
     while ativarDungeon do
-        -- Espera inicial para o servidor carregar
-        task.wait(5)
+        task.wait(5)  -- Espera o servidor carregar
 
-        -- Verificar se já está dentro da dungeon
-        if not isInDungeon() then
-            -- Se não estiver na dungeon, entrar no castelo se ativado
+        if not justTeleported and not isInDungeon() then
             if ativarEvento then
                 entrarCastelo()
                 task.wait(5)
             end
-            -- Criar a dungeon
+            writefile(tempFile, "1")
             criarDungeon()
             task.wait(5)
         end
+        justTeleported = false
 
-        -- Agora, farmar os mobs
         print("⏳ Aguardando mobs serem eliminados...")
 
-        -- Esperar pelos mobs spawnarem se não houver nenhum ainda
+        -- Aumentado o tempo de espera para spawn de mobs
         local startTime = tick()
-        while not mobsVivos() and tick() - startTime < 15 do
+        while not mobsVivos() and tick() - startTime < 30 do
             task.wait(1)
             print("Aguardando spawn de mobs...")
         end
@@ -296,7 +300,8 @@ local function autoDungeonLoop()
             print("✔ Todos os mobs mortos...")
         else
             print("⚠️ Nenhum mob spawnou após espera, verificando configuração...")
-            continue  -- Pula para próxima iteração
+            -- Continue para próxima iteração sem resetar para evitar loop infinito
+            continue
         end
 
         -- Após matar, resetar ou sair/entrar
@@ -307,8 +312,6 @@ local function autoDungeonLoop()
             sairCastelo()
             task.wait(3)
             entrarCastelo()
-            task.wait(3)
-            criarDungeon()
             task.wait(3)
         end
     end
