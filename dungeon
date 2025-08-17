@@ -253,16 +253,20 @@ local function mobsVivos()
     return false
 end
 
+local function isInDungeon()
+    local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
+    if floorValue and tonumber(floorValue.Value) > 0 then return true end
+    if workspace:FindFirstChild("__Enemies") then return true end
+    return false
+end
+
 local function autoDungeonLoop()
     while ativarDungeon do
         -- Espera inicial para o servidor carregar
         task.wait(5)
 
-        -- Verificar se já está dentro da dungeon (baseado no CurrentFloor)
-        local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
-        local inDungeon = floorValue and tonumber(floorValue.Value) > 0
-
-        if not inDungeon then
+        -- Verificar se já está dentro da dungeon
+        if not isInDungeon() then
             -- Se não estiver na dungeon, entrar no castelo se ativado
             if ativarEvento then
                 entrarCastelo()
