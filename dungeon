@@ -1,62 +1,111 @@
-local isInDungeon = function()
-    -- Verificar pela UI da dungeon (mais confiável)
-    local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- ===== Verificações de segurança =====
+local function waitForChild(parent, childName, timeout)
+    timeout = timeout or 10
+    local startTime = tick()
     
-    -- Procurar por elementos da UI da dungeon
+    while not parent:FindFirstChild(childName) and tick() - startTime < timeout do
+        task.wait(0.1)
+    end
+    
+    return parent:FindFirstChild(childName)
+end
+
+local function safeFireServer(remote, ...)
+    local success, error = pcall(function()
+        remote:FireServer(...)
+    end)
+    
+    if not success then
+        warn("Erro ao disparar remote:", error)
+        return false
+    end
+    return true
+end
+
+-- ===== Detecção de Dungeon melhorada =====
+local isInDungeon = function()
+    local playerGui = player:WaitForChild("PlayerGui", 5)
+    if not playerGui then 
+        print("❌ PlayerGui não encontrada")
+        return false 
+    end
+    
+    -- Lista de termos para detectar UI de dungeon
+    local dungeonTerms = {
+        "inimigos restantes", "enemies remaining", "tempo restante", 
+        "time remaining", "sala:", "room:", "wave", "onda", "boss"
+    }
+    
     for _, gui in pairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            -- Procurar por texto "Inimigos Restantes" ou similar
+        if gui:IsA("ScreenGui") and gui.Enabled then
             for _, descendant in pairs(gui:GetDescendants()) do
-                if descendant:IsA("TextLabel") then
+                if descendant:IsA("TextLabel") and descendant.Visible then
                     local text = descendant.Text:lower()
-                    if text:find("inimigos restantes") or text:find("enemies remaining") or 
-                       text:find("tempo restante") or text:find("sala:") then
-                        print("✅ Dungeon detectada pela UI:", text)
-                        return true
+                    for _, term in ipairs(dungeonTerms) do
+                        if text:find(term) then
+                            print("✅ Dungeon detectada pela UI:", descendant.Text)
+                            return true
+                        end
                     end
                 end
             end
         end
     end
     
-    -- Verificação alternativa por workspace
-    local enemies = workspace:FindFirstChild("__Enemies")
-    local dungeonFolder = workspace:FindFirstChild("DungeonEnemies")
-    local mobsFolder = workspace:FindFirstChild("Mobs")
-    
-    return enemies ~= nil or dungeonFolder ~= nil or mobsFolder ~= nil
-end
-
-local encontrarPastaMobs = function()
-    -- Procurar em várias localizações possíveis
-    local possibleFolders = {
-        "__Enemies",
-        "DungeonEnemies", 
-        "Mobs",
-        "Enemies",
-        "NPCs",
-        "Monsters"
+    -- Verificação alternativa por objetos no workspace
+    local dungeonIndicators = {
+        "__Enemies", "DungeonEnemies", "Mobs", "Enemies", 
+        "NPCs", "Monsters", "DungeonFolder"
     }
     
+    for _, indicator in ipairs(dungeonIndicators) do
+        if workspace:FindFirstChild(indicator) then
+            print("✅ Dungeon detectada por pasta:", indicator)
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- ===== Encontrar pasta de mobs =====
+local encontrarPastaMobs = function()
+    local possibleFolders = {
+        "__Enemies", "DungeonEnemies", "Mobs", "Enemies",
+        "NPCs", "Monsters", "EnemyFolder", "MobFolder"
+    }
+    
+    -- Procurar nas pastas conhecidas primeiro
     for _, folderName in ipairs(possibleFolders) do
         local folder = workspace:FindFirstChild(folderName)
-        if folder then
+        if folder and #folder:GetChildren() > 0 then
             print("📁 Pasta de mobs encontrada:", folderName)
             return folder
         end
     end
     
-    -- Se não encontrar, procurar em subpastas
+    -- Procurar em subpastas do workspace
     for _, child in pairs(workspace:GetChildren()) do
-        if child:IsA("Folder") or child:IsA("Model") then
+        if (child:IsA("Folder") or child:IsA("Model")) and child.Name ~= "Camera" then
+            local mobCount = 0
             for _, subchild in pairs(child:GetChildren()) do
                 if subchild:IsA("Model") then
                     local humanoid = subchild:FindFirstChild("Humanoid")
-                    if humanoid and humanoid.Health > 0 then
-                        print("📁 Mobs encontrados em:", child.Name)
-                        return child
+                    if humanoid then
+                        mobCount = mobCount + 1
                     end
                 end
+            end
+            
+            if mobCount >= 3 then -- Se tem 3+ mobs, provavelmente é a pasta certa
+                print("📁 Pasta de mobs encontrada por contagem:", child.Name, "- Mobs:", mobCount)
+                return child
             end
         end
     end
@@ -65,250 +114,312 @@ local encontrarPastaMobs = function()
     return nil
 end
 
-local mobsVivos = function()
+-- ===== Contar mobs vivos =====
+local contarMobsVivos = function()
     local folder = encontrarPastaMobs()
-    if not folder then return false end
+    if not folder then return 0, {} end
     
     local count = 0
-    local mobNames = {}
+    local mobList = {}
     
-    for _, mob in ipairs(folder:GetChildren()) do
+    for _, mob in pairs(folder:GetChildren()) do
         if mob:IsA("Model") then
             local humanoid = mob:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
+            if humanoid and humanoid.Health > 0 and humanoid.MaxHealth > 0 then
                 count = count + 1
-                table.insert(mobNames, mob.Name)
+                table.insert(mobList, {
+                    name = mob.Name,
+                    health = math.floor(humanoid.Health),
+                    maxHealth = math.floor(humanoid.MaxHealth),
+                    model = mob
+                })
             end
         end
     end
     
-    if count > 0 then
-        print("🎯 Mobs vivos encontrados:", count, "->", table.concat(mobNames, ", "))
-    else
-        print("💀 Nenhum mob vivo encontrado")
-    end
-    
-    return count > 0
+    return count, mobList
 end
 
--- ===== Combate melhorado =====
+-- ===== Teleporte seguro =====
 local teleportToNearestMob = function()
-    local char = game.Players.LocalPlayer.Character
-    if not char then return false end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return false end
+    local character = player.Character
+    if not character then 
+        print("❌ Character não encontrado")
+        return false 
+    end
     
-    local folder = encontrarPastaMobs()
-    if not folder then return false end
-
-    local closest, bestDistance = nil, math.huge
-    local mobName = ""
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then 
+        print("❌ HumanoidRootPart não encontrado")
+        return false 
+    end
     
-    for _, mob in ipairs(folder:GetChildren()) do
-        if mob:IsA("Model") then
-            local humanoid = mob:FindFirstChild("Humanoid")
-            local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("Torso") or mob:FindFirstChild("Head")
-            
-            if humanoid and hrp and humanoid.Health > 0 then
-                local distance = (root.Position - hrp.Position).Magnitude
-                if distance < bestDistance then
-                    bestDistance = distance
-                    closest = hrp
-                    mobName = mob.Name
-                end
+    local count, mobList = contarMobsVivos()
+    if count == 0 then 
+        print("❌ Nenhum mob vivo para teleportar")
+        return false 
+    end
+    
+    -- Encontrar o mob mais próximo
+    local closest = nil
+    local bestDistance = math.huge
+    
+    for _, mobInfo in pairs(mobList) do
+        local mob = mobInfo.model
+        local mobRoot = mob:FindFirstChild("HumanoidRootPart") or 
+                       mob:FindFirstChild("Torso") or 
+                       mob:FindFirstChild("Head")
+        
+        if mobRoot then
+            local distance = (root.Position - mobRoot.Position).Magnitude
+            if distance < bestDistance then
+                bestDistance = distance
+                closest = {root = mobRoot, info = mobInfo}
             end
         end
     end
     
     if closest then
-        root.CFrame = closest.CFrame * CFrame.new(0, 0, 5)
-        print("📍 Teleportado para:", mobName, "- Distância:", math.floor(bestDistance))
+        -- Teleporte seguro com verificação
+        local targetPosition = closest.root.CFrame * CFrame.new(0, 0, 5)
+        root.CFrame = targetPosition
+        
+        print("📍 Teleportado para:", closest.info.name, 
+              "- HP:", closest.info.health .. "/" .. closest.info.maxHealth,
+              "- Distância:", math.floor(bestDistance))
         return true
     end
+    
     return false
 end
 
-local atacarInimigos = function()
-    local folder = encontrarPastaMobs()
-    if not folder then return 0 end
+-- ===== Sistema de ataque melhorado =====
+local atacarMobs = function()
+    local count, mobList = contarMobsVivos()
+    if count == 0 then return 0 end
     
     local attacked = 0
-    local attackMethods = {
-        -- Método 1: Event Attack
-        function(mobName)
-            local args = { [1] = { [1] = { Event = "Attack", Enemy = mobName, AttackType = "All" }, [2] = "\5" } }
-            game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        end,
-        -- Método 2: Combat Event
-        function(mobName)
-            local args = { [1] = { [1] = { Event = "Combat", Target = mobName, Action = "Attack" }, [2] = "\5" } }
-            game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        end,
-        -- Método 3: DungeonAttack Event
-        function(mobName)
-            local args = { [1] = { [1] = { Event = "DungeonAttack", Enemy = mobName }, [2] = "\5" } }
-            game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        end,
-        -- Método 4: Usando ClickDetector se existir
-        function(mob)
-            if mob:FindFirstChildOfClass("ClickDetector") then
-                fireclickdetector(mob:FindFirstChildOfClass("ClickDetector"))
-                return true
-            end
-            return false
-        end
-    }
-    
-    for _, mob in ipairs(folder:GetChildren()) do
-        if mob:IsA("Model") then
-            local humanoid = mob:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                print("⚔️ Atacando:", mob.Name, "- HP:", math.floor(humanoid.Health))
-                
-                -- Tentar diferentes métodos de ataque
-                for i, method in ipairs(attackMethods) do
-                    if i <= 3 then
-                        method(mob.Name)
-                    else
-                        method(mob)
-                    end
-                    task.wait(0.05)
-                end
-                
-                attacked = attacked + 1
-                task.wait(0.1)
-            end
-        end
+    local remote = ReplicatedStorage:FindFirstChild("BridgeNet2")
+    if remote then
+        remote = remote:FindFirstChild("dataRemoteEvent")
     end
     
-    print("⚔️ Total atacado:", attacked, "inimigos")
+    if not remote then
+        print("❌ Remote de ataque não encontrado")
+        return 0
+    end
+    
+    for _, mobInfo in pairs(mobList) do
+        local mobName = mobInfo.name
+        
+        -- Múltiplos métodos de ataque
+        local attackMethods = {
+            { Event = "Attack", Enemy = mobName, AttackType = "All" },
+            { Event = "Combat", Target = mobName, Action = "Attack" },
+            { Event = "DungeonAttack", Enemy = mobName },
+            { Event = "KillEnemy", Target = mobName },
+            { Event = "AttackMob", Mob = mobName }
+        }
+        
+        print("⚔️ Atacando:", mobName, "- HP:", mobInfo.health .. "/" .. mobInfo.maxHealth)
+        
+        for _, attackData in ipairs(attackMethods) do
+            local args = { { attackData, "\5" } }
+            
+            if safeFireServer(remote, unpack(args)) then
+                task.wait(0.05)
+            end
+        end
+        
+        -- Tentar ClickDetector se existir
+        local clickDetector = mobInfo.model:FindFirstChildOfClass("ClickDetector")
+        if clickDetector then
+            local success = pcall(function()
+                fireclickdetector(clickDetector)
+            end)
+            if success then
+                print("🖱️ ClickDetector ativado para:", mobName)
+            end
+        end
+        
+        attacked = attacked + 1
+        task.wait(0.1)
+    end
+    
+    print("⚔️ Total de ataques enviados:", attacked)
     return attacked
 end
 
--- ===== Função de debug para encontrar o método correto =====
+-- ===== Função de debug =====
 local debugDungeon = function()
-    print("🔍 === DEBUG DUNGEON ===")
-    print("🏰 isInDungeon():", isInDungeon())
-    print("👹 mobsVivos():", mobsVivos())
+    print("\n🔍 === DEBUG DUNGEON COMPLETO ===")
+    print("🏰 Em dungeon:", isInDungeon())
     
-    -- Listar todos os filhos do workspace
-    print("📁 Filhos do Workspace:")
+    local count, mobList = contarMobsVivos()
+    print("👹 Mobs vivos:", count)
+    
+    if count > 0 then
+        print("📋 Lista de mobs:")
+        for i, mobInfo in ipairs(mobList) do
+            print("  " .. i .. ".", mobInfo.name, "-", mobInfo.health .. "/" .. mobInfo.maxHealth .. " HP")
+        end
+    end
+    
+    -- Verificar pastas do workspace
+    print("📁 Pastas do Workspace com modelos:")
     for _, child in pairs(workspace:GetChildren()) do
-        if child:IsA("Folder") or child:IsA("Model") then
-            local mobCount = 0
+        if (child:IsA("Folder") or child:IsA("Model")) and child.Name ~= "Camera" then
+            local modelCount = 0
             for _, subchild in pairs(child:GetChildren()) do
-                if subchild:IsA("Model") and subchild:FindFirstChild("Humanoid") then
-                    mobCount = mobCount + 1
+                if subchild:IsA("Model") then
+                    modelCount = modelCount + 1
                 end
             end
-            if mobCount > 0 then
-                print("  📂", child.Name, "- Mobs:", mobCount)
+            if modelCount > 0 then
+                print("  📂", child.Name, "- Modelos:", modelCount)
             end
         end
     end
     
-    -- Verificar PlayerGui
-    print("🖥️ Elementos da UI:")
-    local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    for _, gui in pairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            for _, descendant in pairs(gui:GetDescendants()) do
-                if descendant:IsA("TextLabel") then
-                    local text = descendant.Text:lower()
-                    if text:find("inimigos") or text:find("enemies") or text:find("restantes") or text:find("remaining") then
-                        print("  🏷️", descendant.Name, ":", descendant.Text)
-                    end
-                end
-            end
-        end
+    -- Verificar remote
+    local remote = ReplicatedStorage:FindFirstChild("BridgeNet2")
+    if remote then
+        remote = remote:FindFirstChild("dataRemoteEvent")
+        print("🔗 Remote encontrado:", remote and "✅" or "❌")
+    else
+        print("🔗 BridgeNet2 não encontrado")
     end
-    print("🔍 === FIM DEBUG ===")
+    
+    print("🔍 === FIM DEBUG ===\n")
 end
 
--- ===== Função principal corrigida =====
+-- ===== Função principal de combate =====
 local solarDungeon = function()
-    print("🌟 Iniciando combate na dungeon...")
+    print("🌟 === INICIANDO COMBATE NA DUNGEON ===")
     
-    -- Debug primeiro
-    debugDungeon()
+    -- Verificar se está na dungeon
+    if not isInDungeon() then
+        print("❌ Não parece estar em uma dungeon")
+        debugDungeon()
+        return false
+    end
     
-    -- Esperar mobs aparecerem (até 30 segundos)
-    local waitStart = tick()
-    while tick() - waitStart < 30 do
-        if mobsVivos() then
-            print("✅ Mobs detectados, iniciando combate!")
+    -- Aguardar mobs aparecerem
+    local waitTime = 0
+    local maxWait = 30
+    
+    print("⏳ Aguardando mobs aparecerem...")
+    while waitTime < maxWait do
+        local count = contarMobsVivos()
+        if count > 0 then
+            print("✅ Mobs detectados! Iniciando combate...")
             break
         end
-        print("⏳ Aguardando mobs aparecerem... (" .. math.floor(30 - (tick() - waitStart)) .. "s restantes)")
-        task.wait(2)
-    end
-    
-    if not mobsVivos() then
-        print("❌ Nenhum mob encontrado após 30 segundos")
-        debugDungeon() -- Debug novamente se não encontrar
-        return
-    end
-
-    -- Loop de combate
-    local combatStart = tick()
-    local lastMobCount = 0
-    
-    while mobsVivos() and tick() - combatStart < 300 do -- Máximo 5 minutos
-        local currentMobCount = 0
-        local folder = encontrarPastaMobs()
         
-        if folder then
-            for _, mob in pairs(folder:GetChildren()) do
-                if mob:IsA("Model") then
-                    local humanoid = mob:FindFirstChild("Humanoid")
-                    if humanoid and humanoid.Health > 0 then
-                        currentMobCount = currentMobCount + 1
-                    end
-                end
-            end
+        task.wait(1)
+        waitTime = waitTime + 1
+        
+        if waitTime % 5 == 0 then
+            print("⏳ Aguardando... (" .. (maxWait - waitTime) .. "s restantes)")
+        end
+    end
+    
+    local mobCount = contarMobsVivos()
+    if mobCount == 0 then
+        print("❌ Nenhum mob encontrado após", maxWait, "segundos")
+        debugDungeon()
+        return false
+    end
+    
+    -- Loop principal de combate
+    local combatStart = tick()
+    local maxCombatTime = 300 -- 5 minutos
+    local lastMobCount = mobCount
+    local stuckTimer = 0
+    
+    while combatStart + maxCombatTime > tick() do
+        local currentMobCount = contarMobsVivos()
+        
+        if currentMobCount == 0 then
+            print("🎉 Todos os mobs foram derrotados!")
+            return true
         end
         
         print("🔄 Ciclo de combate - Mobs restantes:", currentMobCount)
         
-        teleportToNearestMob()
-        task.wait(0.5)
-        atacarInimigos()
+        -- Teleportar e atacar
+        if teleportToNearestMob() then
+            task.wait(0.5)
+            atacarMobs()
+        end
         
-        -- Se o número de mobs não mudou por 10 segundos, algo pode estar errado
+        -- Verificar se está travado
         if currentMobCount == lastMobCount then
-            local stuckTime = tick() - combatStart
-            if stuckTime > 10 then
-                print("⚠️ Possível travamento detectado, fazendo debug...")
+            stuckTimer = stuckTimer + 1
+            if stuckTimer >= 10 then
+                print("⚠️ Possível travamento - fazendo debug...")
                 debugDungeon()
+                stuckTimer = 0
             end
         else
-            combatStart = tick() -- Reset timer se mobs morreram
+            stuckTimer = 0
         end
         
         lastMobCount = currentMobCount
-        task.wait(1)
+        task.wait(2)
     end
     
-    if mobsVivos() then
-        print("⏰ Timeout no combate após 5 minutos")
-    else
-        print("🎉 Todos os mobs foram derrotados!")
-    end
+    print("⏰ Timeout no combate após", math.floor(maxCombatTime/60), "minutos")
+    return false
 end
 
--- Adicionar botão de debug na GUI
-t:AddButton({
-    Title = "🔍 Debug Dungeon",
-    Description = "Mostrar informações de debug",
-    Callback = function()
-        debugDungeon()
-    end
-})
+-- ===== Interface de controle =====
+-- Assumindo que 't' é sua aba da GUI
+if t then
+    t:AddButton({
+        Title = "🔍 Debug Dungeon",
+        Description = "Mostrar informações detalhadas",
+        Callback = function()
+            debugDungeon()
+        end
+    })
 
-t:AddButton({
-    Title = "⚔️ Teste Combate Manual",
-    Description = "Testar combate uma vez",
-    Callback = function()
+    t:AddButton({
+        Title = "⚔️ Combate Manual",
+        Description = "Executar combate uma vez",
+        Callback = function()
+            task.spawn(solarDungeon)
+        end
+    })
+
+    t:AddButton({
+        Title = "📍 Teleportar para Mob",
+        Description = "Teleportar para o mob mais próximo",
+        Callback = function()
+            teleportToNearestMob()
+        end
+    })
+
+    t:AddButton({
+        Title = "👀 Contar Mobs",
+        Description = "Mostrar quantos mobs estão vivos",
+        Callback = function()
+            local count, mobList = contarMobsVivos()
+            print("👹 Mobs vivos:", count)
+            for _, mobInfo in ipairs(mobList) do
+                print("  -", mobInfo.name, "(" .. mobInfo.health .. "/" .. mobInfo.maxHealth .. " HP)")
+            end
+        end
+    })
+end
+
+print("✅ Script de dungeon carregado com sucesso!")
+
+-- ===== Auto-executar se detectar dungeon =====
+task.spawn(function()
+    if isInDungeon() then
+        print("🏰 Dungeon detectada automaticamente!")
+        task.wait(2)
         solarDungeon()
     end
-})
+end)
