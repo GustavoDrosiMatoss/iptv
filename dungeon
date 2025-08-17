@@ -1,6 +1,6 @@
 local ativarEvento = false
 local ativarDungeon = false
-local ativarGems = false  -- Nova variável para ativar o reset com gems
+local ativarGems = false
 local andarEntrada = 10
 local andarSaida = 1
 local currentFloor = 0
@@ -45,7 +45,7 @@ end
 
 carregarConfig()
 
--- Funções de Castelo/Dungeon
+-- Funções principais
 local function entrarCastelo()
     local args = {
         [1] = {
@@ -76,8 +76,6 @@ local function sairCastelo()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("Saindo no andar " .. andarSaida)
-
-    -- Apaga o arquivo de teleporte ao sair
     if isfile(tempFile) then
         delfile(tempFile)
     end
@@ -109,11 +107,7 @@ local function criarDungeon()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
-
-    -- Marca que foi criado para evitar recriar no outro servidor
-    writefile(tempFile, "1")
-
-    -- Espera 3 segundos para garantir que o servidor processe a criação antes de iniciar
+    writefile(tempFile, "1") -- marca como criada
     task.wait(3)
     iniciarDungeon()
 end
@@ -131,14 +125,12 @@ local function resetarDungeon()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("♻️ Dungeon resetada (ticket comprado).")
-
-    -- Apaga o arquivo de teleporte ao resetar
     if isfile(tempFile) then
         delfile(tempFile)
     end
 end
 
--- Funções de mobs
+-- Funções de combate
 local function detectarInimigosProximos()
     local player = game.Players.LocalPlayer
     local character = player.Character
@@ -166,7 +158,6 @@ local function atacarInimigos()
     local inimigos = detectarInimigosProximos()
     if #inimigos > 0 then
         for _, enemyId in ipairs(inimigos) do
-            print("Atacando inimigo com ID:", enemyId)
             local args = {
                 [1] = {
                     [1] = {
@@ -180,8 +171,6 @@ local function atacarInimigos()
             }
             game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
         end
-    else
-        print("Nenhum inimigo a menos de 20 metros para atacar.")
     end
 end
 
@@ -209,7 +198,6 @@ local function teleportToNearestMob()
     end
     if closestMob and minDist > 5 then
         root.CFrame = closestMob.CFrame * CFrame.new(0, 0, 5)
-        print("Teletransportado para o mob mais próximo.")
     end
 end
 
@@ -226,8 +214,7 @@ local function mobsVivos()
 end
 
 local function isInDungeon()
-    if workspace:FindFirstChild("__Enemies") then return true end
-    return false
+    return workspace:FindFirstChild("__Enemies") ~= nil
 end
 
 local function autoDungeonLoop()
@@ -244,12 +231,9 @@ local function autoDungeonLoop()
         end
         justTeleported = false
 
-        print("⏳ Aguardando mobs serem eliminados...")
-
         local startTime = tick()
         while not mobsVivos() and tick() - startTime < 30 do
             task.wait(1)
-            print("Aguardando spawn de mobs...")
         end
 
         if mobsVivos() then
@@ -258,10 +242,6 @@ local function autoDungeonLoop()
                 atacarInimigos()
                 task.wait(0.5)
             until not mobsVivos()
-            print("✔ Todos os mobs mortos...")
-        else
-            print("⚠️ Nenhum mob spawnou após espera, verificando configuração...")
-            continue
         end
 
         if ativarGems then
@@ -275,3 +255,112 @@ local function autoDungeonLoop()
         end
     end
 end
+
+-- GUI com Fluent
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local Window = Fluent:CreateWindow({
+    Title = "Allan Hub - Arise",
+    SubTitle = "Dungeon Automática",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 400),
+    Acrylic = true,
+    Theme = "dark",
+    MinimizeKey = Enum.KeyCode.End
+})
+
+local t = Window:AddTab({
+    Title = "Auto Castelo",
+    Icon = "home"
+})
+
+local andaresEntrada = {}
+for i = 10, 110, 10 do
+    table.insert(andaresEntrada, tostring(i))
+end
+
+local andaresSaida = {}
+for i = 1, 117 do
+    table.insert(andaresSaida, tostring(i))
+end
+
+t:AddDropdown("AndarEntrada", {
+    Title = "Selecionar Andar de Entrada",
+    Values = andaresEntrada,
+    Multi = false,
+    Default = tostring(andarEntrada),
+    Callback = function(value)
+        andarEntrada = tonumber(value)
+        salvarConfig()
+    end
+})
+
+t:AddDropdown("AndarSaida", {
+    Title = "Selecionar Andar de Saída",
+    Values = andaresSaida,
+    Multi = false,
+    Default = tostring(andarSaida),
+    Callback = function(value)
+        andarSaida = tonumber(value)
+        salvarConfig()
+    end
+})
+
+t:AddToggle("ToggleAutoCastelo", {
+    Title = "Auto Castelo",
+    Description = "Ativa ou desativa o Auto Castelo Infernal",
+    Default = ativarEvento,
+    Callback = function(state)
+        ativarEvento = state
+        salvarConfig()
+        if ativarEvento then
+            entrarCastelo()
+        end
+    end
+})
+
+t:AddToggle("ToggleAutoDungeon", {
+    Title = "Auto Dungeon",
+    Description = "Ativa ciclo automático de criar, iniciar e resetar dungeon",
+    Default = ativarDungeon,
+    Callback = function(state)
+        ativarDungeon = state
+        salvarConfig()
+        if ativarDungeon then
+            task.spawn(autoDungeonLoop)
+        end
+    end
+})
+
+t:AddToggle("ToggleUseGems", {
+    Title = "Usar Gems para Reset",
+    Description = "Compra ticket com gems para resetar dungeon",
+    Default = ativarGems,
+    Callback = function(state)
+        ativarGems = state
+        salvarConfig()
+    end
+})
+
+-- Botão flutuante
+local floatingGui = Instance.new("ScreenGui")
+floatingGui.Name = "AllanHubFloating"
+floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+floatingGui.ResetOnSpawn = false
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+toggleButton.Text = "⚙"
+toggleButton.TextScaled = true
+toggleButton.Parent = floatingGui
+toggleButton.Active = true
+toggleButton.Draggable = true
+
+local hubVisivel = true
+toggleButton.MouseButton1Click:Connect(function()
+    hubVisivel = not hubVisivel
+    Window.Frame.Visible = hubVisivel
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100, 100, 255) or Color3.fromRGB(255, 100, 100)
+    toggleButton.Text = hubVisivel and "🔼" or "🔽"
+end)
