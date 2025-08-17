@@ -1,160 +1,82 @@
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
+-- ===== SCRIPT SEM WAITFORCHILD - TOTALMENTE SEGURO =====
 
+-- Esperar tudo estar pronto primeiro
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+task.wait(2) -- Aguardar um pouco mais para segurança
+
+local Players = game.Players
+local ReplicatedStorage = game.ReplicatedStorage  
+local Workspace = game.Workspace
 local player = Players.LocalPlayer
 
--- ===== Funções auxiliares seguras =====
-local function safeGetService(serviceName)
-    local success, service = pcall(function()
-        return game:GetService(serviceName)
-    end)
-    return success and service or nil
-end
-
-local function safeWaitForChild(parent, childName, timeout)
-    timeout = timeout or 3
-    local child = nil
+-- ===== Verificações básicas =====
+local function verificarTudo()
+    local status = {
+        player = player ~= nil,
+        workspace = Workspace ~= nil,
+        replicatedStorage = ReplicatedStorage ~= nil
+    }
     
-    local success = pcall(function()
-        local startTime = tick()
-        while not child and tick() - startTime < timeout do
-            child = parent:FindFirstChild(childName)
-            if not child then
-                task.wait(0.1)
-            end
+    if player then
+        status.character = player.Character ~= nil
+        if player.Character then
+            status.humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart") ~= nil
         end
-    end)
+    end
     
-    return success and child or nil
+    return status
 end
 
-local function safeFireServer(remote, ...)
-    if not remote then return false end
+-- ===== Função para encontrar mobs SEM waitforchild =====
+local function encontrarMobs()
+    local mobs = {}
     
-    local success = pcall(function()
-        remote:FireServer(...)
-    end)
-    
-    return success
-end
-
--- ===== Verificar se player está pronto =====
-local function isPlayerReady()
-    return player and player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-end
-
--- ===== Detecção de Dungeon SIMPLIFICADA =====
-local isInDungeon = function()
-    -- Método 1: Verificar pastas conhecidas no workspace
-    local dungeonFolders = {
+    -- Lista de possíveis nomes de pastas
+    local nomesPastas = {
         "__Enemies", "DungeonEnemies", "Mobs", "Enemies", 
         "NPCs", "Monsters", "EnemyFolder", "MobFolder"
     }
     
-    for _, folderName in ipairs(dungeonFolders) do
-        if Workspace:FindFirstChild(folderName) then
-            print("✅ Dungeon detectada por pasta:", folderName)
-            return true
-        end
-    end
-    
-    -- Método 2: Procurar por modelos com Humanoid no workspace
-    local mobCount = 0
-    for _, child in pairs(Workspace:GetChildren()) do
-        if child:IsA("Model") and child:FindFirstChild("Humanoid") then
-            local humanoid = child:FindFirstChild("Humanoid")
-            if humanoid and humanoid.MaxHealth > 100 then -- Provavelmente é um mob
-                mobCount = mobCount + 1
-            end
-        elseif child:IsA("Folder") then
-            for _, subchild in pairs(child:GetChildren()) do
-                if subchild:IsA("Model") and subchild:FindFirstChild("Humanoid") then
-                    mobCount = mobCount + 1
-                end
-            end
-        end
-    end
-    
-    if mobCount >= 3 then
-        print("✅ Dungeon detectada por contagem de mobs:", mobCount)
-        return true
-    end
-    
-    -- Método 3: Verificar UI (sem WaitForChild)
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if playerGui then
-        local dungeonTerms = {"inimigos", "enemies", "boss", "wave", "sala", "room"}
-        
-        for _, gui in pairs(playerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Enabled then
-                for _, descendant in pairs(gui:GetDescendants()) do
-                    if descendant:IsA("TextLabel") and descendant.Visible then
-                        local text = descendant.Text:lower()
-                        for _, term in ipairs(dungeonTerms) do
-                            if text:find(term) then
-                                print("✅ Dungeon detectada por UI:", descendant.Text)
-                                return true
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return false
-end
-
--- ===== Encontrar mobs de forma segura =====
-local encontrarMobs = function()
-    local mobs = {}
-    
-    -- Procurar em pastas conhecidas primeiro
-    local dungeonFolders = {
-        "__Enemies", "DungeonEnemies", "Mobs", "Enemies", "NPCs", "Monsters"
-    }
-    
-    for _, folderName in ipairs(dungeonFolders) do
-        local folder = Workspace:FindFirstChild(folderName)
-        if folder then
-            for _, mob in pairs(folder:GetChildren()) do
-                if mob:IsA("Model") then
-                    local humanoid = mob:FindFirstChild("Humanoid")
+    -- Procurar nas pastas conhecidas
+    for _, nomePasta in ipairs(nomesPastas) do
+        local pasta = Workspace:FindFirstChild(nomePasta)
+        if pasta then
+            for _, modelo in pairs(pasta:GetChildren()) do
+                if modelo:IsA("Model") then
+                    local humanoid = modelo:FindFirstChild("Humanoid")
                     if humanoid and humanoid.Health > 0 then
-                        table.insert(mobs, mob)
+                        table.insert(mobs, modelo)
                     end
                 end
             end
             
             if #mobs > 0 then
-                print("📁 Mobs encontrados na pasta:", folderName, "- Quantidade:", #mobs)
+                print("📁 Encontrou", #mobs, "mobs na pasta:", nomePasta)
                 return mobs
             end
         end
     end
     
-    -- Se não encontrou em pastas, procurar no workspace
+    -- Se não encontrou em pastas, procurar diretamente no workspace
     for _, child in pairs(Workspace:GetChildren()) do
-        if child:IsA("Model") and child.Name:lower():find("mob") or child.Name:lower():find("enemy") then
+        if child:IsA("Model") then
             local humanoid = child:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 and humanoid.MaxHealth > 100 then
+            -- Verificar se parece com um mob (tem humanoid e vida alta)
+            if humanoid and humanoid.MaxHealth > 100 and humanoid.Health > 0 then
                 table.insert(mobs, child)
             end
         elseif child:IsA("Folder") then
-            local folderMobs = 0
+            -- Procurar dentro de pastas
             for _, subchild in pairs(child:GetChildren()) do
                 if subchild:IsA("Model") then
                     local humanoid = subchild:FindFirstChild("Humanoid")
                     if humanoid and humanoid.Health > 0 then
                         table.insert(mobs, subchild)
-                        folderMobs = folderMobs + 1
                     end
                 end
-            end
-            if folderMobs > 0 then
-                print("📁 Mobs encontrados em:", child.Name, "- Quantidade:", folderMobs)
             end
         end
     end
@@ -163,41 +85,39 @@ local encontrarMobs = function()
     return mobs
 end
 
--- ===== Teleporte ultra seguro =====
-local teleportToMob = function(mob)
-    if not isPlayerReady() then
-        print("❌ Player não está pronto")
+-- ===== Função de teleporte segura =====
+local function teleportarPara(mob)
+    local status = verificarTudo()
+    if not (status.player and status.character and status.humanoidRootPart) then
+        print("❌ Player não está pronto para teleporte")
         return false
     end
-    
-    local character = player.Character
-    local root = character.HumanoidRootPart
     
     local mobRoot = mob:FindFirstChild("HumanoidRootPart") or 
                    mob:FindFirstChild("Torso") or 
                    mob:FindFirstChild("Head")
     
     if not mobRoot then
-        print("❌ Mob sem root part:", mob.Name)
+        print("❌ Mob sem parte para teleportar:", mob.Name)
         return false
     end
     
-    local success = pcall(function()
-        root.CFrame = mobRoot.CFrame * CFrame.new(0, 0, 5)
+    local sucesso = pcall(function()
+        player.Character.HumanoidRootPart.CFrame = mobRoot.CFrame * CFrame.new(0, 0, 5)
     end)
     
-    if success then
-        print("📍 Teleportado para:", mob.Name)
-        return true
+    if sucesso then
+        print("📍 Teleportou para:", mob.Name)
     else
-        print("❌ Falha no teleporte para:", mob.Name)
-        return false
+        print("❌ Erro ao teleportar")
     end
+    
+    return sucesso
 end
 
--- ===== Sistema de ataque simplificado =====
-local atacarMob = function(mobName)
-    -- Tentar encontrar o remote de forma segura
+-- ===== Função de ataque segura =====
+local function atacarMob(nomeDoMob)
+    -- Tentar encontrar o remote
     local bridgeNet = ReplicatedStorage:FindFirstChild("BridgeNet2")
     if not bridgeNet then
         print("❌ BridgeNet2 não encontrado")
@@ -206,88 +126,83 @@ local atacarMob = function(mobName)
     
     local remote = bridgeNet:FindFirstChild("dataRemoteEvent")
     if not remote then
-        print("❌ dataRemoteEvent não encontrado")
+        print("❌ Remote não encontrado")
         return false
     end
     
-    -- Lista de ataques para tentar
-    local attacks = {
-        { Event = "Attack", Enemy = mobName },
-        { Event = "Combat", Target = mobName },
-        { Event = "DungeonAttack", Enemy = mobName },
-        { Event = "KillEnemy", Target = mobName },
-        { Event = "AttackMob", Mob = mobName },
-        { Action = "Attack", Target = mobName },
-        { Type = "Attack", Enemy = mobName }
+    -- Diferentes tipos de ataque para tentar
+    local tiposAtaque = {
+        {Event = "Attack", Enemy = nomeDoMob},
+        {Event = "Combat", Target = nomeDoMob},
+        {Event = "DungeonAttack", Enemy = nomeDoMob},
+        {Event = "KillEnemy", Target = nomeDoMob}
     }
     
-    local attacksSent = 0
-    for _, attackData in ipairs(attacks) do
-        if safeFireServer(remote, { attackData, "\5" }) then
-            attacksSent = attacksSent + 1
-            task.wait(0.05)
+    local ataqueEnviados = 0
+    
+    for _, ataque in ipairs(tiposAtaque) do
+        local sucesso = pcall(function()
+            remote:FireServer({ataque, "\5"})
+        end)
+        
+        if sucesso then
+            ataqueEnviados = ataqueEnviados + 1
+            task.wait(0.1)
         end
     end
     
-    print("⚔️ Atacando:", mobName, "- Ataques enviados:", attacksSent)
-    return attacksSent > 0
+    print("⚔️ Atacou:", nomeDoMob, "- Ataques:", ataqueEnviados)
+    return ataqueEnviados > 0
 end
 
--- ===== Função principal SIMPLIFICADA =====
-local executarCombate = function()
-    print("\n🌟 === INICIANDO COMBATE ===")
+-- ===== Função principal de combate =====
+local function iniciarCombate()
+    print("\n🌟 INICIANDO COMBATE")
     
-    -- Verificar se está em dungeon
-    if not isInDungeon() then
-        print("❌ Não detectou dungeon")
+    -- Verificar se tudo está OK
+    local status = verificarTudo()
+    print("📊 Status do sistema:")
+    for item, ok in pairs(status) do
+        print("  " .. item .. ":", ok and "✅" or "❌")
+    end
+    
+    if not (status.player and status.character and status.humanoidRootPart) then
+        print("❌ Sistema não está pronto")
         return false
     end
     
-    -- Aguardar um pouco para tudo carregar
-    print("⏳ Aguardando 3 segundos para inicializar...")
-    task.wait(3)
+    -- Loop principal
+    local cicloMax = 30
+    local ciclo = 0
     
-    local maxCycles = 50 -- Máximo de 50 ciclos
-    local cycle = 0
-    
-    while cycle < maxCycles do
-        cycle = cycle + 1
-        print("\n🔄 Ciclo", cycle .. "/" .. maxCycles)
-        
-        -- Verificar se player está pronto
-        if not isPlayerReady() then
-            print("⏳ Aguardando player ficar pronto...")
-            task.wait(2)
-            continue
-        end
+    while ciclo < cicloMax do
+        ciclo = ciclo + 1
+        print("\n🔄 Ciclo", ciclo, "de", cicloMax)
         
         -- Encontrar mobs
         local mobs = encontrarMobs()
+        
         if #mobs == 0 then
-            print("🎉 Nenhum mob encontrado - Combate finalizado!")
+            print("🎉 Nenhum mob encontrado - Finalizado!")
             return true
         end
         
-        print("👹 Mobs restantes:", #mobs)
+        print("🎯 Atacando", #mobs, "mobs...")
         
-        -- Atacar todos os mobs
+        -- Atacar cada mob
         for i, mob in ipairs(mobs) do
             local humanoid = mob:FindFirstChild("Humanoid")
             if humanoid and humanoid.Health > 0 then
-                -- Teleportar para o mob
-                if teleportToMob(mob) then
-                    task.wait(0.5)
-                end
+                -- Teleportar
+                teleportarPara(mob)
+                task.wait(0.5)
                 
                 -- Atacar
                 atacarMob(mob.Name)
-                
-                -- Pequena pausa entre ataques
                 task.wait(0.5)
             end
         end
         
-        -- Pausa maior entre ciclos
         print("💤 Pausa de 3 segundos...")
         task.wait(3)
     end
@@ -296,77 +211,135 @@ local executarCombate = function()
     return false
 end
 
--- ===== Debug simplificado =====
-local debugSimples = function()
-    print("\n🔍 === DEBUG SIMPLES ===")
-    print("🏰 Em dungeon:", isInDungeon())
-    print("👤 Player pronto:", isPlayerReady())
+-- ===== Função de debug simples =====
+local function debug()
+    print("\n🔍 DEBUG RÁPIDO")
+    
+    local status = verificarTudo()
+    for item, ok in pairs(status) do
+        print("  " .. item .. ":", ok and "✅" or "❌")
+    end
     
     local mobs = encontrarMobs()
-    print("👹 Mobs encontrados:", #mobs)
-    
     if #mobs > 0 then
+        print("📋 Mobs encontrados:")
         for i, mob in ipairs(mobs) do
             local humanoid = mob:FindFirstChild("Humanoid")
             if humanoid then
                 print("  " .. i .. ".", mob.Name, "- HP:", math.floor(humanoid.Health))
             end
         end
+    else
+        print("❌ Nenhum mob encontrado")
     end
     
+    -- Verificar remote
     local bridgeNet = ReplicatedStorage:FindFirstChild("BridgeNet2")
     local remote = bridgeNet and bridgeNet:FindFirstChild("dataRemoteEvent")
     print("🔗 Remote disponível:", remote and "✅" or "❌")
     
-    print("🔍 === FIM DEBUG ===\n")
+    print("🔍 FIM DEBUG\n")
 end
 
--- ===== Interface (assumindo que 't' existe) =====
-if t then
-    t:AddButton({
-        Title = "🔍 Debug Rápido",
-        Description = "Verificação básica do sistema",
-        Callback = function()
-            debugSimples()
-        end
-    })
-
-    t:AddButton({
-        Title = "⚔️ Iniciar Combate",
-        Description = "Executar combate completo",
-        Callback = function()
-            task.spawn(executarCombate)
-        end
-    })
-
-    t:AddButton({
-        Title = "👹 Encontrar Mobs",
-        Description = "Mostrar mobs disponíveis",
-        Callback = function()
-            local mobs = encontrarMobs()
-            print("Mobs encontrados:", #mobs)
-        end
-    })
-
-    t:AddButton({
-        Title = "📍 Teleporte Teste",
-        Description = "Teleportar para primeiro mob",
-        Callback = function()
-            local mobs = encontrarMobs()
-            if #mobs > 0 then
-                teleportToMob(mobs[1])
-            else
-                print("❌ Nenhum mob para teleportar")
+-- ===== Tentar criar interface apenas se 't' existir =====
+local function criarInterface()
+    -- Verificar se 't' existe e não dar erro se não existir
+    if not _G.t and not t then
+        print("⚠️ Interface 't' não encontrada - usando comandos no chat")
+        return false
+    end
+    
+    local tab = _G.t or t
+    
+    local sucesso = pcall(function()
+        tab:AddButton({
+            Title = "🔍 Debug",
+            Description = "Verificar sistema",
+            Callback = function()
+                debug()
             end
-        end
-    })
+        })
+
+        tab:AddButton({
+            Title = "⚔️ Combate",
+            Description = "Iniciar combate",
+            Callback = function()
+                task.spawn(iniciarCombate)
+            end
+        })
+
+        tab:AddButton({
+            Title = "👹 Mobs",
+            Description = "Encontrar mobs",
+            Callback = function()
+                encontrarMobs()
+            end
+        })
+
+        tab:AddButton({
+            Title = "📍 Teleporte",
+            Description = "Teleportar para mob",
+            Callback = function()
+                local mobs = encontrarMobs()
+                if #mobs > 0 then
+                    teleportarPara(mobs[1])
+                end
+            end
+        })
+    end)
+    
+    return sucesso
 end
 
-print("✅ Script robusto carregado!")
-
--- Auto-executar se em dungeon
-if isInDungeon() then
-    print("🎯 Dungeon detectada - executando em 5 segundos...")
-    task.wait(5)
-    task.spawn(executarCombate)
+-- ===== Sistema de comandos por chat =====
+local function configurarComandos()
+    if player.Chatted then
+        player.Chatted:Connect(function(message)
+            local msg = message:lower()
+            
+            if msg == "/debug" then
+                debug()
+            elseif msg == "/combate" then
+                task.spawn(iniciarCombate)
+            elseif msg == "/mobs" then
+                encontrarMobs()
+            elseif msg == "/tp" then
+                local mobs = encontrarMobs()
+                if #mobs > 0 then
+                    teleportarPara(mobs[1])
+                end
+            elseif msg == "/help" then
+                print("🎮 Comandos disponíveis:")
+                print("  /debug - Verificar sistema")
+                print("  /combate - Iniciar combate")
+                print("  /mobs - Encontrar mobs")
+                print("  /tp - Teleportar para mob")
+                print("  /help - Mostrar comandos")
+            end
+        end)
+        
+        print("💬 Comandos de chat ativados! Digite /help para ver os comandos")
+    end
 end
+
+-- ===== INICIALIZAÇÃO =====
+print("🔧 Carregando script...")
+
+-- Aguardar um pouco para tudo estar pronto
+task.wait(1)
+
+-- Tentar criar interface, se falhar, usar comandos
+if not criarInterface() then
+    print("⚠️ Interface não disponível - usando comandos de chat")
+    configurarComandos()
+else
+    print("✅ Interface criada com sucesso!")
+    -- Criar comandos também como backup
+    configurarComandos()
+end
+
+print("✅ Script carregado!")
+print("🎮 Use a interface ou digite /help no chat")
+
+-- Auto debug para ver se está tudo OK
+debug()
