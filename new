@@ -1,5 +1,6 @@
 local ativarEvento = false
 local ativarDungeon = false
+local ativarGems = false  -- Nova variável para ativar o reset com gems
 local andarEntrada = 10
 local andarSaida = 1
 local currentFloor = 0
@@ -9,7 +10,10 @@ local configFile = "allan_hub_castelo.json"
 local function salvarConfig()
     local data = {
         entrada = andarEntrada,
-        saida = andarSaida
+        saida = andarSaida,
+        evento = ativarEvento,
+        dungeon = ativarDungeon,
+        gems = ativarGems
     }
     writefile(configFile, game:GetService("HttpService"):JSONEncode(data))
     print("💾 Configuração salva!")
@@ -22,7 +26,10 @@ local function carregarConfig()
         local data = game:GetService("HttpService"):JSONDecode(content)
         andarEntrada = tonumber(data.entrada) or andarEntrada
         andarSaida = tonumber(data.saida) or andarSaida
-        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida)
+        ativarEvento = data.evento or false
+        ativarDungeon = data.dungeon or false
+        ativarGems = data.gems or false
+        print("📂 Configuração carregada! Entrada: " .. andarEntrada .. " | Saída: " .. andarSaida .. " | Evento: " .. tostring(ativarEvento) .. " | Dungeon: " .. tostring(ativarDungeon) .. " | Gems: " .. tostring(ativarGems))
     else
         salvarConfig()
     end
@@ -139,8 +146,84 @@ local function criarDungeon()
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     print("✔ Dungeon criada.")
+
+    -- Espera 3 segundos para garantir que o servidor processe a criação antes de iniciar
     task.wait(3)
     iniciarDungeon()
+end
+
+local function detectarInimigosProximos()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if not character then return {} end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return {} end
+    local mobsFolder = workspace:FindFirstChild("__Enemies")
+    if not mobsFolder then return {} end
+    local inimigos = {}
+    for _, mob in pairs(mobsFolder:GetChildren()) do
+        if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+            local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+            if mobRoot then
+                local dist = (root.Position - mobRoot.Position).Magnitude
+                if dist <= 20 then
+                    table.insert(inimigos, mob.Name)  -- Assumindo que enemyId é o Name do mob
+                end
+            end
+        end
+    end
+    return inimigos
+end
+
+local function atacarInimigos()
+    local inimigos = detectarInimigosProximos()
+    if #inimigos > 0 then
+        for _, enemyId in ipairs(inimigos) do
+            print("Atacando inimigo com ID:", enemyId)
+            local args = {
+                [1] = {
+                    [1] = {
+                        ["PetPos"] = {},
+                        ["AttackType"] = "All",
+                        ["Event"] = "Attack",
+                        ["Enemy"] = enemyId
+                    },
+                    [2] = "\5"
+                }
+            }
+            game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+        end
+    else
+        print("Nenhum inimigo a menos de 20 metros para atacar.")
+    end
+end
+
+local function teleportToNearestMob()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if not character then return end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local mobsFolder = workspace:FindFirstChild("__Enemies")
+    if not mobsFolder then return end
+    local closestMob = nil
+    local minDist = math.huge
+    for _, mob in pairs(mobsFolder:GetChildren()) do
+        if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+            local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+            if mobRoot then
+                local dist = (root.Position - mobRoot.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    closestMob = mobRoot
+                end
+            end
+        end
+    end
+    if closestMob and minDist > 5 then
+        root.CFrame = closestMob.CFrame * CFrame.new(0, 0, 5)  -- Teleporta perto do mob
+        print("Teletransportado para o mob mais próximo.")
+    end
 end
 
 local function resetarDungeon()
@@ -172,50 +255,40 @@ end
 
 local function autoDungeonLoop()
     while ativarDungeon do
-        criarDungeon()
-        print("⏳ Aguardando mobs aparecerem...")
-        task.wait(5)
-
-        print("⚔️ Iniciando ataque aos inimigos...")
-        local mobsFolder = workspace:FindFirstChild("__Enemies")
-        if mobsFolder then
-            while mobsVivos() do
-                for _, mob in pairs(mobsFolder:GetChildren()) do
-                    if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                        local enemyId = mob:GetAttribute("EnemyID") or mob.Name
-                        local args = {
-                            [1] = {
-                                [1] = {
-                                    ["PetPos"] = {},
-                                    ["AttackType"] = "All",
-                                    ["Event"] = "Attack",
-                                    ["Enemy"] = enemyId
-                                },
-                                [2] = "\5"
-                            }
-                        }
-                        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-                        print("🔫 Atacando: " .. enemyId)
-                    end
-                end
-                task.wait(2)
+        if not mobsVivos() then
+            if ativarGems then
+                resetarDungeon()
+                task.wait(3)
             end
-        else
-            print("❌ Pasta '__Enemies' não encontrada.")
+            criarDungeon()
+            task.wait(3)
         end
 
-        print("✅ Dungeon limpa! Resetando...")
-        resetarDungeon()
-        task.wait(3)
+        print("⏳ Aguardando mobs serem eliminados...")
+        repeat
+            teleportToNearestMob()
+            atacarInimigos()
+            task.wait(0.5)
+        until not mobsVivos()
+
+        print("✔ Todos os mobs mortos...")
+
+        if not ativarGems then
+            sairCastelo()
+            task.wait(3)
+            entrarCastelo()
+            task.wait(3)
+        end
     end
 end
 
-t:AddToggle("ToggleAutoCastelo", {
+local toggleAutoCastelo = t:AddToggle("ToggleAutoCastelo", {
     Title = "Auto Castelo",
     Description = "Ativa ou desativa o Auto Castelo Infernal",
-    Default = false,
+    Default = ativarEvento,
     Callback = function(state)
         ativarEvento = state
+        salvarConfig()
         if ativarEvento then
             print("✅ Auto Castelo ativado!")
             entrarCastelo()
@@ -225,12 +298,13 @@ t:AddToggle("ToggleAutoCastelo", {
     end
 })
 
-t:AddToggle("ToggleAutoDungeon", {
+local toggleAutoDungeon = t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon",
     Description = "Ativa ou desativa o ciclo automático de criar, iniciar e resetar dungeon",
-    Default = false,
+    Default = ativarDungeon,
     Callback = function(state)
         ativarDungeon = state
+        salvarConfig()
         if ativarDungeon then
             print("✅ Auto Dungeon ativado!")
             task.spawn(autoDungeonLoop)
@@ -240,32 +314,74 @@ t:AddToggle("ToggleAutoDungeon", {
     end
 })
 
--- Janela flutuante separada para controle da GUI
-local guiControl = Instance.new("ScreenGui")
-guiControl.Name = "AllanHubControl"
-guiControl.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-guiControl.ResetOnSpawn = false
+local toggleUseGems = t:AddToggle("ToggleUseGems", {
+    Title = "Usar Gems para Reset",
+    Description = "Ativa o uso de gems para comprar ticket e resetar a dungeon (use como última opção)",
+    Default = ativarGems,
+    Callback = function(state)
+        ativarGems = state
+        salvarConfig()
+        if ativarGems then
+            print("✅ Uso de gems para reset ativado!")
+        else
+            print("❌ Uso de gems para reset desativado!")
+        end
+    end
+})
 
-local controlButton = Instance.new("TextButton")
-controlButton.Size = UDim2.new(0, 60, 0, 60)
-controlButton.Position = UDim2.new(0, 20, 0.5, -30)
-controlButton.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
-controlButton.Text = "🧭"
-controlButton.TextScaled = true
-controlButton.Font = Enum.Font.GothamBold
-controlButton.TextColor3 = Color3.new(1, 1, 1)
-controlButton.Parent = guiControl
-controlButton.Active = true
-controlButton.Draggable = true
+-- Inicializar loops se carregados como ativos
+if ativarEvento then
+    entrarCastelo()
+end
+if ativarDungeon then
+    task.spawn(autoDungeonLoop)
+end
 
-local guiVisivel = true
-controlButton.MouseButton1Click:Connect(function()
-    guiVisivel = not Window.Frame.Visible
-    Window.Frame.Visible = guiVisivel
-    controlButton.BackgroundColor3 = guiVisivel and Color3.fromRGB(50, 50, 200) or Color3.fromRGB(200, 50, 50)
-    controlButton.Text = guiVisivel and "🧭" or "🚫"
+-- Botão flutuante para abrir/fechar o Hub
+local floatingGui = Instance.new("ScreenGui")
+floatingGui.Name = "AllanHubFloating"
+floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+floatingGui.ResetOnSpawn = false
 
-    if guiVisivel then
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+toggleButton.Text = "⚙"
+toggleButton.TextScaled = true
+toggleButton.Parent = floatingGui
+toggleButton.Active = true
+toggleButton.Draggable = true
+
+local hubVisivel = true
+toggleButton.MouseButton1Click:Connect(function()
+    hubVisivel = not hubVisivel
+    Window.Frame.Visible = hubVisivel
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100, 100, 255) or Color3.fromRGB(255, 100, 100)
+    toggleButton.Text = hubVisivel and "🔼" or "🔽"
+
+    if hubVisivel then
         if ativarEvento then
             entrarCastelo()
-            print("🔁
+            print("🔁 Reativando entrada no castelo após reabrir o Hub")
+        end
+        if ativarDungeon then
+            print("🔁 Continuando Auto Dungeon após reabrir o Hub")
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(1) do
+        if ativarEvento then
+            local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
+            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
+                currentFloor = tonumber(floorValue.Value)
+                print("Andar atual: " .. currentFloor)
+                if currentFloor == andarSaida then
+                    sairCastelo()
+                end
+            end
+        end
+    end
+end)
