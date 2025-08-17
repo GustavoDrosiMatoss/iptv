@@ -255,28 +255,56 @@ end
 
 local function autoDungeonLoop()
     while ativarDungeon do
-        if not mobsVivos() then
-            if ativarGems then
-                resetarDungeon()
-                task.wait(3)
+        -- Espera inicial para o servidor carregar
+        task.wait(5)
+
+        -- Verificar se já está dentro da dungeon (baseado no CurrentFloor)
+        local floorValue = game.Players.LocalPlayer:FindFirstChild("CurrentFloor")
+        local inDungeon = floorValue and tonumber(floorValue.Value) > 0
+
+        if not inDungeon then
+            -- Se não estiver na dungeon, entrar no castelo se ativado
+            if ativarEvento then
+                entrarCastelo()
+                task.wait(5)
             end
+            -- Criar a dungeon
             criarDungeon()
-            task.wait(3)
+            task.wait(5)
         end
 
+        -- Agora, farmar os mobs
         print("⏳ Aguardando mobs serem eliminados...")
-        repeat
-            teleportToNearestMob()
-            atacarInimigos()
-            task.wait(0.5)
-        until not mobsVivos()
 
-        print("✔ Todos os mobs mortos...")
+        -- Esperar pelos mobs spawnarem se não houver nenhum ainda
+        local startTime = tick()
+        while not mobsVivos() and tick() - startTime < 15 do
+            task.wait(1)
+            print("Aguardando spawn de mobs...")
+        end
 
-        if not ativarGems then
+        if mobsVivos() then
+            repeat
+                teleportToNearestMob()
+                atacarInimigos()
+                task.wait(0.5)
+            until not mobsVivos()
+            print("✔ Todos os mobs mortos...")
+        else
+            print("⚠️ Nenhum mob spawnou após espera, verificando configuração...")
+            continue  -- Pula para próxima iteração
+        end
+
+        -- Após matar, resetar ou sair/entrar
+        if ativarGems then
+            resetarDungeon()
+            task.wait(3)
+        else
             sairCastelo()
             task.wait(3)
             entrarCastelo()
+            task.wait(3)
+            criarDungeon()
             task.wait(3)
         end
     end
@@ -385,3 +413,6 @@ task.spawn(function()
         end
     end
 end)
+
+-- Para executar via GitHub, use:
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/GustavoDrosiMatoss/iptv/main/dungeon"))()
