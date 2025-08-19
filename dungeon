@@ -1,203 +1,723 @@
---[=[
-    Script: Allan Hub - Arise (Versão Corrigida)
-    Descrição: Versão final com detecção automática de mobs e sistema de voo robusto.
-    Data da Atualização: 19/08/2025
---]=]
+local ativarEvento   = false
+local ativarDungeon  = false
+local ativarGems     = false
+local ativarAutoFly  = false  -- Nova variável para controlar o auto farm voador
+local andarEntrada   = 10
+local andarSaida     = 1
+local currentFloor   = 0
+local configFile     = "allan_hub_castelo.json"
+local tempFile       = "temp_dungeon.json"
+local dungeonActive  = false  -- Nova flag para controle
 
--- ===== Serviços e Variáveis Globais =====
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-
 local player = Players.LocalPlayer
+
+-- ===== FUNÇÃO DE AUTO FARM COM VOO (COMPLETA E INALTERADA) =====
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
 
--- Variáveis de controle de estado
-local ativarEvento = false
-local ativarDungeon = false
-local ativarGems = false
-local andarEntrada = 10
-local andarSaida = 1
-local dungeonActive = false
+local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies")
 
--- Nomes de arquivos de configuração
-local configFile = "allan_hub_corrigido.json"
-local tempFile = "temp_dungeon_corrigido.json"
-
----------------------------------------------------------------------
---- NOVO SISTEMA DE VOO CORRIGIDO ---
----------------------------------------------------------------------
-
--- Configurações de Voo
-local FLIGHT_SPEED = 180 -- Velocidade para BodyVelocity. Ajuste se necessário.
-local FLIGHT_HEIGHT = 10 -- Altura acima do mob.
-
--- Variáveis de estado para o sistema de voo
 local visitedPositions = {}
-local flyConnection = nil -- Será a BodyVelocity
-local cachedEnemiesFolder = nil -- Guarda a pasta de inimigos para não procurar toda hora
+local currentTarget = nil
+local stuckCounter = 0
+local flyConnection = nil
+local currentTween = nil
+local autoFlyRunning = false
+local autoFlyCoroutine = nil
 
--- **NOVO: Função para encontrar a pasta de inimigos automaticamente**
-local function findEnemiesFolder()
-    if cachedEnemiesFolder and cachedEnemiesFolder.Parent then
-        return cachedEnemiesFolder -- Retorna a pasta se já foi encontrada
-    end
-    print("🔎 Procurando pasta de inimigos em 'workspace'...")
-    for _, item in ipairs(workspace:GetChildren()) do
-        if item:IsA("Folder") or item:IsA("Model") then
-            local mobCount = 0
-            for _, child in ipairs(item:GetChildren()) do
-                if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") and child:FindFirstChild("HumanoidRootPart") then
-                    mobCount = mobCount + 1
-                end
-            end
-            -- Considera uma pasta de inimigos se tiver pelo menos 2 mobs
-            if mobCount >= 2 then
-                print("✅ Pasta de inimigos encontrada:", item:GetFullName())
-                cachedEnemiesFolder = item
-                return item
-            end
+-- Configurações de voo
+local FLIGHT_SPEED = 500 -- Velocidade de voo
+local FLIGHT_HEIGHT = 5 -- Altura acima do mob
+
+-- Função para verificar se uma posição já foi visitada recentemente
+local function isPositionVisited(position)
+    for _, visitedPos in pairs(visitedPositions) do
+        if (position - visitedPos).Magnitude < 10 then
+            return true
         end
     end
-    print("❌ Nenhuma pasta de inimigos foi detectada.")
-    return nil -- Retorna nulo se não encontrar
-end
-
-local function isPositionVisited(position)
-    for _, visitedPos in pairs(visitedPositions) do if (position - visitedPos).Magnitude < 15 then return true end end
     return false
 end
 
+-- Função para adicionar posição à lista de visitadas
 local function addVisitedPosition(position)
-    table.insert(visitedPositions, position); if #visitedPositions > 10 then table.remove(visitedPositions, 1) end
+    table.insert(visitedPositions, position)
+    if #visitedPositions > 10 then
+        table.remove(visitedPositions, 1)
+    end
 end
 
+-- Função para ativar o voo
 local function enableFlight()
     if flyConnection then return end
+    
     local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if humanoid then humanoid.PlatformStand = true end
-    flyConnection = Instance.new("BodyVelocity", hrp)
-    flyConnection.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    flyConnection.Velocity = Vector3.new(0, 0, 0)
+    if humanoid then
+        humanoid.PlatformStand = true
+    end
+    
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent = hrp
+    
+    flyConnection = bodyVelocity
 end
 
+-- Função para desativar o voo
 local function disableFlight()
-    if flyConnection then flyConnection:Destroy(); flyConnection = nil; end
+    if flyConnection then
+        flyConnection:Destroy()
+        flyConnection = nil
+    end
+    
     local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if humanoid then humanoid.PlatformStand = false end
-    cachedEnemiesFolder = nil -- Limpa o cache ao sair da dungeon
+    if humanoid then
+        humanoid.PlatformStand = false
+    end
+end
+
+-- Função para voar até uma posição usando Tween
+local function flyToPosition(targetPosition)
+    enableFlight()
+    
+    -- Para o tween anterior se existir
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
+    end
+    
+    local targetCFrame = CFrame.new(targetPosition + Vector3.new(0, FLIGHT_HEIGHT, 0))
+    local distance = (hrp.Position - targetPosition).Magnitude
+    local duration = distance / FLIGHT_SPEED
+    
+    -- Cria o tween de movimento
+    local tweenInfo = TweenInfo.new(
+        duration,
+        Enum.EasingStyle.Linear,
+        Enum.EasingDirection.InOut,
+        0,
+        false,
+        0
+    )
+    
+    currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    currentTween:Play()
+    
+    print("Voando para posição:", math.floor(targetPosition.X), math.floor(targetPosition.Y), math.floor(targetPosition.Z))
+    
+    return currentTween
 end
 
 local function getClosestUnvisitedMob()
-    local enemiesFolder = findEnemiesFolder()
-    if not enemiesFolder then return nil end
-
-    local allMobs, closestMob, shortestDistance = {}, nil, math.huge
-    for _, mobFolder in ipairs(enemiesFolder:GetChildren()) do
-        if mobFolder:IsA("Model") then
-            local humanoid = mobFolder:FindFirstChildOfClass("Humanoid")
-            local mobHRP = mobFolder:FindFirstChild("HumanoidRootPart")
-            if humanoid and humanoid.Health > 0 and mobHRP then
-                table.insert(allMobs, {mob = mobHRP, distance = (hrp.Position - mobHRP.Position).Magnitude})
+    local closestMob = nil
+    local shortestDistance = math.huge
+    local allMobs = {}
+    local maxDistance = 50000
+    
+    for _, mobFolder in pairs(enemiesFolder:GetChildren()) do
+        if mobFolder and mobFolder.Parent then
+            local mob = mobFolder:FindFirstChild("HumanoidRootPart") or mobFolder:FindFirstChildWhichIsA("BasePart", true)
+            
+            if mob and mob:IsA("BasePart") and mob.Parent then
+                local dist = (hrp.Position - mob.Position).Magnitude
+                
+                if dist <= maxDistance then
+                    local humanoid = mobFolder:FindFirstChildOfClass("Humanoid")
+                    local isAlive = true
+                    
+                    if humanoid then
+                        isAlive = humanoid.Health > 0
+                    end
+                    
+                    if isAlive then
+                        table.insert(allMobs, {mob = mob, folder = mobFolder, distance = dist})
+                    end
+                end
             end
         end
     end
-
-    if #allMobs == 0 then return nil end
-
-    for _, data in pairs(allMobs) do
-        if not isPositionVisited(data.mob.Position) and data.distance < shortestDistance then
-            shortestDistance = data.distance; closestMob = data.mob
+    
+    -- Procura por mobs não visitados primeiro
+    for _, mobData in pairs(allMobs) do
+        local mob = mobData.mob
+        if not isPositionVisited(mob.Position) then
+            local dist = mobData.distance
+            if dist < shortestDistance then
+                shortestDistance = dist
+                closestMob = mob
+            end
         end
     end
     
-    if not closestMob then
-        print("🔍 Todos os mobs já foram visitados. Resetando a lista.")
+    -- Se não encontrar mobs não visitados, limpa a lista e pega qualquer um
+    if not closestMob and #allMobs > 0 then
         visitedPositions = {}
-        for _, data in pairs(allMobs) do
-            if data.distance < shortestDistance then shortestDistance = data.distance; closestMob = data.mob end
+        for _, mobData in pairs(allMobs) do
+            local mob = mobData.mob
+            local dist = mobData.distance
+            if dist < shortestDistance then
+                shortestDistance = dist
+                closestMob = mob
+            end
         end
     end
+    
+    print("Mobs encontrados no alcance:", #allMobs, "| Distância do mais próximo:", math.floor(shortestDistance))
     return closestMob
 end
 
--- ===== FUNÇÃO PRINCIPAL DE VOO (Usa BodyVelocity) =====
-local function flyToAllMobs()
-    print("✈️ Iniciando modo de voo automático...")
-    visitedPositions = {}
+local function flyToMobLoop()
     enableFlight()
     
-    local combatTimeout = tick() + 300 -- Timeout de 5 minutos
-    while tick() < combatTimeout do
+    while autoFlyRunning do
         local mob = getClosestUnvisitedMob()
-        if not mob or not mob.Parent then
-            print("🎉 Nenhum mob encontrado ou todos foram derrotados. Finalizando.")
-            break -- Sai do loop se não houver mais mobs
+        
+        if mob and mob.Parent then
+            -- Verifica se é o mesmo alvo da vez anterior
+            if currentTarget and currentTarget == mob then
+                stuckCounter = stuckCounter + 1
+                if stuckCounter > 3 then
+                    print("Parece que estou preso no mesmo mob, marcando como visitado...")
+                    addVisitedPosition(mob.Position)
+                    stuckCounter = 0
+                    currentTarget = nil
+                    task.wait(1)
+                    continue
+                end
+            else
+                stuckCounter = 0
+                currentTarget = mob
+            end
+            
+            -- Voa até o mob
+            local flyTween = flyToPosition(mob.Position)
+            
+            -- Espera o voo completar ou um tempo máximo
+            local startTime = tick()
+            local maxWaitTime = 10 -- Máximo 10 segundos para chegar ao mob
+            
+            repeat
+                task.wait(0.1)
+                if not autoFlyRunning then break end -- Verifica se ainda deve continuar
+                
+                local distance = (hrp.Position - mob.Position).Magnitude
+                
+                -- Se chegou perto o suficiente, para o tween
+                if distance < 15 then
+                    break
+                end
+                
+                -- Se o mob morreu ou sumiu, para o tween
+                if not mob.Parent then
+                    break
+                end
+                
+            until (tick() - startTime) > maxWaitTime or flyTween.PlaybackState == Enum.PlaybackState.Completed
+            
+            -- Para o tween se ainda estiver rodando
+            if currentTween then
+                currentTween:Cancel()
+                currentTween = nil
+            end
+            
+            print("Chegou próximo ao mob!")
+            
+            -- Aguarda um pouco no mob antes de marcar como visitado
+            task.wait(2)
+            addVisitedPosition(mob.Position)
+            
+        else
+            print("Nenhum mob encontrado! Aguardando...")
+            visitedPositions = {}
+            currentTarget = nil
+            stuckCounter = 0
+            task.wait(2)
         end
+        
+        if autoFlyRunning then
+            task.wait(0.5)
+        end
+    end
+end
 
-        print("🎯 Próximo alvo:", mob.Parent.Name)
-        local targetPos = mob.Position + Vector3.new(0, FLIGHT_HEIGHT, 0)
-        
-        local flightTimeout = tick() + 10 -- Timeout de 10 segundos para chegar em cada mob
-        while tick() < flightTimeout and mob.Parent and (hrp.Position - targetPos).Magnitude > 20 do
-            local direction = (targetPos - hrp.Position).Unit
-            flyConnection.Velocity = direction * FLIGHT_SPEED
-            task.wait()
+-- Função para iniciar o auto fly
+local function startAutoFly()
+    if autoFlyRunning then return end
+    
+    autoFlyRunning = true
+    print("Iniciando voo automático para mobs...")
+    
+    autoFlyCoroutine = coroutine.create(function()
+        local success, error = pcall(flyToMobLoop)
+        if not success then
+            print("Erro no script de voo:", error)
+            stopAutoFly()
         end
-        
-        print("✅ Chegou próximo ao alvo.")
-        addVisitedPosition(mob.Position)
-        flyConnection.Velocity = Vector3.new(0, 0, 0) -- Para de se mover
-        task.wait(1.5) -- Espera um pouco antes de ir para o próximo
+    end)
+    
+    coroutine.resume(autoFlyCoroutine)
+end
+
+-- Função para parar o auto fly
+local function stopAutoFly()
+    autoFlyRunning = false
+    
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
     end
     
     disableFlight()
-    print("✈️ Sequência de voo finalizada.")
+    
+    -- Reset das variáveis
+    visitedPositions = {}
+    currentTarget = nil
+    stuckCounter = 0
+    
+    print("Script de voo automático parado!")
 end
 
--- Funções de Salvar/Carregar e Ações da Dungeon (sem alterações)
-local function salvarConfig() local data = {entrada=andarEntrada, saida=andarSaida, evento=ativarEvento, dungeon=ativarDungeon, gems=ativarGems, dungeonActive=dungeonActive}; writefile(configFile, HttpService:JSONEncode(data)) end
-local function carregarConfig() if isfile and isfile(configFile) then local s, d = pcall(function() return HttpService:JSONDecode(readfile(configFile)) end) if s and type(d)=="table" then andarEntrada=tonumber(d.entrada) or andarEntrada; andarSaida=tonumber(d.saida) or andarSaida; ativarEvento=d.evento or false; ativarDungeon=d.dungeon or false; ativarGems=d.gems or false; dungeonActive=d.dungeonActive or false else salvarConfig() end else salvarConfig() end end; carregarConfig()
-local function entrarCastelo() print("🏰 Entrando no castelo - Andar:", andarEntrada); local args = {[1]={[1]={Check=true,Floor=tostring(andarEntrada),Event="CastleAction",Action="Join"},[2]="\12"}}; game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) end
-local function sairCastelo() print("🚪 Saindo do castelo"); disableFlight(); local args = {[1]={[1]={Check=true,Floor=tostring(andarSaida),Event="CastleAction",Action="LeaveDungeon"},[2]="\12"}}; game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args)); dungeonActive=false; salvarConfig() end
-local function iniciarDungeon() print("▶️ Iniciando dungeon..."); local args = {[1]={[1]={Event="DungeonAction",Action="Start"},[2]="\12"}}; game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) end
-local function criarDungeon() if dungeonActive then return end; if workspace:FindFirstChild("__Enemies") or workspace:FindFirstChild("Dungeon") then dungeonActive=true; salvarConfig(); return end; print("🆕 Criando nova dungeon..."); local args = {[1]={[1]={Event="DungeonAction",Action="Create"},[2]="\12"}}; game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args)); dungeonActive=true; salvarConfig(); task.wait(5); iniciarDungeon() end
-local function resetarDungeon() print("💎 Resetando dungeon com gems..."); disableFlight(); local args = {[1]={[1]={Type="Gems",Event="DungeonAction",Action="BuyTicket"},[2]="\12"}}; game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args)); dungeonActive=false; salvarConfig() end
+-- ===== FIM DA FUNÇÃO DE AUTO FARM COM VOO =====
 
--- ===== Loop Principal =====
-local function autoDungeonLoop()
-    print("🔄 Iniciando loop de auto dungeon...")
-    while ativarDungeon do
-        task.wait(5)
-        local inDungeon = workspace:FindFirstChild("__Enemies") or workspace:FindFirstChild("Dungeon")
-        if not inDungeon and not dungeonActive then
-            if ativarEvento then entrarCastelo(); task.wait(5); end
-            criarDungeon()
-            task.wait(8)
-        end
-        inDungeon = workspace:FindFirstChild("__Enemies") or workspace:FindFirstChild("Dungeon")
-        if inDungeon then
-            flyToAllMobs()
-            task.wait(3)
-            if ativarGems then resetarDungeon() else sairCastelo(); task.wait(5); if ativarEvento then entrarCastelo() end end
-            task.wait(5)
+-- ===== Compat de arquivos =====
+local function safeDelete(path)
+    if isfile and isfile(path) then
+        if delfile then delfile(path)
+        elseif deletefile then deletefile(path)
+        else writefile(path, "") end
+    end
+end
+
+-- ===== Salvar/Carregar (incluindo flag dungeon e auto fly) =====
+local function salvarConfig()
+    local data = {
+        entrada = andarEntrada, saida = andarSaida,
+        evento = ativarEvento, dungeon = ativarDungeon, gems = ativarGems,
+        autofly = ativarAutoFly,  -- Salvar estado do auto fly
+        dungeonActive = dungeonActive  -- Salvar estado da dungeon
+    }
+    writefile(configFile, HttpService:JSONEncode(data))
+end
+
+local function carregarConfig()
+    if isfile and isfile(configFile) then
+        local data = HttpService:JSONDecode(readfile(configFile))
+        andarEntrada  = tonumber(data.entrada) or andarEntrada
+        andarSaida    = tonumber(data.saida) or andarSaida
+        ativarEvento  = data.evento or false
+        ativarDungeon = data.dungeon or false
+        ativarGems    = data.gems or false
+        ativarAutoFly = data.autofly or false  -- Carregar estado do auto fly
+        dungeonActive = data.dungeonActive or false  -- Carregar estado
+    else
+        salvarConfig()
+    end
+end
+carregarConfig()
+
+-- ===== Verificações melhoradas =====
+local isInDungeon = function()
+    local enemies = workspace:FindFirstChild("__Enemies")
+    local dungeonFolder = workspace:FindFirstChild("Dungeon") -- Adicionar outras verificações se necessário
+    return enemies ~= nil or dungeonFolder ~= nil
+end
+
+local mobsVivos = function()
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then return false end
+    
+    local count = 0
+    for _, mob in ipairs(folder:GetChildren()) do
+        if mob:IsA("Model") then
+            local humanoid = mob:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                count = count + 1
+            end
         end
     end
-    print("🛑 Loop de auto dungeon parado"); disableFlight()
+    print("🎯 Mobs vivos encontrados:", count)
+    return count > 0
 end
 
--- ===== Interface Gráfica (GUI) =====
+-- ===== Ações corrigidas =====
+local entrarCastelo = function()
+    print("🏰 Entrando no castelo - Andar:", andarEntrada)
+    local args = {
+        [1] = { [1] = { Check = true, Floor = tostring(andarEntrada), Event = "CastleAction", Action = "Join" }, [2] = "\12" }
+    }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+end
+
+local sairCastelo = function()
+    print("🚪 Saindo do castelo")
+    local args = {
+        [1] = { [1] = { Check = true, Floor = tostring(andarSaida), Event = "CastleAction", Action = "LeaveDungeon" }, [2] = "\12" }
+    }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    dungeonActive = false
+    salvarConfig()
+    safeDelete(tempFile)
+end
+
+local iniciarDungeon = function()
+    print("▶️ Iniciando dungeon...")
+    local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Start" }, [2] = "\12" } }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+end
+
+local criarDungeon = function()
+    if dungeonActive then 
+        print("⚠️ Dungeon já está ativa, pulando criação")
+        return 
+    end
+    
+    if isInDungeon() then 
+        print("⚠️ Já está em uma dungeon")
+        dungeonActive = true
+        salvarConfig()
+        return 
+    end
+    
+    print("🆕 Criando nova dungeon...")
+    local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Create" }, [2] = "\12" } }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    
+    dungeonActive = true
+    salvarConfig()
+    writefile(tempFile, "1")
+    
+    task.wait(5) -- Esperar mais tempo para criar
+    iniciarDungeon()
+end
+
+local resetarDungeon = function()
+    print("💎 Resetando dungeon com gems...")
+    local args = { [1] = { [1] = { Type = "Gems", Event = "DungeonAction", Action = "BuyTicket" }, [2] = "\12" } }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    dungeonActive = false
+    salvarConfig()
+    safeDelete(tempFile)
+end
+
+-- ===== Combate melhorado =====
+local teleportToNearestMob = function()
+    local char = player.Character
+    if not char then return false end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then return false end
+
+    local closest, bestDistance = nil, math.huge
+    for _, mob in ipairs(folder:GetChildren()) do
+        if mob:IsA("Model") then
+            local humanoid = mob:FindFirstChild("Humanoid")
+            local hrp = mob:FindFirstChild("HumanoidRootPart")
+            if humanoid and hrp and humanoid.Health > 0 then
+                local distance = (root.Position - hrp.Position).Magnitude
+                if distance < bestDistance then
+                    bestDistance = distance
+                    closest = hrp
+                end
+            end
+        end
+    end
+    
+    if closest then
+        root.CFrame = closest.CFrame * CFrame.new(0, 0, 5)
+        print("📍 Teleportado para mob mais próximo")
+        return true
+    end
+    return false
+end
+
+local atacarInimigos = function()
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then return 0 end
+    
+    local attacked = 0
+    for _, mob in ipairs(folder:GetChildren()) do
+        if mob:IsA("Model") then
+            local humanoid = mob:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local args = { [1] = { [1] = { Event = "Attack", Enemy = mob.Name, AttackType = "All" }, [2] = "\5" } }
+                game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+                attacked = attacked + 1
+                task.wait(0.1)
+            end
+        end
+    end
+    print("⚔️ Atacou", attacked, "inimigos")
+    return attacked
+end
+
+-- ===== Função principal corrigida =====
+local solarDungeon = function()
+    print("🌟 Iniciando combate na dungeon...")
+    
+    -- Esperar mobs aparecerem (até 30 segundos)
+    local waitStart = tick()
+    while tick() - waitStart < 30 do
+        if mobsVivos() then
+            print("✅ Mobs detectados, iniciando combate!")
+            break
+        end
+        print("⏳ Aguardando mobs aparecerem...")
+        task.wait(2)
+    end
+    
+    if not mobsVivos() then
+        print("❌ Nenhum mob encontrado após 30 segundos")
+        return
+    end
+
+    -- Loop de combate
+    local combatStart = tick()
+    while mobsVivos() and tick() - combatStart < 300 do -- Máximo 5 minutos
+        teleportToNearestMob()
+        task.wait(0.5)
+        atacarInimigos()
+        task.wait(1)
+    end
+    
+    if mobsVivos() then
+        print("⏰ Timeout no combate após 5 minutos")
+    else
+        print("🎉 Todos os mobs foram derrotados!")
+    end
+end
+
+-- ===== Loop principal corrigido =====
+local function autoDungeonLoop()
+    print("🔄 Iniciando loop de auto dungeon...")
+    
+    while ativarDungeon do
+        task.wait(5) -- Espera maior entre ciclos
+        
+        if not isInDungeon() and not dungeonActive then
+            print("🏗️ Preparando para criar dungeon...")
+            
+            if ativarEvento then 
+                entrarCastelo()
+                task.wait(5) 
+            end
+            
+            criarDungeon()
+            task.wait(8) -- Mais tempo para processar
+        end
+
+        if isInDungeon() then
+            print("🎮 Executando dungeon...")
+            solarDungeon()
+            task.wait(3)
+            
+            if ativarGems then
+                resetarDungeon()
+                task.wait(5)
+            else
+                sairCastelo()
+                task.wait(5)
+                if ativarEvento then entrarCastelo() end
+                task.wait(3)
+            end
+        end
+    end
+    
+    print("🛑 Loop de auto dungeon parado")
+end
+
+-- ===== GUI (mantida igual) =====
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local Window = Fluent:CreateWindow({Title = "Allan Hub (Versão Corrigida)", SubTitle = "Voo Automático Otimizado", TabWidth = 160, Size = UDim2.fromOffset(580, 400), Acrylic = true, Theme = "dark", MinimizeKey = Enum.KeyCode.End})
+local Window = Fluent:CreateWindow({
+    Title = "Allan Hub - Arise (FIXED)",
+    SubTitle = "Dungeon Automática Corrigida + Auto Farm Voador",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 400),
+    Acrylic = true,
+    Theme = "dark",
+    MinimizeKey = Enum.KeyCode.End
+})
+
 local t = Window:AddTab({ Title = "Auto Castelo", Icon = "home" })
-t:AddToggle("ToggleAutoDungeon", {Title = "Auto Dungeon (Ativa o Voo)", Description = "Cria/Inicia a dungeon e voa até os mobs", Default = ativarDungeon, Callback = function(state) ativarDungeon = state; salvarConfig(); if state then task.spawn(autoDungeonLoop) else disableFlight() end end})
-t:AddToggle("ToggleAutoCastelo", {Title = "Auto Castelo", Description = "Entra e sai do castelo automaticamente", Default = ativarEvento, Callback = function(state) ativarEvento = state; salvarConfig(); if state then entrarCastelo() end end})
-t:AddToggle("ToggleUseGems", {Title = "Usar Gems para Reset", Description = "Compra ticket com gems para resetar a dungeon", Default = ativarGems, Callback = function(state) ativarGems = state; salvarConfig() end})
-local andaresEntrada, andaresSaida = {}, {}; for i=10,110,10 do table.insert(andaresEntrada, tostring(i)) end; for i=1,117 do table.insert(andaresSaida, tostring(i)) end
-t:AddDropdown("AndarEntrada", {Title = "Andar de Entrada", Values = andaresEntrada, Default = tostring(andarEntrada), Callback = function(v) andarEntrada = tonumber(v); salvarConfig() end})
-t:AddDropdown("AndarSaida", {Title = "Andar de Saída", Values = andaresSaida, Default = tostring(andarSaida), Callback = function(v) andarSaida = tonumber(v); salvarConfig() end})
-t:AddButton({Title = "🔄 Reset Dungeon Status", Description = "Limpa o status da dungeon se bugar", Callback = function() dungeonActive = false; salvarConfig(); print("🔄 Status da dungeon resetado!") end})
+local autoFarmTab = Window:AddTab({ Title = "Auto Farm", Icon = "zap" })
+
+-- Status Tab
+local statusTab = Window:AddTab({ Title = "Status", Icon = "activity" })
+local statusParagraph = statusTab:AddParagraph({
+    Title = "Status Atual",
+    Content = "Aguardando..."
+})
+
+-- Função para atualizar status
+local function updateStatus()
+    local status = string.format([[
+🏰 Em Castelo: %s
+⚔️ Em Dungeon: %s  
+👹 Mobs Vivos: %s
+🎯 Dungeon Ativa: %s
+🔄 Auto Dungeon: %s
+✈️ Auto Farm Voador: %s
+]], 
+        ativarEvento and "✅" or "❌",
+        isInDungeon() and "✅" or "❌",
+        mobsVivos() and "✅" or "❌", 
+        dungeonActive and "✅" or "❌",
+        ativarDungeon and "✅" or "❌",
+        autoFlyRunning and "✅" or "❌"
+    )
+    statusParagraph:SetDesc(status)
+end
+
+-- Atualizar status a cada 2 segundos
+task.spawn(function()
+    while true do
+        updateStatus()
+        task.wait(2)
+    end
+end)
+
+local andaresEntrada = {}
+for i = 10, 110, 10 do table.insert(andaresEntrada, tostring(i)) end
+local andaresSaida = {}
+for i = 1, 117 do table.insert(andaresSaida, tostring(i)) end
+
+t:AddDropdown("AndarEntrada", {
+    Title = "Selecionar Andar de Entrada",
+    Values = andaresEntrada, Multi = false, Default = tostring(andarEntrada),
+    Callback = function(v) andarEntrada = tonumber(v); salvarConfig() end
+})
+
+t:AddDropdown("AndarSaida", {
+    Title = "Selecionar Andar de Saída", 
+    Values = andaresSaida, Multi = false, Default = tostring(andarSaida),
+    Callback = function(v) andarSaida = tonumber(v); salvarConfig() end
+})
+
+t:AddToggle("ToggleAutoCastelo", {
+    Title = "Auto Castelo",
+    Description = "Ativa/Desativa o Auto Castelo",
+    Default = ativarEvento,
+    Callback = function(state)
+        ativarEvento = state; salvarConfig()
+        if state then entrarCastelo() end
+    end
+})
+
+t:AddToggle("ToggleAutoDungeon", {
+    Title = "Auto Dungeon", 
+    Description = "Cria/Inicia/Reseta automaticamente",
+    Default = ativarDungeon,
+    Callback = function(state)
+        ativarDungeon = state; salvarConfig()
+        if state then 
+            task.spawn(autoDungeonLoop)
+        end
+    end
+})
+
+t:AddToggle("ToggleUseGems", {
+    Title = "Usar Gems para Reset",
+    Description = "Compra ticket com gems para resetar", 
+    Default = ativarGems,
+    Callback = function(state) ativarGems = state; salvarConfig() end
+})
+
+-- ===== ABA AUTO FARM =====
+autoFarmTab:AddToggle("ToggleAutoFly", {
+    Title = "Auto Farm Voador",
+    Description = "Ativa/Desativa o farm automático voando até os mobs",
+    Default = ativarAutoFly,
+    Callback = function(state)
+        ativarAutoFly = state
+        salvarConfig()
+        
+        if state then
+            startAutoFly()
+        else
+            stopAutoFly()
+        end
+    end
+})
+
+autoFarmTab:AddParagraph({
+    Title = "Informações do Auto Farm",
+    Content = [[
+O Auto Farm Voador irá:
+• Voar automaticamente até os mobs mais próximos
+• Evitar mobs já visitados recentemente
+• Funcionar em qualquer área com mobs
+• Parar automaticamente quando desativado
+
+Configurações:
+• Velocidade de voo: 500
+• Altura de voo: 5 unidades acima do mob
+• Alcance máximo: 50.000 unidades
+]]
+})
+
+-- Botões de controle manual
+t:AddButton({
+    Title = "🔄 Reset Dungeon Status",
+    Description = "Limpa flags de dungeon",
+    Callback = function()
+        dungeonActive = false
+        salvarConfig()
+        safeDelete(tempFile)
+        print("🔄 Status da dungeon resetado!")
+    end
+})
+
+-- Botão flutuante (mantido igual)
+local floatingGui = Instance.new("ScreenGui")
+floatingGui.Name = "AllanHubFloating"
+floatingGui.Parent = player:WaitForChild("PlayerGui")
+floatingGui.ResetOnSpawn = false
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+toggleButton.Text = "⚙"
+toggleButton.TextScaled = true
+toggleButton.Parent = floatingGui
+toggleButton.Active = true
+toggleButton.Draggable = true
+
+local hubVisivel = true
+toggleButton.MouseButton1Click:Connect(function()
+    hubVisivel = not hubVisivel
+    if Window and Window.Frame then
+        Window.Frame.Visible = hubVisivel
+    end
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100,100,255) or Color3.fromRGB(255,100,100)
+    toggleButton.Text = hubVisivel and "🔼" or "🔽"
+end)
+
+-- Watch do andar (mantido)
+task.spawn(function()
+    while task.wait(1) do
+        if ativarEvento then
+            local floorValue = player:FindFirstChild("CurrentFloor")
+            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
+                currentFloor = tonumber(floorValue.Value)
+                print("🏢 Andar atual:", currentFloor)
+                if currentFloor == andarSaida then sairCastelo() end
+            end
+        end
+    end
+end)
+
+-- Autostart se estiver ativo no config
+if ativarEvento then entrarCastelo() end
 if ativarDungeon then task.spawn(autoDungeonLoop) end
-print("✅ Allan Hub (Versão Corrigida) carregado!")
+if ativarAutoFly then startAutoFly() end
+
+print("✅ Allan Hub carregado com correções e Auto Farm Voador!")
+
+-- Torna a função de parar disponível globalmente (mantendo compatibilidade)
+_G.stopAutoFly = stopAutoFly
