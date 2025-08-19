@@ -12,10 +12,8 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- ===== Variáveis para sistema de teleporte melhorado =====
-local visitedPositions = {}
-local currentTarget = nil
-local stuckCounter = 0
+-- ===== Variáveis para debug =====
+local debugMode = true
 
 -- ===== Compat de arquivos =====
 local function safeDelete(path)
@@ -135,135 +133,71 @@ local resetarDungeon = function()
     safeDelete(tempFile)
 end
 
--- ===== Sistema de teleporte melhorado =====
--- Função para verificar se uma posição já foi visitada recentemente
-local function isPositionVisited(position)
-    for _, visitedPos in pairs(visitedPositions) do
-        if (position - visitedPos).Magnitude < 10 then -- Se estiver muito próximo de uma posição visitada
-            return true
-        end
-    end
-    return false
-end
-
--- Função para adicionar posição à lista de visitadas
-local function addVisitedPosition(position)
-    table.insert(visitedPositions, position)
-    -- Limita o tamanho da lista para não consumir muita memória
-    if #visitedPositions > 10 then
-        table.remove(visitedPositions, 1)
-    end
-end
-
-local function getClosestUnvisitedMob()
-    local char = player.Character
-    if not char then return nil end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    local folder = workspace:FindFirstChild("__Enemies")
-    if not folder then return nil end
-
-    local closestMob = nil
-    local shortestDistance = math.huge
-    local allMobs = {}
-    local maxDistance = 50000 -- Distância máxima de busca
-    
-    -- Primeiro, coleta todos os mobs disponíveis dentro do alcance
-    for _, mobFolder in pairs(folder:GetChildren()) do
-        if mobFolder and mobFolder.Parent and mobFolder:IsA("Model") then
-            local mob = mobFolder:FindFirstChild("HumanoidRootPart") or mobFolder:FindFirstChildWhichIsA("BasePart", true)
-            
-            if mob and mob:IsA("BasePart") and mob.Parent then
-                local dist = (hrp.Position - mob.Position).Magnitude
-                
-                -- Só considera mobs dentro do alcance máximo
-                if dist <= maxDistance then
-                    -- Verifica se tem Humanoid e se está vivo
-                    local humanoid = mobFolder:FindFirstChildOfClass("Humanoid")
-                    local isAlive = true
-                    
-                    if humanoid then
-                        isAlive = humanoid.Health > 0
-                    end
-                    
-                    if isAlive then
-                        table.insert(allMobs, {mob = mob, folder = mobFolder, distance = dist})
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Procura por mobs não visitados primeiro
-    for _, mobData in pairs(allMobs) do
-        local mob = mobData.mob
-        if not isPositionVisited(mob.Position) then
-            local dist = mobData.distance
-            if dist < shortestDistance then
-                shortestDistance = dist
-                closestMob = mob
-            end
-        end
-    end
-    
-    -- Se não encontrar mobs não visitados, limpa a lista e pega qualquer um
-    if not closestMob and #allMobs > 0 then
-        visitedPositions = {} -- Limpa as posições visitadas
-        for _, mobData in pairs(allMobs) do
-            local mob = mobData.mob
-            local dist = mobData.distance
-            if dist < shortestDistance then
-                shortestDistance = dist
-                closestMob = mob
-            end
-        end
-    end
-    
-    print("📍 Mobs encontrados no alcance:", #allMobs, "| Distância do mais próximo:", math.floor(shortestDistance))
-    return closestMob
-end
+-- ===== Sistema de teleporte simplificado =====
 
 local teleportToNearestMob = function()
     local char = player.Character
-    if not char then return false end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return false end
-
-    local mob = getClosestUnvisitedMob()
+    if not char then 
+        print("❌ Personagem não encontrado")
+        return false 
+    end
     
-    if mob and mob.Parent then
-        -- Verifica se é o mesmo alvo da vez anterior
-        if currentTarget and currentTarget == mob then
-            stuckCounter = stuckCounter + 1
-            if stuckCounter > 3 then
-                print("⚠️ Parece que estou preso no mesmo mob, marcando como visitado...")
-                addVisitedPosition(mob.Position)
-                stuckCounter = 0
-                currentTarget = nil
-                return false
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then 
+        print("❌ HumanoidRootPart não encontrado")
+        return false 
+    end
+    
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then 
+        print("❌ Pasta __Enemies não encontrada")
+        return false 
+    end
+
+    local closest, bestDistance = nil, math.huge
+    local mobCount = 0
+    
+    print("🔍 Procurando mobs...")
+    
+    for _, mob in pairs(folder:GetChildren()) do
+        if mob and mob:IsA("Model") and mob.Parent then
+            mobCount = mobCount + 1
+            print("📋 Verificando mob:", mob.Name)
+            
+            local humanoid = mob:FindFirstChild("Humanoid")
+            local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart", true)
+            
+            if hrp and hrp:IsA("BasePart") then
+                local isAlive = true
+                if humanoid then
+                    isAlive = humanoid.Health > 0
+                    print("❤️ Vida do mob:", humanoid.Health)
+                end
+                
+                if isAlive then
+                    local distance = (root.Position - hrp.Position).Magnitude
+                    print("📏 Distância:", math.floor(distance))
+                    
+                    if distance < bestDistance then
+                        bestDistance = distance
+                        closest = hrp
+                        print("✅ Novo mob mais próximo encontrado!")
+                    end
+                end
+            else
+                print("❌ Mob sem HumanoidRootPart válido")
             end
-        else
-            stuckCounter = 0
-            currentTarget = mob
         end
-        
-        root.CFrame = mob.CFrame * CFrame.new(0, 0, 5)
-        print("📍 Teleportado para mob na posição:", math.floor(mob.Position.X), math.floor(mob.Position.Y), math.floor(mob.Position.Z))
-        
-        -- Adiciona à lista de visitados após um tempo
-        task.spawn(function()
-            task.wait(2)
-            if mob and mob.Parent then
-                addVisitedPosition(mob.Position)
-            end
-        end)
-        
+    end
+    
+    print("📊 Total de mobs verificados:", mobCount)
+    
+    if closest then
+        root.CFrame = closest.CFrame + Vector3.new(0, 5, 0)
+        print("📍 Teleportado para mob! Distância:", math.floor(bestDistance))
         return true
     else
-        print("❌ Nenhum mob válido encontrado")
-        visitedPositions = {} -- Limpa a lista se não encontrar mobs
-        currentTarget = nil
-        stuckCounter = 0
+        print("❌ Nenhum mob válido encontrado para teleporte")
         return false
     end
 end
