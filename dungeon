@@ -166,7 +166,7 @@ local function getClosestUnvisitedMob()
     local closestMob = nil
     local shortestDistance = math.huge
     local allMobs = {}
-    local maxDistance = 500 -- Distância máxima de busca
+    local maxDistance = 50000 -- Distância máxima de busca
     
     -- Primeiro, coleta todos os mobs disponíveis dentro do alcance
     for _, mobFolder in pairs(folder:GetChildren()) do
