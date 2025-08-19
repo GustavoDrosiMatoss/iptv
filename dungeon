@@ -30,12 +30,12 @@ local function safeDelete(path)
     end
 end
 
--- ===== Salvar/Carregar (incluindo flag dungeon e fly) =====
+-- ===== Salvar/Carregar =====
 local function salvarConfig()
     local data = {
         entrada = andarEntrada, saida = andarSaida,
         evento = ativarEvento, dungeon = ativarDungeon, gems = ativarGems,
-        fly = ativarFly, dungeonActive = dungeonActive  -- Salvar estados
+        fly = ativarFly, dungeonActive = dungeonActive
     }
     writefile(configFile, HttpService:JSONEncode(data))
 end
@@ -49,24 +49,23 @@ local function carregarConfig()
         ativarDungeon = data.dungeon or false
         ativarGems    = data.gems or false
         ativarFly     = data.fly or false
-        dungeonActive = data.dungeonActive or false  -- Carregar estado
+        dungeonActive = data.dungeonActive or false
     else
         salvarConfig()
     end
 end
 carregarConfig()
 
--- ===== Verificações melhoradas =====
+-- ===== Verificações =====
 local isInDungeon = function()
     local enemies = workspace:FindFirstChild("__Enemies")
-    local dungeonFolder = workspace:FindFirstChild("Dungeon") -- Adicionar outras verificações se necessário
+    local dungeonFolder = workspace:FindFirstChild("Dungeon")
     return enemies ~= nil or dungeonFolder ~= nil
 end
 
 local mobsVivos = function()
     local folder = workspace:FindFirstChild("__Enemies")
     if not folder then return false end
-    
     local count = 0
     for _, mob in ipairs(folder:GetChildren()) do
         if mob:IsA("Model") then
@@ -80,7 +79,7 @@ local mobsVivos = function()
     return count > 0
 end
 
--- ===== Ações corrigidas =====
+-- ===== Ações =====
 local entrarCastelo = function()
     print("🏰 Entrando no castelo - Andar:", andarEntrada)
     local args = {
@@ -111,23 +110,19 @@ local criarDungeon = function()
         print("⚠️ Dungeon já está ativa, pulando criação")
         return 
     end
-    
     if isInDungeon() then 
         print("⚠️ Já está em uma dungeon")
         dungeonActive = true
         salvarConfig()
         return 
     end
-    
     print("🆕 Criando nova dungeon...")
     local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Create" }, [2] = "\12" } }
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    
     dungeonActive = true
     salvarConfig()
     writefile(tempFile, "1")
-    
-    task.wait(5) -- Esperar mais tempo para criar
+    task.wait(5)
     iniciarDungeon()
 end
 
@@ -140,73 +135,40 @@ local resetarDungeon = function()
     safeDelete(tempFile)
 end
 
--- ===== Funções de voo =====
+-- ===== Voo =====
 local function enableFlight()
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        -- humanoid.PlatformStand = true  -- Comentado para evitar erros de weld
-    end
-    
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     bodyVelocity.Velocity = Vector3.new(0, 0, 0)
     bodyVelocity.Parent = hrp
-    
     return bodyVelocity
 end
 
 local function disableFlight(bodyVelocity)
-    if bodyVelocity then
-        bodyVelocity:Destroy()
-    end
-    
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        humanoid.PlatformStand = false
-    end
+    if bodyVelocity then bodyVelocity:Destroy() end
 end
 
 local function flyToPosition(targetPosition, currentTween)
-    -- Para o tween anterior se existir
-    if currentTween then
-        currentTween:Cancel()
-    end
-    
+    if currentTween then currentTween:Cancel() end
     local targetCFrame = CFrame.new(targetPosition + Vector3.new(0, FLIGHT_HEIGHT, 0))
     local distance = (hrp.Position - targetPosition).Magnitude
     local duration = distance / FLIGHT_SPEED
-    
-    local tweenInfo = TweenInfo.new(
-        duration,
-        Enum.EasingStyle.Linear,
-        Enum.EasingDirection.InOut,
-        0,
-        false,
-        0
-    )
-    
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
     local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
-    
-    print("Voando para posição:", math.floor(targetPosition.X), math.floor(targetPosition.Y), math.floor(targetPosition.Z))
-    
     return tween
 end
 
 local function isPositionVisited(position, visitedPositions)
     for _, visitedPos in pairs(visitedPositions) do
-        if (position - visitedPos).Magnitude < 10 then
-            return true
-        end
+        if (position - visitedPos).Magnitude < 10 then return true end
     end
     return false
 end
 
 local function addVisitedPosition(position, visitedPositions)
     table.insert(visitedPositions, position)
-    if #visitedPositions > 10 then
-        table.remove(visitedPositions, 1)
-    end
+    if #visitedPositions > 10 then table.remove(visitedPositions, 1) end
 end
 
 local function getClosestUnvisitedMob(visitedPositions, hrp)
@@ -216,75 +178,55 @@ local function getClosestUnvisitedMob(visitedPositions, hrp)
     local maxDistance = 50000
     local enemiesFolder = workspace:FindFirstChild("__Enemies")
     if not enemiesFolder then return nil end
-    
     for _, mobFolder in pairs(enemiesFolder:GetChildren()) do
         if mobFolder:IsA("Model") then
             local mob = mobFolder:FindFirstChild("HumanoidRootPart")
-            if mob then
+            local humanoid = mobFolder:FindFirstChild("Humanoid")
+            if mob and humanoid and humanoid.Health > 0 then
                 local dist = (hrp.Position - mob.Position).Magnitude
                 if dist <= maxDistance then
-                    local humanoid = mobFolder:FindFirstChild("Humanoid")
-                    local isAlive = humanoid and humanoid.Health > 0 or false
-                    if isAlive then
-                        table.insert(allMobs, {mob = mob, distance = dist})
-                    end
+                    table.insert(allMobs, {mob = mob, distance = dist})
                 end
             end
         end
     end
-    
-    -- Procura por mobs não visitados primeiro
     for _, mobData in pairs(allMobs) do
-        local mob = mobData.mob
-        if not isPositionVisited(mob.Position, visitedPositions) then
-            local dist = mobData.distance
-            if dist < shortestDistance then
-                shortestDistance = dist
-                closestMob = mob
-            end
+        if not isPositionVisited(mobData.mob.Position, visitedPositions) and mobData.distance < shortestDistance then
+            shortestDistance = mobData.distance
+            closestMob = mobData.mob
         end
     end
-    
-    -- Se não encontrar, limpa visitados e pega o mais próximo
     if not closestMob and #allMobs > 0 then
         visitedPositions = {}
         for _, mobData in pairs(allMobs) do
-            local dist = mobData.distance
-            if dist < shortestDistance then
-                shortestDistance = dist
+            if mobData.distance < shortestDistance then
+                shortestDistance = mobData.distance
                 closestMob = mobData.mob
             end
         end
     end
-    
-    print("Mobs encontrados no alcance:", #allMobs, "| Distância do mais próximo:", math.floor(shortestDistance))
     return closestMob
 end
 
--- ===== Combate melhorado =====
+-- ===== Combate =====
 local teleportToNearestMob = function()
-    local char = player.Character
-    if not char then return false end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return false end
+    local root = hrp
     local folder = workspace:FindFirstChild("__Enemies")
     if not folder then return false end
-
     local closest, bestDistance = nil, math.huge
     for _, mob in ipairs(folder:GetChildren()) do
         if mob:IsA("Model") then
             local humanoid = mob:FindFirstChild("Humanoid")
-            local hrp = mob:FindFirstChild("HumanoidRootPart")
-            if humanoid and hrp and humanoid.Health > 0 then
-                local distance = (root.Position - hrp.Position).Magnitude
+            local mobHrp = mob:FindFirstChild("HumanoidRootPart")
+            if humanoid and mobHrp and humanoid.Health > 0 then
+                local distance = (root.Position - mobHrp.Position).Magnitude
                 if distance < bestDistance then
                     bestDistance = distance
-                    closest = hrp
+                    closest = mobHrp
                 end
             end
         end
     end
-    
     if closest then
         root.CFrame = closest.CFrame * CFrame.new(0, 0, 5)
         print("📍 Teleportado para mob mais próximo")
@@ -296,7 +238,6 @@ end
 local atacarInimigos = function()
     local folder = workspace:FindFirstChild("__Enemies")
     if not folder then return 0 end
-    
     local attacked = 0
     for _, mob in ipairs(folder:GetChildren()) do
         if mob:IsA("Model") then
@@ -309,31 +250,19 @@ local atacarInimigos = function()
             end
         end
     end
-    print("⚔️ Atacou", attacked, "inimigos")
     return attacked
 end
 
--- ===== Função principal corrigida com voo integrado =====
+-- ===== SolarDungeon com Fly =====
 local solarDungeon = function()
     print("🌟 Iniciando combate na dungeon...")
-    
-    -- Esperar mobs aparecerem (até 30 segundos)
     local waitStart = tick()
     while tick() - waitStart < 30 do
-        if mobsVivos() then
-            print("✅ Mobs detectados, iniciando combate!")
-            break
-        end
-        print("⏳ Aguardando mobs aparecerem...")
+        if mobsVivos() then break end
         task.wait(2)
     end
-    
-    if not mobsVivos() then
-        print("❌ Nenhum mob encontrado após 30 segundos")
-        return
-    end
+    if not mobsVivos() then return end
 
-    -- Loop de combate
     local combatStart = tick()
     local bodyVelocity = nil
     local currentTween = nil
@@ -341,272 +270,82 @@ local solarDungeon = function()
     local currentTarget = nil
     local stuckCounter = 0
 
-    if ativarFly then
-        bodyVelocity = enableFlight()
-    end
+    if ativarFly then bodyVelocity = enableFlight() end
 
-    while mobsVivos() and tick() - combatStart < 300 do  -- Máximo 5 minutos
+    while mobsVivos() and tick() - combatStart < 300 do
         if ativarFly then
             local mob = getClosestUnvisitedMob(visitedPositions, hrp)
-            if not mob then
-                print("❌ Nenhum mob não visitado encontrado")
-                break
-            end
-
-            -- Lógica de stuck
+            if not mob then break end
             if currentTarget and currentTarget == mob then
                 stuckCounter = stuckCounter + 1
                 if stuckCounter > 3 then
-                    print("Parece que estou preso no mesmo mob, marcando como visitado...")
                     addVisitedPosition(mob.Position, visitedPositions)
                     stuckCounter = 0
                     currentTarget = nil
-                    task.wait(1)
                     continue
                 end
             else
                 stuckCounter = 0
                 currentTarget = mob
             end
-
-            -- Voa até o mob
             currentTween = flyToPosition(mob.Position, currentTween)
-
-            -- Espera chegar
             local startTime = tick()
-            local maxWaitTime = 10
             repeat
                 task.wait(0.1)
                 if not mob or not mob.Parent then break end
-                local distance = (hrp.Position - mob.Position).Magnitude
-                if distance < 15 then break end
-            until (tick() - startTime) > maxWaitTime
-
-            if currentTween then
-                currentTween:Cancel()
-                currentTween = nil
-            end
-
-            print("Chegou próximo ao mob!")
-
+                if (hrp.Position - mob.Position).Magnitude < 15 then break end
+            until (tick() - startTime) > 10
+            if currentTween then currentTween:Cancel() currentTween = nil end
             atacarInimigos()
-            task.wait(0.5)
-
             addVisitedPosition(mob.Position, visitedPositions)
         else
             teleportToNearestMob()
-            task.wait(0.5)
             atacarInimigos()
             task.wait(1)
         end
     end
     
-    if ativarFly then
-        disableFlight(bodyVelocity)
-    end
-
-    if mobsVivos() then
-        print("⏰ Timeout no combate após 5 minutos")
-    else
-        print("🎉 Todos os mobs foram derrotados!")
-    end
+    if ativarFly then disableFlight(bodyVelocity) end
 end
 
--- ===== Loop principal corrigido =====
+-- ===== Loop =====
 local function autoDungeonLoop()
-    print("🔄 Iniciando loop de auto dungeon...")
-    
     while ativarDungeon do
-        task.wait(5) -- Espera maior entre ciclos
-        
+        task.wait(5)
         if not isInDungeon() and not dungeonActive then
-            print("🏗️ Preparando para criar dungeon...")
-            
-            if ativarEvento then 
-                entrarCastelo()
-                task.wait(5) 
-            end
-            
+            if ativarEvento then entrarCastelo() task.wait(5) end
             criarDungeon()
-            task.wait(8) -- Mais tempo para processar
+            task.wait(8)
         end
-
         if isInDungeon() then
-            print("🎮 Executando dungeon...")
             solarDungeon()
-            task.wait(3)
-            
-            if ativarGems then
-                resetarDungeon()
-                task.wait(5)
-            else
-                sairCastelo()
-                task.wait(5)
-                if ativarEvento then entrarCastelo() end
-                task.wait(3)
-            end
+            if ativarGems then resetarDungeon() else sairCastelo() end
         end
     end
-    
-    print("🛑 Loop de auto dungeon parado")
 end
 
--- ===== GUI (com novo toggle) =====
+-- ===== GUI =====
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub - Arise (FIXED)",
-    SubTitle = "Dungeon Automática Corrigida",
+    Title = "Allan Hub - Arise",
+    SubTitle = "Dungeon Automática",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 400),
     Acrylic = true,
     Theme = "dark",
     MinimizeKey = Enum.KeyCode.End
 })
-
 local t = Window:AddTab({ Title = "Auto Castelo", Icon = "home" })
 
--- Status Tab
-local statusTab = Window:AddTab({ Title = "Status", Icon = "activity" })
-local statusParagraph = statusTab:AddParagraph({
-    Title = "Status Atual",
-    Content = "Aguardando..."
-})
-
--- Função para atualizar status
-local function updateStatus()
-    local status = string.format([[
-🏰 Em Castelo: %s
-⚔️ Em Dungeon: %s  
-👹 Mobs Vivos: %s
-🎯 Dungeon Ativa: %s
-🔄 Auto Dungeon: %s
-✈️ Auto Fly: %s
-]], 
-        ativarEvento and "✅" or "❌",
-        isInDungeon() and "✅" or "❌",
-        mobsVivos() and "✅" or "❌", 
-        dungeonActive and "✅" or "❌",
-        ativarDungeon and "✅" or "❌",
-        ativarFly and "✅" or "❌"
-    )
-    statusParagraph:SetDesc(status)
-end
-
--- Atualizar status a cada 2 segundos
-task.spawn(function()
-    while true do
-        updateStatus()
-        task.wait(2)
-    end
-end)
-
-local andaresEntrada = {}
-for i = 10, 110, 10 do table.insert(andaresEntrada, tostring(i)) end
-local andaresSaida = {}
-for i = 1, 117 do table.insert(andaresSaida, tostring(i)) end
-
-t:AddDropdown("AndarEntrada", {
-    Title = "Selecionar Andar de Entrada",
-    Values = andaresEntrada, Multi = false, Default = tostring(andarEntrada),
-    Callback = function(v) andarEntrada = tonumber(v); salvarConfig() end
-})
-
-t:AddDropdown("AndarSaida", {
-    Title = "Selecionar Andar de Saída", 
-    Values = andaresSaida, Multi = false, Default = tostring(andarSaida),
-    Callback = function(v) andarSaida = tonumber(v); salvarConfig() end
-})
-
-t:AddToggle("ToggleAutoCastelo", {
-    Title = "Auto Castelo",
-    Description = "Ativa/Desativa o Auto Castelo",
-    Default = ativarEvento,
-    Callback = function(state)
-        ativarEvento = state; salvarConfig()
-        if state then entrarCastelo() end
-    end
-})
-
 t:AddToggle("ToggleAutoDungeon", {
-    Title = "Auto Dungeon", 
-    Description = "Cria/Inicia/Reseta automaticamente",
+    Title = "Auto Dungeon",
     Default = ativarDungeon,
-    Callback = function(state)
-        ativarDungeon = state; salvarConfig()
-        if state then 
-            task.spawn(autoDungeonLoop)
-        end
-    end
+    Callback = function(state) ativarDungeon = state salvarConfig() if state then task.spawn(autoDungeonLoop) end end
 })
-
-t:AddToggle("ToggleUseGems", {
-    Title = "Usar Gems para Reset",
-    Description = "Compra ticket com gems para resetar", 
-    Default = ativarGems,
-    Callback = function(state) ativarGems = state; salvarConfig() end
-})
-
 t:AddToggle("ToggleAutoFly", {
     Title = "Auto Fly to Mobs",
-    Description = "Voa até os mobs em vez de teleportar durante o combate",
     Default = ativarFly,
-    Callback = function(state) ativarFly = state; salvarConfig() end
+    Callback = function(state) ativarFly = state salvarConfig() end
 })
 
--- Botões de controle manual
-t:AddButton({
-    Title = "🔄 Reset Dungeon Status",
-    Description = "Limpa flags de dungeon",
-    Callback = function()
-        dungeonActive = false
-        salvarConfig()
-        safeDelete(tempFile)
-        print("🔄 Status da dungeon resetado!")
-    end
-})
-
--- Botão flutuante (mantido igual)
-local floatingGui = Instance.new("ScreenGui")
-floatingGui.Name = "AllanHubFloating"
-floatingGui.Parent = player:WaitForChild("PlayerGui")
-floatingGui.ResetOnSpawn = false
-
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 50, 0, 50)
-toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
-toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-toggleButton.Text = "⚙"
-toggleButton.TextScaled = true
-toggleButton.Parent = floatingGui
-toggleButton.Active = true
-toggleButton.Draggable = true
-
-local hubVisivel = true
-toggleButton.MouseButton1Click:Connect(function()
-    hubVisivel = not hubVisivel
-    if Window and Window.Frame then
-        Window.Frame.Visible = hubVisivel
-    end
-    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100,100,255) or Color3.fromRGB(255,100,100)
-    toggleButton.Text = hubVisivel and "🔼" or "🔽"
-end)
-
--- Watch do andar (mantido)
-task.spawn(function()
-    while task.wait(1) do
-        if ativarEvento then
-            local floorValue = player:FindFirstChild("CurrentFloor")
-            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
-                currentFloor = tonumber(floorValue.Value)
-                print("🏢 Andar atual:", currentFloor)
-                if currentFloor == andarSaida then sairCastelo() end
-            end
-        end
-    end
-end)
-
--- Autostart se estiver ativo no config
-if ativarEvento then entrarCastelo() end
-if ativarDungeon then task.spawn(autoDungeonLoop) end
-
-print("✅ Allan Hub carregado com correções!")
+print("✅ Allan Hub carregado com Fly integrado!")
