@@ -114,6 +114,17 @@ local function disableFlight()
 end
 
 local function flyToPosition(targetPosition)
+    -- Verificações de segurança
+    if not char or not char.Parent or not hrp or not hrp.Parent then
+        print("❌ Personagem inválido, não é possível voar")
+        return nil
+    end
+    
+    if not targetPosition then
+        print("❌ Posição alvo inválida")
+        return nil
+    end
+    
     enableFlight()
     
     if currentTween then
@@ -121,20 +132,30 @@ local function flyToPosition(targetPosition)
         currentTween = nil
     end
     
-    local targetCFrame = CFrame.new(targetPosition + Vector3.new(0, FLIGHT_HEIGHT, 0))
-    local distance = (hrp.Position - targetPosition).Magnitude
-    local duration = distance / FLIGHT_SPEED
+    -- Verificação de segurança para posições
+    local success, result = pcall(function()
+        local targetCFrame = CFrame.new(targetPosition + Vector3.new(0, FLIGHT_HEIGHT, 0))
+        local distance = (hrp.Position - targetPosition).Magnitude
+        local duration = math.max(distance / FLIGHT_SPEED, 0.1) -- Mínimo 0.1 segundos
+        
+        local tweenInfo = TweenInfo.new(
+            duration,
+            Enum.EasingStyle.Linear,
+            Enum.EasingDirection.InOut,
+            0,
+            false,
+            0
+        )
+        
+        return TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    end)
     
-    local tweenInfo = TweenInfo.new(
-        duration,
-        Enum.EasingStyle.Linear,
-        Enum.EasingDirection.InOut,
-        0,
-        false,
-        0
-    )
+    if not success then
+        print("❌ Erro ao criar tween de voo:", result)
+        return nil
+    end
     
-    currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    currentTween = result
     currentTween:Play()
     
     print("🚁 Voando para posição:", math.floor(targetPosition.X), math.floor(targetPosition.Y), math.floor(targetPosition.Z))
@@ -144,7 +165,16 @@ end
 
 local function getClosestUnvisitedMob()
     local enemiesFolder = workspace:FindFirstChild("__Enemies")
-    if not enemiesFolder then return nil, 0 end
+    if not enemiesFolder then 
+        print("❌ Pasta __Enemies não encontrada")
+        return nil, 0 
+    end
+    
+    -- Verificar se o personagem ainda existe
+    if not char or not char.Parent or not hrp or not hrp.Parent then
+        print("❌ Personagem ou HumanoidRootPart inválido")
+        return nil, 0
+    end
     
     local closestMob = nil
     local shortestDistance = math.huge
@@ -156,9 +186,12 @@ local function getClosestUnvisitedMob()
             local mob = mobFolder:FindFirstChild("HumanoidRootPart") or mobFolder:FindFirstChildWhichIsA("BasePart", true)
             
             if mob and mob:IsA("BasePart") and mob.Parent then
-                local dist = (hrp.Position - mob.Position).Magnitude
+                -- Verificação de segurança para posição
+                local success, dist = pcall(function()
+                    return (hrp.Position - mob.Position).Magnitude
+                end)
                 
-                if dist <= maxDistance then
+                if success and dist <= maxDistance then
                     local humanoid = mobFolder:FindFirstChildOfClass("Humanoid")
                     local isAlive = true
                     
@@ -177,7 +210,7 @@ local function getClosestUnvisitedMob()
     -- Procura por mobs não visitados primeiro
     for _, mobData in pairs(allMobs) do
         local mob = mobData.mob
-        if not isPositionVisited(mob.Position) then
+        if mob and mob.Parent and not isPositionVisited(mob.Position) then
             local dist = mobData.distance
             if dist < shortestDistance then
                 shortestDistance = dist
@@ -191,10 +224,12 @@ local function getClosestUnvisitedMob()
         visitedPositions = {}
         for _, mobData in pairs(allMobs) do
             local mob = mobData.mob
-            local dist = mobData.distance
-            if dist < shortestDistance then
-                shortestDistance = dist
-                closestMob = mob
+            if mob and mob.Parent then
+                local dist = mobData.distance
+                if dist < shortestDistance then
+                    shortestDistance = dist
+                    closestMob = mob
+                end
             end
         end
     end
@@ -337,19 +372,32 @@ local function startCombatSystem()
     autoFlyActive = true
     
     task.spawn(function()
+        -- Verificação inicial do personagem
+        if not char or not char.Parent or not hrp or not hrp.Parent then
+            print("❌ Personagem inválido, não é possível iniciar combate")
+            autoFlyActive = false
+            return
+        end
+        
         enableFlight()
         print("🚁 Sistema de voo e combate iniciado!")
         
         local consecutiveNoMobChecks = 0
-        local maxConsecutiveChecks = 20 -- 20 verificações consecutivas sem mobs (20 * 0.5s = 10s)
+        local maxConsecutiveChecks = 20
         local mobsKilled = 0
         local combatStarted = false
         
         while autoFlyActive and (ativarDungeon and isInDungeon()) do
+            -- Verificar se personagem ainda é válido
+            if not char or not char.Parent or not hrp or not hrp.Parent then
+                print("❌ Personagem perdido durante combate, parando sistema")
+                break
+            end
+            
             local mob, mobCount = getClosestUnvisitedMob()
             
             if mob and mob.Parent then
-                consecutiveNoMobChecks = 0 -- Reset contador quando encontra mobs
+                consecutiveNoMobChecks = 0
                 
                 if not combatStarted then
                     combatStarted = true
@@ -372,38 +420,48 @@ local function startCombatSystem()
                     currentTarget = mob
                 end
                 
-                -- Voa até o mob
+                -- Voa até o mob com proteção contra erro
                 local flyTween = flyToPosition(mob.Position)
                 
-                -- Espera o voo completar
-                local startTime = tick()
-                local maxWaitTime = 15 -- Mais tempo para chegar ao mob
-                
-                repeat
-                    task.wait(0.1)
-                    local distance = (hrp.Position - mob.Position).Magnitude
+                if flyTween then
+                    -- Espera o voo completar
+                    local startTime = tick()
+                    local maxWaitTime = 15
                     
-                    if distance < 15 then break end
-                    if not mob.Parent then break end
+                    repeat
+                        task.wait(0.1)
+                        
+                        -- Verificações de segurança
+                        if not mob.Parent or not hrp.Parent then break end
+                        
+                        local success, distance = pcall(function()
+                            return (hrp.Position - mob.Position).Magnitude
+                        end)
+                        
+                        if not success or distance < 15 then break end
+                        
+                    until (tick() - startTime) > maxWaitTime or flyTween.PlaybackState == Enum.PlaybackState.Completed
                     
-                until (tick() - startTime) > maxWaitTime or flyTween.PlaybackState == Enum.PlaybackState.Completed
-                
-                if currentTween then
-                    currentTween:Cancel()
-                    currentTween = nil
+                    if currentTween then
+                        currentTween:Cancel()
+                        currentTween = nil
+                    end
+                    
+                    print("📍 Chegou próximo ao mob!")
+                    
+                    -- Ataca o mob atual várias vezes
+                    for i = 1, 3 do
+                        local attacked = atacarInimigos()
+                        mobsKilled = mobsKilled + attacked
+                        task.wait(0.5)
+                    end
+                    
+                    print("🎯 Mobs eliminados nesta sessão:", mobsKilled)
+                    addVisitedPosition(mob.Position)
+                else
+                    print("❌ Falha ao iniciar voo, tentando próximo mob...")
+                    task.wait(1)
                 end
-                
-                print("📍 Chegou próximo ao mob!")
-                
-                -- Ataca o mob atual várias vezes
-                for i = 1, 3 do
-                    local attacked = atacarInimigos()
-                    mobsKilled = mobsKilled + attacked
-                    task.wait(0.5)
-                end
-                
-                print("🎯 Mobs eliminados nesta sessão:", mobsKilled)
-                addVisitedPosition(mob.Position)
                 
             else
                 consecutiveNoMobChecks = consecutiveNoMobChecks + 1
@@ -431,13 +489,12 @@ local function startCombatSystem()
                         criarDungeon()
                         task.wait(8)
                         
-                        -- Reativar sistema de combate
+                        -- Reativar sistema de combate se ainda em dungeon
                         if isInDungeon() then
                             startCombatSystem()
                         end
                         return
                     else
-                        -- Dungeon normal - marcar como completada
                         dungeonCompleted = true
                         salvarConfig()
                         print("✅ Dungeon normal completada!")
@@ -447,7 +504,7 @@ local function startCombatSystem()
                     if not combatStarted then
                         print("⏳ Aguardando mobs aparecerem...")
                     end
-                    task.wait(0.5) -- Espera meio segundo antes de verificar novamente
+                    task.wait(0.5)
                 end
             end
             
@@ -460,90 +517,70 @@ local function startCombatSystem()
     end)
 end
 
--- ===== Loop principal =====
+-- ===== Loop principal CORRIGIDO =====
 local function autoDungeonLoop()
     print("🔄 Iniciando loop de auto dungeon...")
     
     while ativarDungeon do
         task.wait(3)
         
-        -- APENAS no modo Dungeon INF: Criar/Entrar na dungeon automaticamente
-        if dungeonInfinita then
-            if not isInDungeon() and (not dungeonActive or dungeonCompleted) then
-                print("🚁 Dungeon INF - Criando nova dungeon...")
-                resetDungeonStatus()
-                
-                if ativarEvento then 
-                    entrarCastelo()
-                    task.wait(3) 
-                end
-                
-                criarDungeon()
-                task.wait(8)
+        -- Se não está em dungeon E (não está ativa OU foi completada)
+        if not isInDungeon() and (not dungeonActive or dungeonCompleted) then
+            print("🏗️ Preparando para criar nova dungeon...")
+            
+            -- Reset status para nova dungeon
+            resetDungeonStatus()
+            
+            if ativarEvento then 
+                entrarCastelo()
+                task.wait(3) 
             end
+            
+            criarDungeon()
+            task.wait(8)
         end
 
-        -- Se está em dungeon e deve iniciar combate
-        if isInDungeon() and dungeonActive and not dungeonCompleted and not autoFlyActive then
-            print("🎮 Iniciando sistema de combate...")
+        -- Se está em dungeon e dungeon está ativa
+        if isInDungeon() and dungeonActive and not dungeonCompleted then
+            print("🎮 Executando dungeon...")
+            solarDungeon()
+            task.wait(3)
             
-            -- Esperar mobs aparecerem
-            local waitStart = tick()
-            while tick() - waitStart < 30 do
-                if mobsVivos() then 
-                    print("✅ Mobs detectados!")
-                    break 
-                end
-                print("⏳ Aguardando mobs aparecerem...")
-                task.wait(2)
-            end
-            
-            if mobsVivos() then
-                startCombatSystem()
-            else
-                print("❌ Nenhum mob encontrado após 30 segundos")
-                dungeonCompleted = true
-                salvarConfig()
-            end
-        end
-        
-        -- Processar após completar dungeon
-        if dungeonCompleted and not autoFlyActive then
-            if dungeonInfinita then
-                print("🚁 Dungeon INF - Sistema automático gerencia tudo...")
-                -- No modo INF, o próprio sistema de combate já reinicia
-            else
-                print("🎯 Dungeon Normal completada - Saindo...")
+            -- Após completar, decidir próximo passo
+            if dungeonCompleted then
                 if ativarGems then
                     print("💎 Usando gems para reset...")
                     resetarDungeon()
+                    task.wait(5)
                 else
-                    print("🚪 Saindo do castelo...")
+                    print("🚪 Saindo para recriar...")
                     sairCastelo()
+                    task.wait(5)
+                    if ativarEvento then 
+                        entrarCastelo()
+                        task.wait(3)
+                    end
                 end
-                print("✅ Dungeon Normal finalizada - Use Dungeon INF para modo automático!")
-                break -- Sai do loop para dungeon normal
             end
         end
         
-        -- Verificação de segurança
-        if dungeonActive and not isInDungeon() and not dungeonCompleted then
+        -- Verificação de segurança: se está há muito tempo sem fazer nada
+        if dungeonActive and not isInDungeon() then
             print("⚠️ Dungeon ativa mas não está em dungeon - resetando status")
             resetDungeonStatus()
         end
     end
     
     print("🛑 Loop de auto dungeon parado")
-    stopAutoFly()
 end
 
 -- ===== GUI =====
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub - Arise (SEPARATED MODES)",
-    SubTitle = "Auto Dungeon vs Dungeon INF",
+    Title = "Allan Hub - Arise (AUTO FIXED)",
+    SubTitle = "Reset Automático de Dungeon",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 460),
+    Size = UDim2.fromOffset(580, 400),
     Acrylic = true,
     Theme = "dark",
     MinimizeKey = Enum.KeyCode.End
@@ -558,6 +595,7 @@ local statusParagraph = statusTab:AddParagraph({
     Content = "Aguardando..."
 })
 
+-- Função para atualizar status
 local function updateStatus()
     local status = string.format([[
 🏰 Em Castelo: %s
@@ -566,21 +604,18 @@ local function updateStatus()
 🎯 Dungeon Ativa: %s
 ✅ Dungeon Completada: %s
 🔄 Auto Dungeon: %s
-🚁 Dungeon INF (Voo): %s
-✈️ Sistema de Voo: %s
 ]], 
         ativarEvento and "✅" or "❌",
         isInDungeon() and "✅" or "❌",
         mobsVivos() and "✅" or "❌", 
         dungeonActive and "✅" or "❌",
         dungeonCompleted and "✅" or "❌",
-        ativarDungeon and "✅" or "❌",
-        dungeonInfinita and "✅" or "❌",
-        autoFlyActive and "✅" or "❌"
+        ativarDungeon and "✅" or "❌"
     )
     statusParagraph:SetDesc(status)
 end
 
+-- Atualizar status a cada 2 segundos
 task.spawn(function()
     while true do
         updateStatus()
@@ -617,14 +652,12 @@ t:AddToggle("ToggleAutoCastelo", {
 
 t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon", 
-    Description = "Combate com voo (apenas 1 dungeon)",
+    Description = "Cria/Inicia/Reseta automaticamente",
     Default = ativarDungeon,
     Callback = function(state)
         ativarDungeon = state; salvarConfig()
         if state then 
             task.spawn(autoDungeonLoop)
-        else
-            stopAutoFly()
         end
     end
 })
@@ -636,48 +669,13 @@ t:AddToggle("ToggleUseGems", {
     Callback = function(state) ativarGems = state; salvarConfig() end
 })
 
--- Botão Dungeon INF
-t:AddToggle("ToggleDungeonInf", {
-    Title = "🚁 Dungeon INF",
-    Description = "Voo automático + Criação e reset infinito",
-    Default = dungeonInfinita,
-    Callback = function(state)
-        dungeonInfinita = state
-        salvarConfig()
-        
-        if state then
-            print("🚁 Dungeon INF ativada - Modo infinito automático!")
-            ativarGems = true  -- Força usar gems no modo INF
-            ativarDungeon = true -- Ativa auto dungeon automaticamente
-            salvarConfig()
-            -- Inicia o loop se não estiver rodando
-            if not ativarDungeon then
-                task.spawn(autoDungeonLoop)
-            end
-        else
-            print("🛑 Dungeon INF desativada")
-        end
-    end
-})
-
+-- Botões de controle manual (agora desnecessário, mas mantido para debug)
 t:AddButton({
-    Title = "🔄 Reset Status",
-    Description = "Limpa status da dungeon",
+    Title = "🔄 Force Reset Status",
+    Description = "Força limpeza manual (apenas debug)",
     Callback = function()
         resetDungeonStatus()
-        stopAutoFly()
-        print("🔄 Status resetado!")
-    end
-})
-
-t:AddButton({
-    Title = "🛑 Parar Sistema",
-    Description = "Para todo o sistema",
-    Callback = function()
-        ativarDungeon = false
-        salvarConfig()
-        stopAutoFly()
-        print("🛑 Sistema parado completamente!")
+        print("🔄 Status forçado manualmente!")
     end
 })
 
@@ -721,17 +719,8 @@ task.spawn(function()
     end
 end)
 
--- Reconectar personagem
-player.CharacterAdded:Connect(function(newChar)
-    char = newChar
-    hrp = char:WaitForChild("HumanoidRootPart")
-    stopAutoFly()  -- Para o voo atual
-    print("🔄 Personagem reconectado")
-end)
-
--- Autostart
+-- Autostart se estiver ativo no config
 if ativarEvento then entrarCastelo() end
 if ativarDungeon then task.spawn(autoDungeonLoop) end
 
-print("✅ Allan Hub - Sistema ÚNICO de Voo Carregado!")
-print("🚁 Agora usa APENAS sistema de voo, sem teleporte!")
+print("✅ Allan Hub carregado com reset automático!")
