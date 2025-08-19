@@ -6,7 +6,8 @@ local andarSaida     = 1
 local currentFloor   = 0
 local configFile     = "allan_hub_castelo.json"
 local tempFile       = "temp_dungeon.json"
-local dungeonActive  = false  -- Nova flag para controle
+local dungeonActive  = false
+local dungeonCompleted = false  -- Nova flag para detectar conclusão
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -24,12 +25,13 @@ local function safeDelete(path)
     end
 end
 
--- ===== Salvar/Carregar (incluindo flag dungeon) =====
+-- ===== Salvar/Carregar (incluindo novas flags) =====
 local function salvarConfig()
     local data = {
         entrada = andarEntrada, saida = andarSaida,
         evento = ativarEvento, dungeon = ativarDungeon, gems = ativarGems,
-        dungeonActive = dungeonActive  -- Salvar estado da dungeon
+        dungeonActive = dungeonActive,
+        dungeonCompleted = dungeonCompleted
     }
     writefile(configFile, HttpService:JSONEncode(data))
 end
@@ -42,7 +44,8 @@ local function carregarConfig()
         ativarEvento  = data.evento or false
         ativarDungeon = data.dungeon or false
         ativarGems    = data.gems or false
-        dungeonActive = data.dungeonActive or false  -- Carregar estado
+        dungeonActive = data.dungeonActive or false
+        dungeonCompleted = data.dungeonCompleted or false
     else
         salvarConfig()
     end
@@ -52,7 +55,7 @@ carregarConfig()
 -- ===== Verificações melhoradas =====
 local isInDungeon = function()
     local enemies = workspace:FindFirstChild("__Enemies")
-    local dungeonFolder = workspace:FindFirstChild("Dungeon") -- Adicionar outras verificações se necessário
+    local dungeonFolder = workspace:FindFirstChild("Dungeon")
     return enemies ~= nil or dungeonFolder ~= nil
 end
 
@@ -73,6 +76,15 @@ local mobsVivos = function()
     return count > 0
 end
 
+-- ===== Função para limpar status automaticamente =====
+local function resetDungeonStatus()
+    print("🔄 Limpando status da dungeon automaticamente...")
+    dungeonActive = false
+    dungeonCompleted = false
+    salvarConfig()
+    safeDelete(tempFile)
+end
+
 -- ===== Ações corrigidas =====
 local entrarCastelo = function()
     print("🏰 Entrando no castelo - Andar:", andarEntrada)
@@ -80,6 +92,7 @@ local entrarCastelo = function()
         [1] = { [1] = { Check = true, Floor = tostring(andarEntrada), Event = "CastleAction", Action = "Join" }, [2] = "\12" }
     }
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    task.wait(3) -- Aguardar entrada no castelo
 end
 
 local sairCastelo = function()
@@ -88,19 +101,21 @@ local sairCastelo = function()
         [1] = { [1] = { Check = true, Floor = tostring(andarSaida), Event = "CastleAction", Action = "LeaveDungeon" }, [2] = "\12" }
     }
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    dungeonActive = false
-    salvarConfig()
-    safeDelete(tempFile)
+    
+    -- Reset automático de status após sair
+    task.wait(2)
+    resetDungeonStatus()
 end
 
 local iniciarDungeon = function()
     print("▶️ Iniciando dungeon...")
     local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Start" }, [2] = "\12" } }
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    task.wait(3)
 end
 
 local criarDungeon = function()
-    if dungeonActive then 
+    if dungeonActive and not dungeonCompleted then 
         print("⚠️ Dungeon já está ativa, pulando criação")
         return 
     end
@@ -108,6 +123,7 @@ local criarDungeon = function()
     if isInDungeon() then 
         print("⚠️ Já está em uma dungeon")
         dungeonActive = true
+        dungeonCompleted = false
         salvarConfig()
         return 
     end
@@ -117,10 +133,11 @@ local criarDungeon = function()
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     
     dungeonActive = true
+    dungeonCompleted = false
     salvarConfig()
     writefile(tempFile, "1")
     
-    task.wait(5) -- Esperar mais tempo para criar
+    task.wait(5)
     iniciarDungeon()
 end
 
@@ -128,13 +145,13 @@ local resetarDungeon = function()
     print("💎 Resetando dungeon com gems...")
     local args = { [1] = { [1] = { Type = "Gems", Event = "DungeonAction", Action = "BuyTicket" }, [2] = "\12" } }
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    dungeonActive = false
-    salvarConfig()
-    safeDelete(tempFile)
+    
+    -- Reset automático após usar gems
+    task.wait(3)
+    resetDungeonStatus()
 end
 
--- ===== Sistema de teleporte simplificado =====
-
+-- ===== Sistema de teleporte =====
 local teleportToNearestMob = function()
     local char = player.Character
     if not char then 
@@ -155,15 +172,9 @@ local teleportToNearestMob = function()
     end
 
     local closest, bestDistance = nil, math.huge
-    local mobCount = 0
-    
-    print("🔍 Procurando mobs...")
     
     for _, mob in pairs(folder:GetChildren()) do
         if mob and mob:IsA("Model") and mob.Parent then
-            mobCount = mobCount + 1
-            print("📋 Verificando mob:", mob.Name)
-            
             local humanoid = mob:FindFirstChild("Humanoid")
             local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart", true)
             
@@ -171,26 +182,18 @@ local teleportToNearestMob = function()
                 local isAlive = true
                 if humanoid then
                     isAlive = humanoid.Health > 0
-                    print("❤️ Vida do mob:", humanoid.Health)
                 end
                 
                 if isAlive then
                     local distance = (root.Position - hrp.Position).Magnitude
-                    print("📏 Distância:", math.floor(distance))
-                    
                     if distance < bestDistance then
                         bestDistance = distance
                         closest = hrp
-                        print("✅ Novo mob mais próximo encontrado!")
                     end
                 end
-            else
-                print("❌ Mob sem HumanoidRootPart válido")
             end
         end
     end
-    
-    print("📊 Total de mobs verificados:", mobCount)
     
     if closest then
         root.CFrame = closest.CFrame + Vector3.new(0, 5, 0)
@@ -226,7 +229,7 @@ end
 local solarDungeon = function()
     print("🌟 Iniciando combate na dungeon...")
     
-    -- Esperar mobs aparecerem (até 30 segundos)
+    -- Esperar mobs aparecerem
     local waitStart = tick()
     while tick() - waitStart < 30 do
         if mobsVivos() then
@@ -239,12 +242,14 @@ local solarDungeon = function()
     
     if not mobsVivos() then
         print("❌ Nenhum mob encontrado após 30 segundos")
+        dungeonCompleted = true
+        salvarConfig()
         return
     end
 
     -- Loop de combate
     local combatStart = tick()
-    while mobsVivos() and tick() - combatStart < 300 do -- Máximo 5 minutos
+    while mobsVivos() and tick() - combatStart < 300 do
         teleportToNearestMob()
         task.wait(0.5)
         atacarInimigos()
@@ -256,52 +261,75 @@ local solarDungeon = function()
     else
         print("🎉 Todos os mobs foram derrotados!")
     end
+    
+    -- Marcar dungeon como completada
+    dungeonCompleted = true
+    salvarConfig()
+    print("✅ Dungeon marcada como completada")
 end
 
--- ===== Loop principal corrigido =====
+-- ===== Loop principal CORRIGIDO =====
 local function autoDungeonLoop()
     print("🔄 Iniciando loop de auto dungeon...")
     
     while ativarDungeon do
-        task.wait(5) -- Espera maior entre ciclos
+        task.wait(3)
         
-        if not isInDungeon() and not dungeonActive then
-            print("🏗️ Preparando para criar dungeon...")
+        -- Se não está em dungeon E (não está ativa OU foi completada)
+        if not isInDungeon() and (not dungeonActive or dungeonCompleted) then
+            print("🏗️ Preparando para criar nova dungeon...")
+            
+            -- Reset status para nova dungeon
+            resetDungeonStatus()
             
             if ativarEvento then 
                 entrarCastelo()
-                task.wait(5) 
+                task.wait(3) 
             end
             
             criarDungeon()
-            task.wait(8) -- Mais tempo para processar
+            task.wait(8)
         end
 
-        if isInDungeon() then
+        -- Se está em dungeon e dungeon está ativa
+        if isInDungeon() and dungeonActive and not dungeonCompleted then
             print("🎮 Executando dungeon...")
             solarDungeon()
             task.wait(3)
             
-            if ativarGems then
-                resetarDungeon()
-                task.wait(5)
-            else
-                sairCastelo()
-                task.wait(5)
-                if ativarEvento then entrarCastelo() end
-                task.wait(3)
+            -- Após completar, decidir próximo passo
+            if dungeonCompleted then
+                if ativarGems then
+                    print("💎 Usando gems para reset...")
+                    resetarDungeon()
+                    task.wait(5)
+                else
+                    print("🚪 Saindo para recriar...")
+                    sairCastelo()
+                    task.wait(5)
+                    if ativarEvento then 
+                        entrarCastelo()
+                        task.wait(3)
+                    end
+                end
             end
+        end
+        
+        -- Verificação de segurança: se está há muito tempo sem fazer nada
+        if dungeonActive and not isInDungeon() then
+            print("⚠️ Dungeon ativa mas não está em dungeon - resetando status")
+            resetDungeonStatus()
         end
     end
     
     print("🛑 Loop de auto dungeon parado")
 end
 
--- ===== GUI (mantida igual) =====
+-- ===== GUI =====
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub - Arise (FIXED)",
-    SubTitle = "Dungeon Automática Corrigida",
+    Title = "Allan Hub - Arise (AUTO FIXED)",
+    SubTitle = "Reset Automático de Dungeon",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 400),
     Acrylic = true,
@@ -325,12 +353,14 @@ local function updateStatus()
 ⚔️ Em Dungeon: %s  
 👹 Mobs Vivos: %s
 🎯 Dungeon Ativa: %s
+✅ Dungeon Completada: %s
 🔄 Auto Dungeon: %s
 ]], 
         ativarEvento and "✅" or "❌",
         isInDungeon() and "✅" or "❌",
         mobsVivos() and "✅" or "❌", 
         dungeonActive and "✅" or "❌",
+        dungeonCompleted and "✅" or "❌",
         ativarDungeon and "✅" or "❌"
     )
     statusParagraph:SetDesc(status)
@@ -390,19 +420,17 @@ t:AddToggle("ToggleUseGems", {
     Callback = function(state) ativarGems = state; salvarConfig() end
 })
 
--- Botões de controle manual
+-- Botões de controle manual (agora desnecessário, mas mantido para debug)
 t:AddButton({
-    Title = "🔄 Reset Dungeon Status",
-    Description = "Limpa flags de dungeon",
+    Title = "🔄 Force Reset Status",
+    Description = "Força limpeza manual (apenas debug)",
     Callback = function()
-        dungeonActive = false
-        salvarConfig()
-        safeDelete(tempFile)
-        print("🔄 Status da dungeon resetado!")
+        resetDungeonStatus()
+        print("🔄 Status forçado manualmente!")
     end
 })
 
--- Botão flutuante (mantido igual)
+-- Botão flutuante
 local floatingGui = Instance.new("ScreenGui")
 floatingGui.Name = "AllanHubFloating"
 floatingGui.Parent = player:WaitForChild("PlayerGui")
@@ -428,7 +456,7 @@ toggleButton.MouseButton1Click:Connect(function()
     toggleButton.Text = hubVisivel and "🔼" or "🔽"
 end)
 
--- Watch do andar (mantido)
+-- Watch do andar
 task.spawn(function()
     while task.wait(1) do
         if ativarEvento then
@@ -446,4 +474,4 @@ end)
 if ativarEvento then entrarCastelo() end
 if ativarDungeon then task.spawn(autoDungeonLoop) end
 
-print("✅ Allan Hub carregado com correções!")
+print("✅ Allan Hub carregado com reset automático!")
