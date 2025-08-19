@@ -214,16 +214,27 @@ local function flyToMobLoop(enemiesFolder)
             if currentTween then currentTween:Cancel(); currentTween = nil end
             
             print("✅ Chegou próximo ao mob!")
-            task.wait(2) -- Tempo para seu personagem atacar o mob
+            task.wait(3) -- Aumenta tempo para atacar o mob
             addVisitedPosition(mob.Position)
         else
-            print("❌ Nenhum mob encontrado! Parando o auto fly...")
+            print("❌ Nenhum mob encontrado na varredura atual")
+            
+            -- Limpa lista de visitados e tenta novamente
+            if #visitedPositions > 0 then
+                print("🔄 Limpando lista de visitados para nova varredura...")
+                visitedPositions = {}
+                task.wait(2)
+                continue
+            end
+            
+            -- Se mesmo assim não encontrar, para o loop
+            print("❌ Nenhum mob encontrado após limpar lista - parando Auto Fly")
             autoFlyRunning = false
             break
         end
         
         if autoFlyRunning then
-            task.wait(0.5)
+            task.wait(1) -- Aumenta intervalo entre mobs
         end
     end
     
@@ -300,10 +311,19 @@ local function isInDungeon()
     -- Verifica se existe pasta __Enemies diretamente no workspace (sinal de dungeon ativa)
     local dungeonEnemies = workspace:FindFirstChild("__Enemies")
     local dungeonFolder = workspace:FindFirstChild("Dungeon")
+    
+    -- Também verifica se o player está em um lugar específico que indica dungeon
+    local playerGui = player:FindFirstChild("PlayerGui")
+    local dungeonUI = playerGui and playerGui:FindFirstChild("DungeonGUI") -- Ajuste conforme o nome real da UI
+    
     local isDungeon = dungeonEnemies ~= nil or dungeonFolder ~= nil
     
     if isDungeon then
         print("🏰 Detectado que está em uma dungeon")
+    else
+        print("🌍 Não está em dungeon - verificando pastas...")
+        if dungeonEnemies then print("✅ __Enemies encontrado no workspace") end
+        if dungeonFolder then print("✅ Dungeon folder encontrado") end
     end
     
     return isDungeon
@@ -331,11 +351,13 @@ local function mobsVivos()
     local aliveCount = 0
     
     for _, mob in ipairs(folder:GetChildren()) do
-        if mob:IsA("Model") then
+        if mob:IsA("Model") and mob.Parent then
             mobsCount = mobsCount + 1
             local humanoid = mob:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
+            if humanoid and humanoid.Health > 0 and humanoid.Parent then
                 aliveCount = aliveCount + 1
+                -- Debug: mostra quais mobs ainda estão vivos
+                print("👹 Mob vivo encontrado:", mob.Name, "| HP:", math.floor(humanoid.Health))
             end
         end
     end
@@ -401,29 +423,38 @@ local function verificarEresetarSeNecessario()
     -- Para o auto fly antes de verificar
     if autoFlyRunning then
         stopAutoFly()
-        task.wait(2)
+        task.wait(3)
     end
     
-    task.wait(3)
+    -- Aguarda um pouco para garantir que tudo foi processado
+    task.wait(5)
     
-    if not mobsVivos() then
-        print("✅ Dungeon limpa! Iniciando o processo de reset.")
+    -- Faz múltiplas verificações para ter certeza
+    local mobCheck1 = mobsVivos()
+    task.wait(2)
+    local mobCheck2 = mobsVivos()
+    
+    if not mobCheck1 and not mobCheck2 then
+        print("✅ Dungeon confirmada como limpa! Iniciando processo de reset.")
         
         if ativarGems then
             resetarDungeon()
         else
             sairCastelo()
-            task.wait(5)
+            task.wait(8)
             if ativarEvento then entrarCastelo() end
         end
         
-        task.wait(3)
+        task.wait(5)
         return true
     else
-        print("⚠️ Ainda existem mobs vivos.")
+        print("⚠️ Ainda existem mobs vivos - não resetando ainda.")
+        print("🔄 Primeira verificação:", mobCheck1 and "MOBS VIVOS" or "LIMPO")
+        print("🔄 Segunda verificação:", mobCheck2 and "MOBS VIVOS" or "LIMPO")
         return false
     end
 end
+
 -- FUNÇÃO CORRIGIDA DE LIMPEZA COM VOO
 local function solarDungeonComVoo()
     print("🌟 Iniciando limpeza da dungeon com Auto Voo...")
@@ -433,38 +464,68 @@ local function solarDungeonComVoo()
     
     if not dungeonEnemiesFolder then
         print("❌ Pasta de inimigos da dungeon não encontrada.")
-        return
+        return false
     end
     
-    print("📂 Pasta de inimigos encontrada:", dungeonEnemiesFolder.Name)
+    print("📂 Pasta de inimigos encontrada:", dungeonEnemiesFolder.Name, "| Filhos:", #dungeonEnemiesFolder:GetChildren())
+    
+    -- Se não há mobs, já retorna
+    if #dungeonEnemiesFolder:GetChildren() == 0 then
+        print("✅ Nenhum mob encontrado - dungeon já está limpa")
+        return true
+    end
     
     -- Inicia o voo focado apenas na pasta da dungeon
     startAutoFly(dungeonEnemiesFolder)
     
     local startTime = tick()
     local maxTimeout = 300 -- 5 minutos máximo
+    local lastMobCheck = tick()
+    local noMobCounter = 0
     
     -- Espera até que o voo pare ou dê timeout
     while autoFlyRunning and (tick() - startTime < maxTimeout) and ativarDungeon do
-        print("✈️ Limpando dungeon... Auto Voo ativo.")
-        task.wait(5)
+        task.wait(3)
         
-        -- Verifica se ainda existem mobs para continuar
-        if not mobsVivos() then
-            print("🎉 Todos os mobs foram eliminados!")
-            break
+        -- Verifica se ainda existem mobs a cada 10 segundos
+        if tick() - lastMobCheck > 10 then
+            lastMobCheck = tick()
+            local hasMobs = mobsVivos()
+            
+            if not hasMobs then
+                noMobCounter = noMobCounter + 1
+                print("🎯 Verificação", noMobCounter, "- Nenhum mob vivo encontrado")
+                
+                -- Se não encontrou mobs vivos 3 vezes seguidas, considera limpo
+                if noMobCounter >= 3 then
+                    print("🎉 Dungeon confirmadamente limpa!")
+                    break
+                end
+            else
+                noMobCounter = 0 -- Reset counter se ainda há mobs
+            end
         end
+        
+        print("✈️ Limpando dungeon... Auto Voo ativo há", math.floor(tick() - startTime), "segundos")
     end
     
     -- Garante que o voo seja parado ao final
     if autoFlyRunning then
         stopAutoFly()
+        task.wait(2)
     end
+    
+    local finalCheck = mobsVivos()
     
     if tick() - startTime >= maxTimeout then
         print("⏰ Timeout na limpeza da dungeon.")
+        return false
+    elseif not finalCheck then
+        print("✅ Limpeza da dungeon finalizada com sucesso!")
+        return true
     else
-        print("✅ Limpeza da dungeon finalizada!")
+        print("⚠️ Ainda restam mobs após a limpeza")
+        return false
     end
 end
 
@@ -475,28 +536,46 @@ local function autoDungeonLoop()
     while ativarDungeon do
         task.wait(5)
         
-        if not isInDungeon() and not dungeonActive then
+        -- Força verificação detalhada do estado
+        local inDungeon = isInDungeon()
+        local hasMobs = mobsVivos()
+        
+        print("🔍 Estado atual - Em Dungeon:", inDungeon, "| Dungeon Ativa:", dungeonActive, "| Mobs Vivos:", hasMobs)
+        
+        if not inDungeon and not dungeonActive then
             print("🏗️ Preparando para criar dungeon...")
             if ativarEvento then 
                 entrarCastelo()
                 task.wait(5) 
             end
             criarDungeon()
-            task.wait(8)
+            task.wait(10) -- Aguarda mais tempo para dungeon ser criada
+            continue
         end
 
-        if isInDungeon() then
-            print("🎮 Executando dungeon com Auto Voo...")
-            solarDungeonComVoo()
-            verificarEresetarSeNecessario()
+        if inDungeon or dungeonActive then
+            if hasMobs then
+                print("🎮 Executando limpeza da dungeon com Auto Voo...")
+                local limpezaSucesso = solarDungeonComVoo()
+                
+                if limpezaSucesso then
+                    verificarEresetarSeNecessario()
+                else
+                    print("⚠️ Limpeza não foi bem sucedida, tentando novamente...")
+                end
+            else
+                print("✅ Nenhum mob detectado - verificando se precisa resetar...")
+                verificarEresetarSeNecessario()
+            end
         else
-            print("⚠️ Não está em dungeon, aguardando...")
+            print("⚠️ Estado indefinido - aguardando...")
             task.wait(10)
         end
+        
+        task.wait(3)
     end
     print("🛑 Loop de auto dungeon parado")
 end
-
 -- ===== GUI (CORRIGIDA) =====
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
