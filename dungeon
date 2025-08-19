@@ -437,18 +437,20 @@ local function autoDungeonLoop()
     while ativarDungeon do
         task.wait(3)
         
-        -- Criar/Entrar na dungeon se necessário
-        if not isInDungeon() and (not dungeonActive or dungeonCompleted) then
-            print("🏗️ Preparando para criar nova dungeon...")
-            resetDungeonStatus()
-            
-            if ativarEvento then 
-                entrarCastelo()
-                task.wait(3) 
+        -- APENAS no modo Dungeon INF: Criar/Entrar na dungeon automaticamente
+        if dungeonInfinita then
+            if not isInDungeon() and (not dungeonActive or dungeonCompleted) then
+                print("🚁 Dungeon INF - Criando nova dungeon...")
+                resetDungeonStatus()
+                
+                if ativarEvento then 
+                    entrarCastelo()
+                    task.wait(3) 
+                end
+                
+                criarDungeon()
+                task.wait(8)
             end
-            
-            criarDungeon()
-            task.wait(8)
         end
 
         -- Se está em dungeon e deve iniciar combate
@@ -478,23 +480,19 @@ local function autoDungeonLoop()
         -- Processar após completar dungeon
         if dungeonCompleted and not autoFlyActive then
             if dungeonInfinita then
-                print("🚁 Dungeon INF - Continuando automaticamente...")
+                print("🚁 Dungeon INF - Sistema automático gerencia tudo...")
                 -- No modo INF, o próprio sistema de combate já reinicia
             else
-                print("🎯 Processando dungeon completada...")
+                print("🎯 Dungeon Normal completada - Saindo...")
                 if ativarGems then
                     print("💎 Usando gems para reset...")
                     resetarDungeon()
-                    task.wait(5)
                 else
-                    print("🚪 Saindo para recriar...")
+                    print("🚪 Saindo do castelo...")
                     sairCastelo()
-                    task.wait(5)
-                    if ativarEvento then 
-                        entrarCastelo()
-                        task.wait(3)
-                    end
                 end
+                print("✅ Dungeon Normal finalizada - Use Dungeon INF para modo automático!")
+                break -- Sai do loop para dungeon normal
             end
         end
         
@@ -512,8 +510,8 @@ end
 -- ===== GUI =====
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local Window = Fluent:CreateWindow({
-    Title = "Allan Hub - Arise (FLIGHT ONLY)",
-    SubTitle = "Sistema Único de Voo Automático",
+    Title = "Allan Hub - Arise (SEPARATED MODES)",
+    SubTitle = "Auto Dungeon vs Dungeon INF",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -589,7 +587,7 @@ t:AddToggle("ToggleAutoCastelo", {
 
 t:AddToggle("ToggleAutoDungeon", {
     Title = "Auto Dungeon", 
-    Description = "Sistema com voo automático",
+    Description = "Combate com voo (apenas 1 dungeon)",
     Default = ativarDungeon,
     Callback = function(state)
         ativarDungeon = state; salvarConfig()
@@ -611,16 +609,21 @@ t:AddToggle("ToggleUseGems", {
 -- Botão Dungeon INF
 t:AddToggle("ToggleDungeonInf", {
     Title = "🚁 Dungeon INF",
-    Description = "Voo automático + Reset infinito com gems",
+    Description = "Voo automático + Criação e reset infinito",
     Default = dungeonInfinita,
     Callback = function(state)
         dungeonInfinita = state
         salvarConfig()
         
         if state then
-            print("🚁 Dungeon INF ativada - Reset automático infinito!")
+            print("🚁 Dungeon INF ativada - Modo infinito automático!")
             ativarGems = true  -- Força usar gems no modo INF
+            ativarDungeon = true -- Ativa auto dungeon automaticamente
             salvarConfig()
+            -- Inicia o loop se não estiver rodando
+            if not ativarDungeon then
+                task.spawn(autoDungeonLoop)
+            end
         else
             print("🛑 Dungeon INF desativada")
         end
