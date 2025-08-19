@@ -89,17 +89,40 @@ local function getClosestUnvisitedMob(enemiesFolder)
     local allMobs = {}
     local maxDistance = 50000
     
-    -- Se não foi especificada uma pasta, usa a padrão do mundo aberto
-    if not enemiesFolder then
-        enemiesFolder = workspace:FindFirstChild("__Main")
-        if enemiesFolder then
-            enemiesFolder = enemiesFolder:FindFirstChild("__Enemies")
-        end
-    end
+    -- Lista de nomes específicos das dungeons para buscar inimigos
+    local dungeonNames = {
+        "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+        "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+        "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+        "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+    }
     
-    -- Para dungeons, procura pasta __Enemies diretamente no workspace
-    if not enemiesFolder or not enemiesFolder:GetChildren() or #enemiesFolder:GetChildren() == 0 then
+    -- Se não foi especificada uma pasta, tenta encontrar automaticamente
+    if not enemiesFolder then
+        -- Primeiro tenta pasta __Enemies no workspace (dungeon ativa)
         enemiesFolder = workspace:FindFirstChild("__Enemies")
+        
+        -- Se não encontrou, tenta nas dungeons específicas
+        if not enemiesFolder then
+            for _, dungeonName in pairs(dungeonNames) do
+                local dungeon = workspace:FindFirstChild(dungeonName)
+                if dungeon then
+                    enemiesFolder = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
+                    if enemiesFolder then
+                        print("📂 Encontrou inimigos na dungeon:", dungeonName)
+                        break
+                    end
+                end
+            end
+        end
+        
+        -- Se ainda não encontrou, usa a pasta padrão do mundo aberto
+        if not enemiesFolder then
+            local mainFolder = workspace:FindFirstChild("__Main")
+            if mainFolder then
+                enemiesFolder = mainFolder:FindFirstChild("__Enemies")
+            end
+        end
     end
     
     if not enemiesFolder then
@@ -270,6 +293,7 @@ local function stopAutoFly()
     stuckCounter = 0
     print("✅ Auto Fly parado!")
 end
+
 -- ===== FUNÇÕES DE CONTROLE (CORRIGIDAS) =====
 
 local function safeDelete(path)
@@ -305,15 +329,44 @@ local function carregarConfig()
 end
 carregarConfig()
 
--- FUNÇÃO CORRIGIDA DE DETECÇÃO DE DUNGEON
+-- FUNÇÃO CORRIGIDA DE DETECÇÃO DE DUNGEON (USANDO NOMES ESPECÍFICOS)
 local function isInDungeon()
-    -- Verifica se existe pasta __Enemies diretamente no workspace (sinal de dungeon ativa)
+    -- Lista de nomes específicos das dungeons
+    local dungeonNames = {
+        "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+        "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+        "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+        "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+    }
+    
+    -- Verifica se existe pasta __Enemies diretamente no workspace (método antigo)
     local dungeonEnemies = workspace:FindFirstChild("__Enemies")
-    local dungeonFolder = workspace:FindFirstChild("Dungeon")
-    local isDungeon = dungeonEnemies ~= nil or dungeonFolder ~= nil
+    
+    -- Verifica se existe alguma das dungeons específicas
+    local foundDungeon = nil
+    for _, dungeonName in pairs(dungeonNames) do
+        local dungeon = workspace:FindFirstChild(dungeonName)
+        if dungeon then
+            foundDungeon = dungeonName
+            break
+        end
+    end
+    
+    -- Verifica também a pasta Dungeon genérica
+    local genericDungeon = workspace:FindFirstChild("Dungeon")
+    
+    local isDungeon = dungeonEnemies ~= nil or foundDungeon ~= nil or genericDungeon ~= nil
     
     if isDungeon then
-        print("🏰 Detectado que está em uma dungeon")
+        if foundDungeon then
+            print("🏰 Detectado em dungeon específica:", foundDungeon)
+        elseif dungeonEnemies then
+            print("🏰 Detectado em dungeon (pasta __Enemies encontrada)")
+        elseif genericDungeon then
+            print("🏰 Detectado em dungeon (pasta Dungeon encontrada)")
+        end
+    else
+        print("🌍 Não está em nenhuma dungeon conhecida")
     end
     
     return isDungeon
@@ -321,10 +374,34 @@ end
 
 -- FUNÇÃO CORRIGIDA DE DETECÇÃO DE MOBS VIVOS
 local function mobsVivos()
-    -- Primeiro verifica pasta __Enemies no workspace (dungeon)
-    local folder = workspace:FindFirstChild("__Enemies")
+    -- Lista de nomes específicos das dungeons
+    local dungeonNames = {
+        "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+        "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+        "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+        "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+    }
     
-    -- Se não encontrou, verifica a pasta padrão do mundo aberto
+    local folder = nil
+    
+    -- Primeiro verifica pasta __Enemies no workspace (dungeon ativa)
+    folder = workspace:FindFirstChild("__Enemies")
+    
+    -- Se não encontrou, procura nas dungeons específicas
+    if not folder then
+        for _, dungeonName in pairs(dungeonNames) do
+            local dungeon = workspace:FindFirstChild(dungeonName)
+            if dungeon then
+                folder = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
+                if folder then
+                    print("📂 Verificando mobs na dungeon:", dungeonName)
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Se ainda não encontrou, verifica a pasta padrão do mundo aberto
     if not folder then
         local mainFolder = workspace:FindFirstChild("__Main")
         if mainFolder then
@@ -341,16 +418,18 @@ local function mobsVivos()
     local aliveCount = 0
     
     for _, mob in ipairs(folder:GetChildren()) do
-        if mob:IsA("Model") then
+        if mob:IsA("Model") and mob.Parent then
             mobsCount = mobsCount + 1
             local humanoid = mob:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
+            if humanoid and humanoid.Health > 0 and humanoid.Parent then
                 aliveCount = aliveCount + 1
+                -- Debug: mostra quais mobs ainda estão vivos
+                print("👹 Mob vivo encontrado:", mob.Name, "| HP:", math.floor(humanoid.Health))
             end
         end
     end
     
-    print("📊 Mobs encontrados:", mobsCount, "| Vivos:", aliveCount)
+    print("📊 Mobs encontrados:", mobsCount, "| Vivos:", aliveCount, "| Pasta:", folder.Name)
     return aliveCount > 0
 end
 
@@ -387,50 +466,108 @@ end
 
 -- FUNÇÃO CORRIGIDA DE RESET COM GEMS
 local function resetarDungeon()
-    print("💎 Resetando dungeon com gems...")
+    print("💎 Iniciando reset da dungeon com gems...")
+    
     -- Para o auto fly antes de resetar
     if autoFlyRunning then
-        stopAutoFly()
-        task.wait(2)
+        print("🛑 Parando Auto Fly para reset...")
+        autoFlyRunning = false
+        disableFlight()
+        task.wait(3)
     end
     
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Type = "Gems", Event = "DungeonAction", Action = "BuyTicket"}, [2] = "\12"})
+    -- Tenta resetar com gems
+    local success, error = pcall(function()
+        game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({
+            [1] = {Type = "Gems", Event = "DungeonAction", Action = "BuyTicket"}, 
+            [2] = "\12"
+        })
+    end)
+    
+    if success then
+        print("✅ Comando de reset enviado com sucesso")
+    else
+        print("❌ Erro ao enviar comando de reset:", error)
+    end
+    
     dungeonActive = false
     salvarConfig()
     safeDelete(tempFile)
     
-    -- Aguarda um pouco para o reset processar
-    task.wait(3)
-    print("✅ Reset com gems concluído")
+    -- Aguarda o reset processar
+    task.wait(8)
+    
+    -- Verifica se saiu da dungeon
+    local attempts = 0
+    while isInDungeon() and attempts < 10 do
+        print("⏳ Aguardando reset processar... Tentativa", attempts + 1)
+        task.wait(2)
+        attempts = attempts + 1
+    end
+    
+    if not isInDungeon() then
+        print("✅ Reset com gems concluído com sucesso!")
+    else
+        print("⚠️ Ainda em dungeon após reset - pode precisar de mais tempo")
+    end
 end
 
 -- FUNÇÃO CORRIGIDA DE VERIFICAÇÃO E RESET
 local function verificarEresetarSeNecessario()
     print("🔎 Verificando se a dungeon foi concluída...")
     
-    -- Para o auto fly antes de verificar
+    -- Para qualquer auto fly ativo antes de verificar
     if autoFlyRunning then
-        stopAutoFly()
-        task.wait(2)
+        print("🛑 Parando Auto Fly para verificação...")
+        autoFlyRunning = false
+        disableFlight()
+        task.wait(3)
     end
     
+    -- Aguarda um pouco para garantir que tudo foi processado
     task.wait(3)
     
-    if not mobsVivos() then
-        print("✅ Dungeon limpa! Iniciando o processo de reset.")
+    -- Faz múltiplas verificações para ter certeza
+    print("🔍 Primeira verificação de mobs...")
+    local mobCheck1 = mobsVivos()
+    task.wait(3)
+    print("🔍 Segunda verificação de mobs...")
+    local mobCheck2 = mobsVivos()
+    
+    if not mobCheck1 and not mobCheck2 then
+        print("✅ DUNGEON CONFIRMADA COMO LIMPA!")
+        print("🔄 Iniciando processo de reset...")
         
         if ativarGems then
+            print("💎 Resetando com gems...")
             resetarDungeon()
+            
+            -- Aguarda sair da dungeon após reset
+            task.wait(10)
+            
+            -- Se ainda está em dungeon, força saída
+            if isInDungeon() then
+                print("⚠️ Ainda em dungeon após reset com gems - forçando saída...")
+                sairCastelo()
+                task.wait(5)
+            end
+            
         else
+            print("🚪 Resetando saindo e entrando novamente...")
             sairCastelo()
-            task.wait(5)
-            if ativarEvento then entrarCastelo() end
+            task.wait(8)
+            if ativarEvento then 
+                entrarCastelo()
+                task.wait(5)
+            end
         end
         
-        task.wait(3)
+        print("✅ Processo de reset finalizado!")
         return true
     else
-        print("⚠️ Ainda existem mobs vivos.")
+        print("⚠️ AINDA EXISTEM MOBS VIVOS - NÃO RESETANDO")
+        print("🔄 Primeira verificação:", mobCheck1 and "❌ MOBS VIVOS" or "✅ LIMPO")
+        print("🔄 Segunda verificação:", mobCheck2 and "❌ MOBS VIVOS" or "✅ LIMPO")
         return false
     end
 end
@@ -439,43 +576,107 @@ end
 local function solarDungeonComVoo()
     print("🌟 Iniciando limpeza da dungeon com Auto Voo...")
     
-    -- Procura pasta de inimigos da dungeon
-    local dungeonEnemiesFolder = workspace:FindFirstChild("__Enemies")
+    -- Lista de nomes específicos das dungeons
+    local dungeonNames = {
+        "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+        "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+        "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+        "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+    }
+    
+    local dungeonEnemiesFolder = nil
+    
+    -- Procura pasta de inimigos da dungeon - primeiro __Enemies no workspace
+    dungeonEnemiesFolder = workspace:FindFirstChild("__Enemies")
+    
+    -- Se não encontrou, procura nas dungeons específicas
+    if not dungeonEnemiesFolder then
+        for _, dungeonName in pairs(dungeonNames) do
+            local dungeon = workspace:FindFirstChild(dungeonName)
+            if dungeon then
+                dungeonEnemiesFolder = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
+                if dungeonEnemiesFolder then
+                    print("📂 Encontrou pasta de inimigos na dungeon:", dungeonName)
+                    break
+                end
+            end
+        end
+    end
     
     if not dungeonEnemiesFolder then
         print("❌ Pasta de inimigos da dungeon não encontrada.")
-        return
+        return false
     end
     
-    print("📂 Pasta de inimigos encontrada:", dungeonEnemiesFolder.Name)
+    print("📂 Pasta de inimigos encontrada:", dungeonEnemiesFolder.Name, "| Filhos:", #dungeonEnemiesFolder:GetChildren())
+    
+    -- Se não há mobs, já retorna
+    if #dungeonEnemiesFolder:GetChildren() == 0 then
+        print("✅ Nenhum mob encontrado - dungeon já está limpa")
+        return true
+    end
+    
+    -- FORÇA o início do Auto Fly mesmo que não esteja ativo globalmente
+    print("🚁 FORÇANDO início do Auto Fly para dungeon...")
+    autoFlyRunning = true
     
     -- Inicia o voo focado apenas na pasta da dungeon
-    startAutoFly(dungeonEnemiesFolder)
+    autoFlyCoroutine = coroutine.create(function()
+        pcall(flyToMobLoop, dungeonEnemiesFolder)
+        autoFlyRunning = false
+    end)
+    coroutine.resume(autoFlyCoroutine)
     
     local startTime = tick()
     local maxTimeout = 300 -- 5 minutos máximo
+    local lastMobCheck = tick()
+    local noMobCounter = 0
     
     -- Espera até que o voo pare ou dê timeout
     while autoFlyRunning and (tick() - startTime < maxTimeout) and ativarDungeon do
-        print("✈️ Limpando dungeon... Auto Voo ativo.")
-        task.wait(5)
+        task.wait(3)
         
-        -- Verifica se ainda existem mobs para continuar
-        if not mobsVivos() then
-            print("🎉 Todos os mobs foram eliminados!")
-            break
+        -- Verifica se ainda existem mobs a cada 10 segundos
+        if tick() - lastMobCheck > 10 then
+            lastMobCheck = tick()
+            local hasMobs = mobsVivos()
+            
+            if not hasMobs then
+                noMobCounter = noMobCounter + 1
+                print("🎯 Verificação", noMobCounter, "- Nenhum mob vivo encontrado")
+                
+                -- Se não encontrou mobs vivos 2 vezes seguidas, considera limpo
+                if noMobCounter >= 2 then
+                    print("🎉 Dungeon confirmadamente limpa!")
+                    autoFlyRunning = false -- Para o auto fly
+                    break
+                end
+            else
+                noMobCounter = 0 -- Reset counter se ainda há mobs
+            end
         end
+        
+        print("✈️ Limpando dungeon... Auto Voo ativo há", math.floor(tick() - startTime), "segundos")
     end
     
     -- Garante que o voo seja parado ao final
     if autoFlyRunning then
-        stopAutoFly()
+        autoFlyRunning = false
+        disableFlight()
+        task.wait(2)
     end
+    
+    local finalCheck = mobsVivos()
     
     if tick() - startTime >= maxTimeout then
         print("⏰ Timeout na limpeza da dungeon.")
+        return false
+    elseif not finalCheck then
+        print("✅ Limpeza da dungeon finalizada com sucesso!")
+        return true
     else
-        print("✅ Limpeza da dungeon finalizada!")
+        print("⚠️ Ainda restam mobs após a limpeza")
+        return false
     end
 end
 
@@ -484,27 +685,63 @@ local function autoDungeonLoop()
     print("🔄 Iniciando loop de auto dungeon...")
     
     while ativarDungeon do
-        task.wait(5)
+        task.wait(3)
         
-        if not isInDungeon() and not dungeonActive then
-            print("🏗️ Preparando para criar dungeon...")
+        -- Força verificação detalhada do estado
+        local inDungeon = isInDungeon()
+        local hasMobs = mobsVivos()
+        
+        print("🔍 ESTADO ATUAL:")
+        print("   📍 Em Dungeon:", inDungeon and "✅ SIM" or "❌ NÃO") 
+        print("   🎯 Dungeon Ativa:", dungeonActive and "✅ SIM" or "❌ NÃO")
+        print("   👹 Mobs Vivos:", hasMobs and "✅ SIM" or "❌ NÃO")
+        
+        if not inDungeon and not dungeonActive then
+            print("🏗️ CRIANDO NOVA DUNGEON...")
             if ativarEvento then 
+                print("🏰 Entrando no castelo primeiro...")
                 entrarCastelo()
-                task.wait(5) 
+                task.wait(8) 
             end
             criarDungeon()
-            task.wait(8)
+            task.wait(15) -- Aguarda mais tempo para dungeon ser criada
+            continue
         end
 
-        if isInDungeon() then
-            print("🎮 Executando dungeon com Auto Voo...")
-            solarDungeonComVoo()
-            verificarEresetarSeNecessario()
+        if inDungeon or dungeonActive then
+            if hasMobs then
+                print("🎮 INICIANDO LIMPEZA DA DUNGEON...")
+                local limpezaSucesso = solarDungeonComVoo()
+                
+                if limpezaSucesso then
+                    print("✅ Limpeza bem sucedida - verificando reset...")
+                    local resetSucesso = verificarEresetarSeNecessario()
+                    if resetSucesso then
+                        print("🎉 Ciclo completo! Aguardando próxima dungeon...")
+                        task.wait(10)
+                    end
+                else
+                    print("⚠️ Limpeza não foi bem sucedida, aguardando...")
+                    task.wait(10)
+                end
+            else
+                print("✅ NENHUM MOB DETECTADO - VERIFICANDO RESET...")
+                verificarEresetarSeNecessario()
+            end
         else
-            print("⚠️ Não está em dungeon, aguardando...")
-            task.wait(10)
+            print("⚠️ Estado indefinido - aguardando...")
+            task.wait(15)
         end
+        
+        task.wait(5)
     end
+    
+    -- Para qualquer auto fly ativo ao sair do loop
+    if autoFlyRunning then
+        autoFlyRunning = false
+        disableFlight()
+    end
+    
     print("🛑 Loop de auto dungeon parado")
 end
 
@@ -661,9 +898,63 @@ t:AddButton({
     Description = "Força o reset da dungeon atual com gems",
     Callback = function()
         if ativarGems then
+            print("🔧 RESET MANUAL INICIADO...")
             resetarDungeon()
         else
             print("⚠️ Opção de usar gems não está ativada!")
+            print("🔧 Tentando reset manual sem gems...")
+            sairCastelo()
+            task.wait(5)
+            if ativarEvento then entrarCastelo() end
+        end
+    end
+})
+
+t:AddButton({
+    Title = "🧪 Testar Detecção de Mobs",
+    Description = "Testa a detecção de mobs vivos atual",
+    Callback = function()
+        print("🧪 TESTE DE DETECÇÃO INICIADO...")
+        print("🔍 Testando isInDungeon():", isInDungeon())
+        print("🔍 Testando mobsVivos():", mobsVivos())
+        print("📂 Pasta __Enemies existe:", workspace:FindFirstChild("__Enemies") and "✅ SIM" or "❌ NÃO")
+        
+        local mainEnemies = workspace:FindFirstChild("__Main")
+        if mainEnemies then mainEnemies = mainEnemies:FindFirstChild("__Enemies") end
+        print("📂 Pasta __Main.__Enemies existe:", mainEnemies and "✅ SIM" or "❌ NÃO")
+        
+        -- Verifica dungeons específicas
+        local dungeonNames = {
+            "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+            "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+            "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+            "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+        }
+        
+        print("🔍 Verificando dungeons específicas...")
+        for _, dungeonName in pairs(dungeonNames) do
+            local dungeon = workspace:FindFirstChild(dungeonName)
+            if dungeon then
+                print("✅ Dungeon encontrada:", dungeonName)
+                local enemies = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
+                if enemies then
+                    print("   📂 Pasta de inimigos:", enemies.Name, "| Filhos:", #enemies:GetChildren())
+                end
+            end
+        end
+    end
+})
+
+t:AddButton({
+    Title = "🚁 Testar Auto Fly Dungeon", 
+    Description = "Força início do Auto Fly na dungeon atual",
+    Callback = function()
+        local dungeonFolder = workspace:FindFirstChild("__Enemies")
+        if dungeonFolder then
+            print("🚁 TESTE DE AUTO FLY DUNGEON...")
+            solarDungeonComVoo()
+        else
+            print("❌ Nenhuma pasta __Enemies encontrada para teste")
         end
     end
 })
