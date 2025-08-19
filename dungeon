@@ -340,14 +340,21 @@ local function startCombatSystem()
         enableFlight()
         print("🚁 Sistema de voo e combate iniciado!")
         
-        local noMobTime = 0
-        local maxNoMobTime = 10 -- 10 segundos sem mobs para considerar completada
+        local consecutiveNoMobChecks = 0
+        local maxConsecutiveChecks = 20 -- 20 verificações consecutivas sem mobs (20 * 0.5s = 10s)
+        local mobsKilled = 0
+        local combatStarted = false
         
         while autoFlyActive and (ativarDungeon and isInDungeon()) do
             local mob, mobCount = getClosestUnvisitedMob()
             
             if mob and mob.Parent then
-                noMobTime = 0 -- Reset contador quando encontra mobs
+                consecutiveNoMobChecks = 0 -- Reset contador quando encontra mobs
+                
+                if not combatStarted then
+                    combatStarted = true
+                    print("⚔️ Combate iniciado - Mobs detectados!")
+                end
                 
                 -- Verifica se é o mesmo alvo da vez anterior
                 if currentTarget and currentTarget == mob then
@@ -370,7 +377,7 @@ local function startCombatSystem()
                 
                 -- Espera o voo completar
                 local startTime = tick()
-                local maxWaitTime = 10
+                local maxWaitTime = 15 -- Mais tempo para chegar ao mob
                 
                 repeat
                     task.wait(0.1)
@@ -388,28 +395,35 @@ local function startCombatSystem()
                 
                 print("📍 Chegou próximo ao mob!")
                 
-                -- Ataca o mob atual
-                atacarInimigos()
+                -- Ataca o mob atual várias vezes
+                for i = 1, 3 do
+                    local attacked = atacarInimigos()
+                    mobsKilled = mobsKilled + attacked
+                    task.wait(0.5)
+                end
                 
-                task.wait(1)
+                print("🎯 Mobs eliminados nesta sessão:", mobsKilled)
                 addVisitedPosition(mob.Position)
                 
             else
-                print("❌ Nenhum mob encontrado! Tempo sem mobs:", noMobTime)
-                noMobTime = noMobTime + 1
+                consecutiveNoMobChecks = consecutiveNoMobChecks + 1
+                print("❌ Verificação", consecutiveNoMobChecks, "/", maxConsecutiveChecks, "- Nenhum mob encontrado")
                 
-                -- Se passou tempo suficiente sem mobs, considerar dungeon completada
-                if noMobTime >= maxNoMobTime then
-                    print("✅ Dungeon completada - Sem mobs por", maxNoMobTime, "segundos")
+                -- Só considera completada se já começou combate E passou tempo suficiente sem mobs
+                if combatStarted and consecutiveNoMobChecks >= maxConsecutiveChecks then
+                    print("✅ Dungeon completada! Mobs eliminados:", mobsKilled)
                     
-                    -- Limpar cache de posições visitadas
+                    -- Limpar cache
                     visitedPositions = {}
                     currentTarget = nil
                     stuckCounter = 0
+                    mobsKilled = 0
+                    combatStarted = false
                     
                     if dungeonInfinita then
-                        print("🔄 Dungeon INF - Resetando com gems automaticamente...")
+                        print("🔄 Dungeon INF - Resetando com gems...")
                         stopAutoFly()
+                        task.wait(2)
                         resetarDungeon()
                         task.wait(5)
                         
@@ -430,7 +444,10 @@ local function startCombatSystem()
                         break
                     end
                 else
-                    task.wait(1) -- Aguarda 1 segundo antes de verificar novamente
+                    if not combatStarted then
+                        print("⏳ Aguardando mobs aparecerem...")
+                    end
+                    task.wait(0.5) -- Espera meio segundo antes de verificar novamente
                 end
             end
             
@@ -614,4 +631,107 @@ t:AddToggle("ToggleAutoDungeon", {
 
 t:AddToggle("ToggleUseGems", {
     Title = "Usar Gems para Reset",
-    Descripti
+    Description = "Compra ticket com gems para resetar", 
+    Default = ativarGems,
+    Callback = function(state) ativarGems = state; salvarConfig() end
+})
+
+-- Botão Dungeon INF
+t:AddToggle("ToggleDungeonInf", {
+    Title = "🚁 Dungeon INF",
+    Description = "Voo automático + Criação e reset infinito",
+    Default = dungeonInfinita,
+    Callback = function(state)
+        dungeonInfinita = state
+        salvarConfig()
+        
+        if state then
+            print("🚁 Dungeon INF ativada - Modo infinito automático!")
+            ativarGems = true  -- Força usar gems no modo INF
+            ativarDungeon = true -- Ativa auto dungeon automaticamente
+            salvarConfig()
+            -- Inicia o loop se não estiver rodando
+            if not ativarDungeon then
+                task.spawn(autoDungeonLoop)
+            end
+        else
+            print("🛑 Dungeon INF desativada")
+        end
+    end
+})
+
+t:AddButton({
+    Title = "🔄 Reset Status",
+    Description = "Limpa status da dungeon",
+    Callback = function()
+        resetDungeonStatus()
+        stopAutoFly()
+        print("🔄 Status resetado!")
+    end
+})
+
+t:AddButton({
+    Title = "🛑 Parar Sistema",
+    Description = "Para todo o sistema",
+    Callback = function()
+        ativarDungeon = false
+        salvarConfig()
+        stopAutoFly()
+        print("🛑 Sistema parado completamente!")
+    end
+})
+
+-- Botão flutuante
+local floatingGui = Instance.new("ScreenGui")
+floatingGui.Name = "AllanHubFloating"
+floatingGui.Parent = player:WaitForChild("PlayerGui")
+floatingGui.ResetOnSpawn = false
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 50, 0, 50)
+toggleButton.Position = UDim2.new(0, 20, 0.5, -25)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+toggleButton.Text = "⚙"
+toggleButton.TextScaled = true
+toggleButton.Parent = floatingGui
+toggleButton.Active = true
+toggleButton.Draggable = true
+
+local hubVisivel = true
+toggleButton.MouseButton1Click:Connect(function()
+    hubVisivel = not hubVisivel
+    if Window and Window.Frame then
+        Window.Frame.Visible = hubVisivel
+    end
+    toggleButton.BackgroundColor3 = hubVisivel and Color3.fromRGB(100,100,255) or Color3.fromRGB(255,100,100)
+    toggleButton.Text = hubVisivel and "🔼" or "🔽"
+end)
+
+-- Watch do andar
+task.spawn(function()
+    while task.wait(1) do
+        if ativarEvento then
+            local floorValue = player:FindFirstChild("CurrentFloor")
+            if floorValue and tonumber(floorValue.Value) ~= currentFloor then
+                currentFloor = tonumber(floorValue.Value)
+                print("🏢 Andar atual:", currentFloor)
+                if currentFloor == andarSaida then sairCastelo() end
+            end
+        end
+    end
+end)
+
+-- Reconectar personagem
+player.CharacterAdded:Connect(function(newChar)
+    char = newChar
+    hrp = char:WaitForChild("HumanoidRootPart")
+    stopAutoFly()  -- Para o voo atual
+    print("🔄 Personagem reconectado")
+end)
+
+-- Autostart
+if ativarEvento then entrarCastelo() end
+if ativarDungeon then task.spawn(autoDungeonLoop) end
+
+print("✅ Allan Hub - Sistema ÚNICO de Voo Carregado!")
+print("🚁 Agora usa APENAS sistema de voo, sem teleporte!")
