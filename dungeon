@@ -535,6 +535,7 @@ local function resetarDungeon()
         [6] = "\12"
     }
 }    
+game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     if success then
         print("✅ Comando de reset enviado com sucesso")
     else
