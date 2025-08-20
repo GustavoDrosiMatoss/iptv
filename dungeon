@@ -250,6 +250,28 @@ local function flyToMobLoop(enemiesFolder)
                 continue
             end
             
+            -- NOVA FUNCIONALIDADE: Se está em dungeon e não há mobs, verifica reset
+            if isInDungeon() and ativarDungeon then
+                print("🏰 Em dungeon sem mobs - verificando se precisa resetar...")
+                autoFlyRunning = false -- Para o auto fly primeiro
+                disableFlight()
+                
+                -- Chama a verificação e reset
+                local resetSucesso = verificarEresetarSeNecessario()
+                if resetSucesso then
+                    print("✅ Reset realizado pelo Auto Farm!")
+                    break -- Sai do loop do auto farm
+                else
+                    print("⚠️ Reset não realizado - continuando farm...")
+                    -- Se não resetou, continua o auto farm
+                    autoFlyRunning = true
+                    enableFlight()
+                    visitedPositions = {}
+                    task.wait(5)
+                    continue
+                end
+            end
+            
             -- Se mesmo assim não encontrar, para o loop
             print("❌ Nenhum mob encontrado após limpar lista - parando Auto Fly")
             autoFlyRunning = false
@@ -329,15 +351,44 @@ local function carregarConfig()
 end
 carregarConfig()
 
--- FUNÇÃO CORRIGIDA DE DETECÇÃO DE DUNGEON
+-- FUNÇÃO CORRIGIDA DE DETECÇÃO DE DUNGEON (USANDO NOMES ESPECÍFICOS)
 local function isInDungeon()
-    -- Verifica se existe pasta __Enemies diretamente no workspace (sinal de dungeon ativa)
+    -- Lista de nomes específicos das dungeons
+    local dungeonNames = {
+        "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+        "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+        "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+        "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+    }
+    
+    -- Verifica se existe pasta __Enemies diretamente no workspace (método antigo)
     local dungeonEnemies = workspace:FindFirstChild("__Enemies")
-    local dungeonFolder = workspace:FindFirstChild("Dungeon")
-    local isDungeon = dungeonEnemies ~= nil or dungeonFolder ~= nil
+    
+    -- Verifica se existe alguma das dungeons específicas
+    local foundDungeon = nil
+    for _, dungeonName in pairs(dungeonNames) do
+        local dungeon = workspace:FindFirstChild(dungeonName)
+        if dungeon then
+            foundDungeon = dungeonName
+            break
+        end
+    end
+    
+    -- Verifica também a pasta Dungeon genérica
+    local genericDungeon = workspace:FindFirstChild("Dungeon")
+    
+    local isDungeon = dungeonEnemies ~= nil or foundDungeon ~= nil or genericDungeon ~= nil
     
     if isDungeon then
-        print("🏰 Detectado que está em uma dungeon")
+        if foundDungeon then
+            print("🏰 Detectado em dungeon específica:", foundDungeon)
+        elseif dungeonEnemies then
+            print("🏰 Detectado em dungeon (pasta __Enemies encontrada)")
+        elseif genericDungeon then
+            print("🏰 Detectado em dungeon (pasta Dungeon encontrada)")
+        end
+    else
+        print("🌍 Não está em nenhuma dungeon conhecida")
     end
     
     return isDungeon
@@ -345,10 +396,34 @@ end
 
 -- FUNÇÃO CORRIGIDA DE DETECÇÃO DE MOBS VIVOS
 local function mobsVivos()
-    -- Primeiro verifica pasta __Enemies no workspace (dungeon)
-    local folder = workspace:FindFirstChild("__Enemies")
+    -- Lista de nomes específicos das dungeons
+    local dungeonNames = {
+        "DarkDungeon", "TrainStation", "ImpelDown", "SnakeLab", "SoulSociety", 
+        "Hotel", "MagicDungeon", "Prison", "Namek", "Spaceship", "Tunnel", 
+        "OrcDungeon", "HunterTest", "SlimeDungeon", "CursedFactory", 
+        "InfiniteCastle", "Airship", "TitanChurch", "SummerDungeon"
+    }
     
-    -- Se não encontrou, verifica a pasta padrão do mundo aberto
+    local folder = nil
+    
+    -- Primeiro verifica pasta __Enemies no workspace (dungeon ativa)
+    folder = workspace:FindFirstChild("__Enemies")
+    
+    -- Se não encontrou, procura nas dungeons específicas
+    if not folder then
+        for _, dungeonName in pairs(dungeonNames) do
+            local dungeon = workspace:FindFirstChild(dungeonName)
+            if dungeon then
+                folder = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
+                if folder then
+                    print("📂 Verificando mobs na dungeon:", dungeonName)
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Se ainda não encontrou, verifica a pasta padrão do mundo aberto
     if not folder then
         local mainFolder = workspace:FindFirstChild("__Main")
         if mainFolder then
@@ -365,16 +440,18 @@ local function mobsVivos()
     local aliveCount = 0
     
     for _, mob in ipairs(folder:GetChildren()) do
-        if mob:IsA("Model") then
+        if mob:IsA("Model") and mob.Parent then
             mobsCount = mobsCount + 1
             local humanoid = mob:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
+            if humanoid and humanoid.Health > 0 and humanoid.Parent then
                 aliveCount = aliveCount + 1
+                -- Debug: mostra quais mobs ainda estão vivos
+                print("👹 Mob vivo encontrado:", mob.Name, "| HP:", math.floor(humanoid.Health))
             end
         end
     end
     
-    print("📊 Mobs encontrados:", mobsCount, "| Vivos:", aliveCount)
+    print("📊 Mobs encontrados:", mobsCount, "| Vivos:", aliveCount, "| Pasta:", folder.Name)
     return aliveCount > 0
 end
 
@@ -405,27 +482,76 @@ local function criarDungeon()
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Event = "DungeonAction", Action = "Create"}, [2] = "\12"})
     dungeonActive = true
     salvarConfig()
-    task.wait(5)
+    task.wait(8)
     iniciarDungeon()
+    
+    -- Aguarda a dungeon ser realmente criada antes de continuar
+    local attempts = 0
+    while not isInDungeon() and attempts < 10 and ativarDungeon do
+        print("⏳ Aguardando dungeon ser criada... Tentativa", attempts + 1)
+        task.wait(3)
+        attempts = attempts + 1
+    end
+    
+    if isInDungeon() then
+        print("✅ Dungeon criada com sucesso!")
+    else
+        print("⚠️ Dungeon pode não ter sido criada corretamente")
+        dungeonActive = false -- Reset status se não conseguiu criar
+        salvarConfig()
+    end
 end
 
 -- FUNÇÃO CORRIGIDA DE RESET COM GEMS
 local function resetarDungeon()
-    print("💎 Resetando dungeon com gems...")
+    print("💎 Iniciando reset da dungeon com gems...")
+    
     -- Para o auto fly antes de resetar
     if autoFlyRunning then
-        stopAutoFly()
-        task.wait(2)
+        print("🛑 Parando Auto Fly para reset...")
+        autoFlyRunning = false
+        disableFlight()
+        task.wait(3)
     end
     
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Type = "Gems", Event = "DungeonAction", Action = "BuyTicket"}, [2] = "\12"})
+    -- Tenta resetar com gems
+    local success, error = pcall(function()
+        game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({
+            [1] = {Type = "Gems", Event = "DungeonAction", Action = "BuyTicket"}, 
+            [2] = "\12"
+        })
+    end)
+    
+    if success then
+        print("✅ Comando de reset enviado com sucesso")
+    else
+        print("❌ Erro ao enviar comando de reset:", error)
+    end
+    
     dungeonActive = false
     salvarConfig()
     safeDelete(tempFile)
     
-    -- Aguarda um pouco para o reset processar
-    task.wait(3)
-    print("✅ Reset com gems concluído")
+    -- Aguarda o reset processar
+    print("⏳ Aguardando reset processar...")
+    task.wait(10)
+    
+    -- Verifica se saiu da dungeon - aguarda até sair ou timeout
+    local attempts = 0
+    local maxAttempts = 15
+    while isInDungeon() and attempts < maxAttempts do
+        print("⏳ Aguardando sair da dungeon... Tentativa", attempts + 1, "de", maxAttempts)
+        task.wait(2)
+        attempts = attempts + 1
+    end
+    
+    if not isInDungeon() then
+        print("✅ Reset com gems concluído - saiu da dungeon!")
+        return true
+    else
+        print("⚠️ Ainda em dungeon após reset - pode precisar de mais tempo")
+        return false
+    end
 end
 
 -- FUNÇÃO CORRIGIDA DE VERIFICAÇÃO E RESET
