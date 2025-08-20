@@ -460,8 +460,24 @@ local function criarDungeon()
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Event = "DungeonAction", Action = "Create"}, [2] = "\12"})
     dungeonActive = true
     salvarConfig()
-    task.wait(5)
+    task.wait(8)
     iniciarDungeon()
+    
+    -- Aguarda a dungeon ser realmente criada antes de continuar
+    local attempts = 0
+    while not isInDungeon() and attempts < 10 and ativarDungeon do
+        print("⏳ Aguardando dungeon ser criada... Tentativa", attempts + 1)
+        task.wait(3)
+        attempts = attempts + 1
+    end
+    
+    if isInDungeon() then
+        print("✅ Dungeon criada com sucesso!")
+    else
+        print("⚠️ Dungeon pode não ter sido criada corretamente")
+        dungeonActive = false -- Reset status se não conseguiu criar
+        salvarConfig()
+    end
 end
 
 -- FUNÇÃO CORRIGIDA DE RESET COM GEMS
@@ -495,20 +511,24 @@ local function resetarDungeon()
     safeDelete(tempFile)
     
     -- Aguarda o reset processar
-    task.wait(8)
+    print("⏳ Aguardando reset processar...")
+    task.wait(10)
     
-    -- Verifica se saiu da dungeon
+    -- Verifica se saiu da dungeon - aguarda até sair ou timeout
     local attempts = 0
-    while isInDungeon() and attempts < 10 do
-        print("⏳ Aguardando reset processar... Tentativa", attempts + 1)
+    local maxAttempts = 15
+    while isInDungeon() and attempts < maxAttempts do
+        print("⏳ Aguardando sair da dungeon... Tentativa", attempts + 1, "de", maxAttempts)
         task.wait(2)
         attempts = attempts + 1
     end
     
     if not isInDungeon() then
-        print("✅ Reset com gems concluído com sucesso!")
+        print("✅ Reset com gems concluído - saiu da dungeon!")
+        return true
     else
         print("⚠️ Ainda em dungeon após reset - pode precisar de mais tempo")
+        return false
     end
 end
 
@@ -538,20 +558,11 @@ local function verificarEresetarSeNecessario()
         print("✅ DUNGEON CONFIRMADA COMO LIMPA!")
         print("🔄 Iniciando processo de reset...")
         
+        local resetSuccess = false
+        
         if ativarGems then
             print("💎 Resetando com gems...")
-            resetarDungeon()
-            
-            -- Aguarda sair da dungeon após reset
-            task.wait(10)
-            
-            -- Se ainda está em dungeon, força saída
-            if isInDungeon() then
-                print("⚠️ Ainda em dungeon após reset com gems - forçando saída...")
-                sairCastelo()
-                task.wait(5)
-            end
-            
+            resetSuccess = resetarDungeon()
         else
             print("🚪 Resetando saindo e entrando novamente...")
             sairCastelo()
@@ -560,10 +571,18 @@ local function verificarEresetarSeNecessario()
                 entrarCastelo()
                 task.wait(5)
             end
+            resetSuccess = true
         end
         
-        print("✅ Processo de reset finalizado!")
-        return true
+        if resetSuccess then
+            print("✅ Reset concluído com sucesso - aguardando nova dungeon...")
+            -- Aguarda um tempo antes de continuar o loop para evitar reset infinito
+            task.wait(15)
+            return true
+        else
+            print("⚠️ Reset não foi bem sucedido")
+            return false
+        end
     else
         print("⚠️ AINDA EXISTEM MOBS VIVOS - NÃO RESETANDO")
         print("🔄 Primeira verificação:", mobCheck1 and "❌ MOBS VIVOS" or "✅ LIMPO")
