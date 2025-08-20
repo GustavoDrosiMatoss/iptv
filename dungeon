@@ -515,13 +515,26 @@ local function resetarDungeon()
     end
     
     -- Tenta resetar com gems
-    local success, error = pcall(function()
-        game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({
-            [1] = {Type = "Gems", Event = "DungeonAction", Action = "BuyTicket"}, 
-            [2] = "\12"
-        })
-    end)
-    
+    local args = {
+    [1] = {
+        [1] = {
+            ["Type"] = "Gems",
+            ["Event"] = "DungeonAction",
+            ["Action"] = "BuyTicket"
+        },
+        [2] = "\12",
+        [3] = {
+            ["Event"] = "DungeonAction",
+            ["Action"] = "Create"
+        },
+        [4] = "\12",
+        [5] = {
+            ["Event"] = "DungeonAction",
+            ["Action"] = "Start"
+        },
+        [6] = "\12"
+    }
+}    
     if success then
         print("✅ Comando de reset enviado com sucesso")
     else
