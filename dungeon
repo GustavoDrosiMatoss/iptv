@@ -22,7 +22,6 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 local visitedPositions = {}
 local currentTarget = nil
 local stuckCounter = 0
-local flyConnection = nil
 local currentTween = nil
 local autoFlyRunning = false
 local autoFlyCoroutine = nil
@@ -46,26 +45,19 @@ local function addVisitedPosition(position)
     end
 end
 
+-- FUNÇÃO CORRIGIDA: Sistema de voo simplificado
 local function enableFlight()
-    if flyConnection then return end
+    -- Apenas impede animações/quedas do Humanoid
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if humanoid then humanoid.PlatformStand = true end
-    local bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    bodyVelocity.Parent = hrp
-    flyConnection = bodyVelocity
 end
 
 local function disableFlight()
-    if flyConnection then
-        flyConnection:Destroy()
-        flyConnection = nil
-    end
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if humanoid then humanoid.PlatformStand = false end
 end
 
+-- FUNÇÃO CORRIGIDA: Voo usando apenas TweenService
 local function flyToPosition(targetPosition)
     enableFlight()
     if currentTween then currentTween:Cancel(); currentTween = nil end
@@ -109,7 +101,7 @@ local function getClosestUnvisitedMob(enemiesFolder)
                 if dungeon then
                     enemiesFolder = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
                     if enemiesFolder then
-                        print("📂 Encontrou inimigos na dungeon:", dungeonName)
+                        print("Encontrou inimigos na dungeon:", dungeonName)
                         break
                     end
                 end
@@ -126,11 +118,11 @@ local function getClosestUnvisitedMob(enemiesFolder)
     end
     
     if not enemiesFolder then
-        print("❌ Nenhuma pasta de inimigos encontrada")
+        print("Nenhuma pasta de inimigos encontrada")
         return nil
     end
     
-    print("🔍 Procurando mobs na pasta:", enemiesFolder.Name, "| Filhos:", #enemiesFolder:GetChildren())
+    print("Procurando mobs na pasta:", enemiesFolder.Name, "| Filhos:", #enemiesFolder:GetChildren())
     
     for _, mobFolder in pairs(enemiesFolder:GetChildren()) do
         if mobFolder and mobFolder.Parent then
@@ -155,7 +147,7 @@ local function getClosestUnvisitedMob(enemiesFolder)
         end
     end
     
-    print("📊 Mobs encontrados no alcance:", #allMobs)
+    print("Mobs encontrados no alcance:", #allMobs)
     
     -- Procura por mobs não visitados primeiro
     for _, mobData in pairs(allMobs) do
@@ -171,7 +163,7 @@ local function getClosestUnvisitedMob(enemiesFolder)
     
     -- Se não encontrar mobs não visitados, limpa a lista e pega qualquer um
     if not closestMob and #allMobs > 0 then
-        print("🔄 Limpando lista de posições visitadas...")
+        print("Limpando lista de posições visitadas...")
         visitedPositions = {}
         for _, mobData in pairs(allMobs) do
             local mob = mobData.mob
@@ -184,9 +176,9 @@ local function getClosestUnvisitedMob(enemiesFolder)
     end
     
     if closestMob then
-        print("🎯 Mob mais próximo encontrado! Distância:", math.floor(shortestDistance))
+        print("Mob mais próximo encontrado! Distância:", math.floor(shortestDistance))
     else
-        print("❌ Nenhum mob válido encontrado")
+        print("Nenhum mob válido encontrado")
     end
     
     return closestMob
@@ -203,7 +195,7 @@ local function flyToMobLoop(enemiesFolder)
             if currentTarget and currentTarget == mob then
                 stuckCounter = stuckCounter + 1
                 if stuckCounter > 3 then
-                    print("⚠️ Parece que estou preso no mesmo mob, marcando como visitado...")
+                    print("Parece que estou preso no mesmo mob, marcando como visitado...")
                     addVisitedPosition(mob.Position)
                     stuckCounter = 0
                     currentTarget = nil
@@ -236,15 +228,15 @@ local function flyToMobLoop(enemiesFolder)
             -- Para o tween se ainda estiver rodando
             if currentTween then currentTween:Cancel(); currentTween = nil end
             
-            print("✅ Chegou próximo ao mob!")
+            print("Chegou próximo ao mob!")
             task.wait(3) -- Aumenta tempo para atacar o mob
             addVisitedPosition(mob.Position)
         else
-            print("❌ Nenhum mob encontrado na varredura atual")
+            print("Nenhum mob encontrado na varredura atual")
             
             -- Limpa lista de visitados e tenta novamente
             if #visitedPositions > 0 then
-                print("🔄 Limpando lista de visitados para nova varredura...")
+                print("Limpando lista de visitados para nova varredura...")
                 visitedPositions = {}
                 task.wait(2)
                 continue
@@ -252,17 +244,17 @@ local function flyToMobLoop(enemiesFolder)
             
             -- NOVA FUNCIONALIDADE: Se está em dungeon e não há mobs, verifica reset
             if isInDungeon() and ativarDungeon then
-                print("🏰 Em dungeon sem mobs - verificando se precisa resetar...")
+                print("Em dungeon sem mobs - verificando se precisa resetar...")
                 autoFlyRunning = false -- Para o auto fly primeiro
                 disableFlight()
                 
                 -- Chama a verificação e reset
                 local resetSucesso = verificarEresetarSeNecessario()
                 if resetSucesso then
-                    print("✅ Reset realizado pelo Auto Farm!")
+                    print("Reset realizado pelo Auto Farm!")
                     break -- Sai do loop do auto farm
                 else
-                    print("⚠️ Reset não realizado - continuando farm...")
+                    print("Reset não realizado - continuando farm...")
                     -- Se não resetou, continua o auto farm
                     autoFlyRunning = true
                     enableFlight()
@@ -273,7 +265,7 @@ local function flyToMobLoop(enemiesFolder)
             end
             
             -- Se mesmo assim não encontrar, para o loop
-            print("❌ Nenhum mob encontrado após limpar lista - parando Auto Fly")
+            print("Nenhum mob encontrado após limpar lista - parando Auto Fly")
             autoFlyRunning = false
             break
         end
@@ -284,16 +276,16 @@ local function flyToMobLoop(enemiesFolder)
     end
     
     disableFlight()
-    print("🛑 Loop de voo finalizado")
+    print("Loop de voo finalizado")
 end
 
 local function startAutoFly(targetFolder)
     if autoFlyRunning then 
-        print("⚠️ Auto Fly já está rodando!")
+        print("Auto Fly já está rodando!")
         return 
     end
     
-    print("🚀 Iniciando Auto Fly...")
+    print("Iniciando Auto Fly...")
     autoFlyRunning = true
     
     autoFlyCoroutine = coroutine.create(function()
@@ -305,15 +297,15 @@ local function startAutoFly(targetFolder)
 end
 
 local function stopAutoFly()
-    if not autoFlyRunning and not flyConnection then return end
-    print("🛑 Parando Auto Fly...")
+    if not autoFlyRunning then return end
+    print("Parando Auto Fly...")
     autoFlyRunning = false
     if currentTween then currentTween:Cancel(); currentTween = nil end
     disableFlight()
     visitedPositions = {}
     currentTarget = nil
     stuckCounter = 0
-    print("✅ Auto Fly parado!")
+    print("Auto Fly parado!")
 end
 
 -- ===== FUNÇÕES DE CONTROLE (CORRIGIDAS) =====
@@ -381,14 +373,14 @@ local function isInDungeon()
     
     if isDungeon then
         if foundDungeon then
-            print("🏰 Detectado em dungeon específica:", foundDungeon)
+            print("Detectado em dungeon específica:", foundDungeon)
         elseif dungeonEnemies then
-            print("🏰 Detectado em dungeon (pasta __Enemies encontrada)")
+            print("Detectado em dungeon (pasta __Enemies encontrada)")
         elseif genericDungeon then
-            print("🏰 Detectado em dungeon (pasta Dungeon encontrada)")
+            print("Detectado em dungeon (pasta Dungeon encontrada)")
         end
     else
-        print("🌍 Não está em nenhuma dungeon conhecida")
+        print("Não está em nenhuma dungeon conhecida")
     end
     
     return isDungeon
@@ -416,7 +408,7 @@ local function mobsVivos()
             if dungeon then
                 folder = dungeon:FindFirstChild("__Enemies") or dungeon:FindFirstChild("Enemies")
                 if folder then
-                    print("📂 Verificando mobs na dungeon:", dungeonName)
+                    print("Verificando mobs na dungeon:", dungeonName)
                     break
                 end
             end
@@ -432,7 +424,7 @@ local function mobsVivos()
     end
     
     if not folder then 
-        print("❌ Nenhuma pasta de inimigos encontrada para verificar mobs vivos")
+        print("Nenhuma pasta de inimigos encontrada para verificar mobs vivos")
         return false 
     end
     
@@ -446,22 +438,22 @@ local function mobsVivos()
             if humanoid and humanoid.Health > 0 and humanoid.Parent then
                 aliveCount = aliveCount + 1
                 -- Debug: mostra quais mobs ainda estão vivos
-                print("👹 Mob vivo encontrado:", mob.Name, "| HP:", math.floor(humanoid.Health))
+                print("Mob vivo encontrado:", mob.Name, "| HP:", math.floor(humanoid.Health))
             end
         end
     end
     
-    print("📊 Mobs encontrados:", mobsCount, "| Vivos:", aliveCount, "| Pasta:", folder.Name)
+    print("Mobs encontrados:", mobsCount, "| Vivos:", aliveCount, "| Pasta:", folder.Name)
     return aliveCount > 0
 end
 
 local function entrarCastelo()
-    print("🏰 Entrando no castelo - Andar:", andarEntrada)
+    print("Entrando no castelo - Andar:", andarEntrada)
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Check = true, Floor = tostring(andarEntrada), Event = "CastleAction", Action = "Join"}, [2] = "\12"})
 end
 
 local function sairCastelo()
-    print("🚪 Saindo do castelo")
+    print("Saindo do castelo")
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Check = true, Floor = tostring(andarSaida), Event = "CastleAction", Action = "LeaveDungeon"}, [2] = "\12"})
     dungeonActive = false
     salvarConfig()
@@ -469,16 +461,16 @@ local function sairCastelo()
 end
 
 local function iniciarDungeon()
-    print("▶️ Iniciando dungeon...")
+    print("Iniciando dungeon...")
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Event = "DungeonAction", Action = "Start"}, [2] = "\12"})
 end
 
 local function criarDungeon()
     if dungeonActive or isInDungeon() then 
-        print("⚠️ Dungeon já está ativa ou já está em uma dungeon")
+        print("Dungeon já está ativa ou já está em uma dungeon")
         return 
     end
-    print("🆕 Criando nova dungeon...")
+    print("Criando nova dungeon...")
     game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer({[1] = {Event = "DungeonAction", Action = "Create"}, [2] = "\12"})
     dungeonActive = true
     salvarConfig()
@@ -488,15 +480,15 @@ local function criarDungeon()
     -- Aguarda a dungeon ser realmente criada antes de continuar
     local attempts = 0
     while not isInDungeon() and attempts < 10 and ativarDungeon do
-        print("⏳ Aguardando dungeon ser criada... Tentativa", attempts + 1)
+        print("Aguardando dungeon ser criada... Tentativa", attempts + 1)
         task.wait(3)
         attempts = attempts + 1
     end
     
     if isInDungeon() then
-        print("✅ Dungeon criada com sucesso!")
+        print("Dungeon criada com sucesso!")
     else
-        print("⚠️ Dungeon pode não ter sido criada corretamente")
+        print("Dungeon pode não ter sido criada corretamente")
         dungeonActive = false -- Reset status se não conseguiu criar
         salvarConfig()
     end
@@ -504,11 +496,11 @@ end
 
 -- FUNÇÃO CORRIGIDA DE RESET COM GEMS
 local function resetarDungeon()
-    print("💎 Iniciando reset da dungeon com gems...")
+    print("Iniciando reset da dungeon com gems...")
     
     -- Para o auto fly antes de resetar
     if autoFlyRunning then
-        print("🛑 Parando Auto Fly para reset...")
+        print("Parando Auto Fly para reset...")
         autoFlyRunning = false
         disableFlight()
         task.wait(3)
@@ -516,30 +508,34 @@ local function resetarDungeon()
     
     -- Tenta resetar com gems
     local args = {
-    [1] = {
         [1] = {
-            ["Type"] = "Gems",
-            ["Event"] = "DungeonAction",
-            ["Action"] = "BuyTicket"
-        },
-        [2] = "\12",
-        [3] = {
-            ["Event"] = "DungeonAction",
-            ["Action"] = "Create"
-        },
-        [4] = "\12",
-        [5] = {
-            ["Event"] = "DungeonAction",
-            ["Action"] = "Start"
-        },
-        [6] = "\12"
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "DungeonAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\12",
+            [3] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Create"
+            },
+            [4] = "\12",
+            [5] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [6] = "\12"
+        }
     }
-}    
-game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+
+    local success, err = pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    end)
+
     if success then
-        print("✅ Comando de reset enviado com sucesso")
+        print("Comando de reset enviado com sucesso")
     else
-        print("❌ Erro ao enviar comando de reset:", error)
+        warn("Erro ao enviar comando de reset:", err)
     end
     
     dungeonActive = false
@@ -547,30 +543,30 @@ game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpac
     safeDelete(tempFile)
     
     -- Aguarda o reset processar
-    print("⏳ Aguardando reset processar...")
+    print("Aguardando reset processar...")
     task.wait(10)
     
     -- Verifica se saiu da dungeon - aguarda até sair ou timeout
     local attempts = 0
     local maxAttempts = 15
     while isInDungeon() and attempts < maxAttempts do
-        print("⏳ Aguardando sair da dungeon... Tentativa", attempts + 1, "de", maxAttempts)
+        print("Aguardando sair da dungeon... Tentativa", attempts + 1, "de", maxAttempts)
         task.wait(2)
         attempts = attempts + 1
     end
     
     if not isInDungeon() then
-        print("✅ Reset com gems concluído - saiu da dungeon!")
+        print("Reset com gems concluído - saiu da dungeon!")
         return true
     else
-        print("⚠️ Ainda em dungeon após reset - pode precisar de mais tempo")
+        print("Ainda em dungeon após reset - pode precisar de mais tempo")
         return false
     end
 end
 
 -- FUNÇÃO CORRIGIDA DE VERIFICAÇÃO E RESET
 local function verificarEresetarSeNecessario()
-    print("🔎 Verificando se a dungeon foi concluída...")
+    print("Verificando se a dungeon foi concluída...")
     
     -- Para o auto fly antes de verificar
     if autoFlyRunning then
@@ -581,37 +577,35 @@ local function verificarEresetarSeNecessario()
     task.wait(3)
     
     if not mobsVivos() then
-        print("✅ Dungeon limpa! Iniciando o processo de reset.")
+        print("Dungeon limpa! Iniciando o processo de reset.")
         
         if ativarGems then
-            resetarDungeon()
+            return resetarDungeon()
         else
             sairCastelo()
             task.wait(5)
             if ativarEvento then entrarCastelo() end
+            return true
         end
-        
-        task.wait(3)
-        return true
     else
-        print("⚠️ Ainda existem mobs vivos.")
+        print("Ainda existem mobs vivos.")
         return false
     end
 end
 
 -- FUNÇÃO CORRIGIDA DE LIMPEZA COM VOO
 local function solarDungeonComVoo()
-    print("🌟 Iniciando limpeza da dungeon com Auto Voo...")
+    print("Iniciando limpeza da dungeon com Auto Voo...")
     
     -- Procura pasta de inimigos da dungeon
     local dungeonEnemiesFolder = workspace:FindFirstChild("__Enemies")
     
     if not dungeonEnemiesFolder then
-        print("❌ Pasta de inimigos da dungeon não encontrada.")
+        print("Pasta de inimigos da dungeon não encontrada.")
         return
     end
     
-    print("📂 Pasta de inimigos encontrada:", dungeonEnemiesFolder.Name)
+    print("Pasta de inimigos encontrada:", dungeonEnemiesFolder.Name)
     
     -- Inicia o voo focado apenas na pasta da dungeon
     startAutoFly(dungeonEnemiesFolder)
@@ -621,12 +615,12 @@ local function solarDungeonComVoo()
     
     -- Espera até que o voo pare ou dê timeout
     while autoFlyRunning and (tick() - startTime < maxTimeout) and ativarDungeon do
-        print("✈️ Limpando dungeon... Auto Voo ativo.")
+        print("Limpando dungeon... Auto Voo ativo.")
         task.wait(5)
         
         -- Verifica se ainda existem mobs para continuar
         if not mobsVivos() then
-            print("🎉 Todos os mobs foram eliminados!")
+            print("Todos os mobs foram eliminados!")
             break
         end
     end
@@ -637,21 +631,21 @@ local function solarDungeonComVoo()
     end
     
     if tick() - startTime >= maxTimeout then
-        print("⏰ Timeout na limpeza da dungeon.")
+        print("Timeout na limpeza da dungeon.")
     else
-        print("✅ Limpeza da dungeon finalizada!")
+        print("Limpeza da dungeon finalizada!")
     end
 end
 
 -- LOOP PRINCIPAL CORRIGIDO
 local function autoDungeonLoop()
-    print("🔄 Iniciando loop de auto dungeon...")
+    print("Iniciando loop de auto dungeon...")
     
     while ativarDungeon do
         task.wait(5)
         
         if not isInDungeon() and not dungeonActive then
-            print("🏗️ Preparando para criar dungeon...")
+            print("Preparando para criar dungeon...")
             if ativarEvento then 
                 entrarCastelo()
                 task.wait(5) 
@@ -661,15 +655,15 @@ local function autoDungeonLoop()
         end
 
         if isInDungeon() then
-            print("🎮 Executando dungeon com Auto Voo...")
+            print("Executando dungeon com Auto Voo...")
             solarDungeonComVoo()
             verificarEresetarSeNecessario()
         else
-            print("⚠️ Não está em dungeon, aguardando...")
+            print("Não está em dungeon, aguardando...")
             task.wait(10)
         end
     end
-    print("🛑 Loop de auto dungeon parado")
+    print("Loop de auto dungeon parado")
 end
 
 -- ===== GUI (CORRIGIDA) =====
@@ -691,19 +685,19 @@ local statusParagraph = statusTab:AddParagraph({Title = "Status Atual",Content =
 
 local function updateStatus()
     local status = string.format([[
-🏰 Em Castelo: %s
-⚔️ Em Dungeon: %s  
-👹 Mobs Vivos: %s
-🎯 Dungeon Ativa: %s
-🔄 Auto Dungeon: %s
-✈️ Auto Farm Voador: %s
+Em Castelo: %s
+Em Dungeon: %s  
+Mobs Vivos: %s
+Dungeon Ativa: %s
+Auto Dungeon: %s
+Auto Farm Voador: %s
 ]], 
-        ativarEvento and "✅" or "❌",
-        isInDungeon() and "✅" or "❌",
-        mobsVivos() and "✅" or "❌", 
-        dungeonActive and "✅" or "❌",
-        ativarDungeon and "✅" or "❌",
-        autoFlyRunning and "✅" or "❌"
+        ativarEvento and "Sim" or "Não",
+        isInDungeon() and "Sim" or "Não",
+        mobsVivos() and "Sim" or "Não", 
+        dungeonActive and "Sim" or "Não",
+        ativarDungeon and "Sim" or "Não",
+        autoFlyRunning and "Sim" or "Não"
     )
     statusParagraph:SetDesc(status)
 end
@@ -783,10 +777,10 @@ autoFarmTab:AddToggle("ToggleAutoFly", {
                 if enemiesFolder then
                     startAutoFly(enemiesFolder)
                 else
-                    print("❌ Pasta __Enemies não encontrada em __Main")
+                    print("Pasta __Enemies não encontrada em __Main")
                 end
             else
-                print("❌ Pasta __Main não encontrada")
+                print("Pasta __Main não encontrada")
             end
         else
             stopAutoFly()
@@ -795,11 +789,11 @@ autoFarmTab:AddToggle("ToggleAutoFly", {
 })
 
 autoFarmTab:AddButton({
-    Title = "🔄 Forçar Parar Auto Fly",
+    Title = "Forçar Parar Auto Fly",
     Description = "Para forçadamente o Auto Fly se estiver com problema",
     Callback = function()
         stopAutoFly()
-        print("🛑 Auto Fly forçadamente parado!")
+        print("Auto Fly forçadamente parado!")
     end
 })
 
@@ -809,29 +803,28 @@ autoFarmTab:AddParagraph({
 })
 
 t:AddButton({
-    Title = "🔄 Reset Dungeon Status",
+    Title = "Reset Dungeon Status",
     Description = "Reseta o status interno da dungeon",
     Callback = function()
         dungeonActive = false
         salvarConfig()
         safeDelete(tempFile)
         if autoFlyRunning then stopAutoFly() end
-        print("🔄 Status da dungeon resetado!")
+        print("Status da dungeon resetado!")
     end
 })
 
 t:AddButton({
-    Title = "💎 Resetar Dungeon Agora",
+    Title = "Resetar Dungeon Agora",
     Description = "Força o reset da dungeon atual com gems",
     Callback = function()
         if ativarGems then
             resetarDungeon()
         else
-            print("⚠️ Opção de usar gems não está ativada!")
+            print("Opção de usar gems não está ativada!")
         end
     end
 })
-
 -- GUI flutuante
 local floatingGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 floatingGui.Name = "AllanHubFloating"
