@@ -941,19 +941,7 @@ local teleportingEnabled = false
 -- Function to create a dungeon
 local function createDungeon()
     print("[DEBUG] Tentando criar dungeon...")
-   local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\12"
-        }
-    }
-    attackRemote:FireServer(args)
-    print("✔ Dungeon criada.")
-    task.wait(3)
-
+ 
     local iniciarArgs = {
         [1] = {
             [1] = {
