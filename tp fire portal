@@ -1,0 +1,110 @@
+-- Teleporte automático para FirePortal (LocalScript)
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+if not player then
+    warn("[TP] Player local não encontrado.")
+    return
+end
+
+-- Busca dinâmica do FirePortal em Room_1 até Room_200
+local destino = nil
+local main = workspace:FindFirstChild("__Main")
+if not main then
+    warn("[TP] __Main não encontrado.")
+    return
+end
+
+local world = main:FindFirstChild("__World")
+if not world then
+    warn("[TP] __World não encontrado.")
+    return
+end
+
+for i = 1, 200 do
+    local room = world:FindFirstChild("Room_" .. i)
+    if room then
+        local portal = room:FindFirstChild("FirePortal")
+        if portal and portal:IsA("BasePart") then
+            destino = portal.CFrame
+            print("[TP] FirePortal encontrado em Room_" .. i)
+            break
+        end
+    end
+end
+
+if not destino then
+    warn("[TP] Nenhum FirePortal encontrado em Rooms 1–200.")
+    return
+end
+
+-- Funções auxiliares
+local function getChar(timeout)
+    timeout = timeout or 5
+    return player.Character or player.CharacterAdded:Wait(timeout)
+end
+
+local function findRootPart(char)
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("LowerTorso")
+        or char:FindFirstChild("Torso")
+        or (function()
+            for _, v in ipairs(char:GetChildren()) do
+                if v:IsA("BasePart") then return v end
+            end
+        end)()
+end
+
+-- Obtenção do personagem
+local char = getChar(5)
+if not char then
+    warn("[TP] Character não encontrado.")
+    return
+end
+
+local hrp = findRootPart(char)
+if not hrp then
+    warn("[TP] Nenhuma basepart encontrada no character.")
+    return
+end
+
+-- Função de teleporte robusto
+local function attemptTeleport()
+    pcall(function() hrp.CFrame = destino end)
+    pcall(function() if char.PivotTo then char:PivotTo(destino) end end)
+    pcall(function() if char.PrimaryPart then char:SetPrimaryPartCFrame(destino) end end)
+    pcall(function()
+        local inv = hrp.CFrame:Inverse()
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local localC = inv * part.CFrame
+                part.CFrame = destino * localC
+            end
+        end
+    end)
+    pcall(function()
+        hrp.Velocity = Vector3.zero
+        if hrp.AssemblyLinearVelocity then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+end
+
+-- Reforço de teleporte para vencer correções do servidor
+for i = 1, 12 do
+    attemptTeleport()
+    task.wait(0.06)
+end
+
+-- Verificação final
+task.wait(0.12)
+local finalPos = hrp.Position
+local diff = (finalPos - destino.Position).Magnitude
+print(string.format("[TP] Posição final: (%.3f, %.3f, %.3f) | Distância do destino: %.3f",
+    finalPos.X, finalPos.Y, finalPos.Z, diff))
+
+if diff <= 3 then
+    print("[TP] SUCESSO: parece que você foi teleportado.")
+else
+    warn("[TP] Falhou: servidor pode estar re-sincronizando. Distância:", diff)
+end
