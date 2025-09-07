@@ -1,0 +1,181 @@
+ConfigSystem.CurrentConfig = {}
+
+-- Função para criar pastas
+ConfigSystem.CreateFolders = function()
+    local success = pcall(function()
+        if makefolder then
+            if not isfolder(ConfigSystem.Folder) then
+                makefolder(ConfigSystem.Folder)
+            end
+            if not isfolder(ConfigSystem.Folder .. "/" .. ConfigSystem.SubFolder) then
+                makefolder(ConfigSystem.Folder .. "/" .. ConfigSystem.SubFolder)
+            end
+        end
+    end)
+    return success
+end
+
+-- Função para salvar config
+ConfigSystem.SaveConfig = function()
+    ConfigSystem.CreateFolders()
+    local jsonData = HttpService:JSONEncode(ConfigSystem.CurrentConfig)
+    local success, err = pcall(function()
+        if writefile then
+            writefile(ConfigSystem.FilePath, jsonData)
+            return true
+        end
+        return false
+    end)
+    if success then
+        print("Configuração salva com sucesso em: " .. ConfigSystem.FilePath)
+        return true
+    else
+        warn("Falha ao salvar configuração:", err)
+        return false
+    end
+end
+
+-- Função para carregar config
+ConfigSystem.LoadConfig = function()
+    local success, content = pcall(function()
+        if readfile and isfile and isfile(ConfigSystem.FilePath) then
+            return readfile(ConfigSystem.FilePath)
+        end
+        return nil
+    end)
+
+    if success and content then
+        local data
+        success, data = pcall(function()
+            return HttpService:JSONDecode(content)
+        end)
+
+        if success and data then
+            ConfigSystem.CurrentConfig = data
+            print("Configuração carregada de: " .. ConfigSystem.FilePath)
+            return true
+        else
+            warn("Erro ao analisar configuração, criando nova.")
+        end
+    end
+
+    ConfigSystem.CurrentConfig = table.clone(ConfigSystem.DefaultConfig)
+    ConfigSystem.SaveConfig()
+    print("Inicializando nova configuração")
+    return false
+end
+
+-- Carregar configuração
+ConfigSystem.LoadConfig()
+
+-- Auto save
+local function setupAutoSave()
+    spawn(function()
+        while wait(5) do
+            pcall(function()
+                ConfigSystem.SaveConfig()
+            end)
+        end
+    end)
+end
+setupAutoSave()
+        ConfigSystem.SaveConfig()
+        if state then entrarCastelo() end
+    end
+})
+
+Tabs.Castle:AddToggle("ToggleAutoDungeon", {
+    Title = "Auto Dungeon", 
+    Description = "Cria/Inicia/Reseta automaticamente",
+    Default = ativarDungeon,
+    Callback = function(state)
+        ativarDungeon = state
+        ConfigSystem.CurrentConfig.AutoDungeon = state
+        salvarConfigCastelo()
+        ConfigSystem.SaveConfig()
+        if state then 
+            task.spawn(autoDungeonLoop)
+        end
+    end
+})
+
+Tabs.Castle:AddToggle("ToggleUseGems", {
+    Title = "Usar Gems para Reset",
+    Description = "Compra ticket com gems para resetar", 
+    Default = ativarGems,
+    Callback = function(state)
+        ativarGems = state
+        ConfigSystem.CurrentConfig.UseGems = state
+        salvarConfigCastelo()
+        ConfigSystem.SaveConfig()
+    end
+})
+
+Tabs.Castle:AddButton({
+    Title = "🔄 Reset Dungeon Status",
+    Description = "Limpa flags de dungeon",
+    Callback = function()
+        dungeonActive = false
+        salvarConfigCastelo()
+        safeDelete(tempFile)
+        print("🔄 Status da dungeon resetado!")
+    end
+})
+-- ===== TAB STATUS =====
+local statusParagraph = Tabs.Status:AddParagraph({
+    Title = "Status Atual",
+    Content = "Aguardando..."
+})
+
+local function updateStatus()
+    local status = string.format([[
+🏰 Em Castelo: %s
+⚔️ Em Dungeon: %s  
+👹 Mobs Vivos: %s
+🎯 Dungeon Ativa: %s
+🔄 Auto Dungeon: %s
+📍 Andar Atual: %s
+]], 
+        ativarEvento and "✅" or "❌",
+        isInDungeon() and "✅" or "❌",
+        mobsVivos() and "✅" or "❌", 
+        dungeonActive and "✅" or "❌",
+        ativarDungeon and "✅" or "❌",
+        currentFloor or "N/A"
+    )
+    statusParagraph:SetDesc(status)
+end
+
+task.spawn(function()
+    while true do
+        updateStatus()
+        task.wait(2)
+    end
+end)
+
+-- ===== CONFIGURAÇÕES =====
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+local playerName = game:GetService("Players").LocalPlayer.Name
+InterfaceManager:SetFolder("Allan Hub")
+SaveManager:SetFolder("Allan Hub/AriseCrossover/" .. playerName)
+
+Tabs.Settings:AddParagraph({
+    Title = "Cấu hình tự động",
+    Content = "Cấu hình của bạn đang được tự động lưu theo tên nhân vật: " .. playerName
+})
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "Allan Hub",
+    Content = "Script modificado carregado com sucesso!",
+    Duration = 3
+})
+
+-- Autostart se estiver ativo no config
+if ativarEvento then entrarCastelo() end
+if ativarDungeon then task.spawn(autoDungeonLoop) end
+
+print("✅ Allan Hub Arise Modified carregado com sucesso!")
