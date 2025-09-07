@@ -639,3 +639,79 @@ Tabs.Player:AddButton({
         end
     end
 })
+-- Aba Info
+Tabs.Info:AddButton({
+    Title = "Copy Discord Link",
+    Callback = function()
+        setclipboard("https://discord.gg/v94FqK3zH5")
+        Fluent:Notify({
+            Title = "Discord",
+            Content = "Link copiado para o clipboard!",
+            Duration = 3
+        })
+    end
+})
+
+Tabs.Info:AddButton({
+    Title = "Sobre o Script",
+    Callback = function()
+        Fluent:Notify({
+            Title = "Allan Hub",
+            Content = "Script criado e otimizado para Arise Crossover",
+            Duration = 4
+        })
+    end
+})
+
+-- Aba Settings
+Tabs.Settings:AddButton({
+    Title = "Reset Config",
+    Callback = function()
+        SaveManager:Delete("AutoSave_" .. player.Name)
+        Fluent:Notify({
+            Title = "Configuração",
+            Content = "Todas as configurações foram resetadas!",
+            Duration = 4
+        })
+    end
+})
+
+Tabs.Settings:AddButton({
+    Title = "Salvar Agora",
+    Callback = function()
+        SaveManager:Save("AutoSave_" .. player.Name)
+        Fluent:Notify({
+            Title = "Configuração",
+            Content = "Configurações salvas manualmente!",
+            Duration = 3
+        })
+    end
+})
+
+Tabs.Settings:AddButton({
+    Title = "Carregar Configuração",
+    Callback = function()
+        SaveManager:Load("AutoSave_" .. player.Name)
+        Fluent:Notify({
+            Title = "Configuração",
+            Content = "Configurações carregadas!",
+            Duration = 3
+        })
+    end
+})
+
+-- Auto Save
+task.spawn(function()
+    while task.wait(10) do
+        pcall(function()
+            SaveManager:Save("AutoSave_" .. player.Name)
+        end)
+    end
+end)
+
+-- Mensagem inicial
+Fluent:Notify({
+    Title = "Allan Hub",
+    Content = "Script iniciado com sucesso!\nConfig salva como AutoSave_" .. player.Name,
+    Duration = 5
+})
