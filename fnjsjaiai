@@ -2387,7 +2387,7 @@ Tabs.dungeon:AddToggle("TeleportMobs", {
                 local enemiesFolder = workspace.__Main.__Enemies.Server
                 local currentTween = nil
                 local noEnemiesTimer = 0 -- Timer para contar tempo sem inimigos
-                local maxTimeWithoutEnemies = 30 -- 30 segundos sem inimigos antes de recriar
+                local maxTimeWithoutEnemies = 2 -- 30 segundos sem inimigos antes de recriar
                 local lastEnemyCheck = tick()
 
                 local function getDistance(pos1, pos2)
