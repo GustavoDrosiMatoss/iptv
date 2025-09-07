@@ -1,0 +1,66 @@
+-- Teleporte ULTRA RÁPIDO para FirePortal e ativação (LocalScript)
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Busca RÁPIDA do FirePortal e identifica o andar atual
+local portal = nil
+local currentFloor = nil
+local main = workspace.__Main
+local world = main.__World
+
+for i = 1, 200 do
+    local room = world:FindFirstChild("Room_" .. i)
+    if room then
+        local foundPortal = room:FindFirstChild("FirePortal")
+        if foundPortal then
+            portal = foundPortal
+            currentFloor = i -- O andar atual é o número da room
+            print("📍 ANDAR ATUAL: " .. i)
+            print("🎯 Próximo andar será: " .. (i + 1))
+            break
+        end
+    end
+end
+
+if not portal then
+    warn("FirePortal não encontrado! Você pode estar no andar máximo ou em uma área sem portal.")
+    return
+end
+
+-- Character e HumanoidRootPart
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+-- TELEPORTE INSTANTÂNEO
+local destino = portal.CFrame
+hrp.CFrame = destino
+hrp.Velocity = Vector3.zero
+
+-- Pequena pausa para estabilizar
+task.wait(0.1)
+
+-- BUSCA RÁPIDA do ProximityPrompt
+local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
+if not prompt then
+    for _, obj in ipairs(portal:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            prompt = obj
+            break
+        end
+    end
+end
+
+if not prompt and portal.Parent then
+    prompt = portal.Parent:FindFirstChildOfClass("ProximityPrompt")
+end
+
+if prompt then
+    -- ATIVAÇÃO RÁPIDA - só 3 tentativas
+    for i = 1, 3 do
+        fireproximityprompt(prompt)
+        task.wait(0.05) -- Intervalo mínimo
+    end
+    print("🚀 Portal ativado! Subindo do andar " .. currentFloor .. " para o andar " .. (currentFloor + 1))
+else
+    warn("ProximityPrompt não encontrado!")
+end
