@@ -1,275 +1,69 @@
-if not game or not game.GetService then
-    warn("Ambiente do jogo não está disponível.")
-    return
-end
+-- Allan Hub | Arise Crossover
+-- Interface 100% Fluent
 
+-- Carregar Fluent e Addons
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- Criar Janela
+local Window = Fluent:CreateWindow({
+    Title = "Allan Hub | Arise Crossover",
+    SubTitle = "100% Fluent UI",
+    TabWidth = 140,
+    Size = UDim2.fromOffset(460, 360),
+    Acrylic = false,
+    Theme = "Amethyst",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- Criar Abas
+local Tabs = {
+    Info = Window:AddTab({ Title = "Info", Icon = "" }),
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Teleports = Window:AddTab({ Title = "Teleports", Icon = "" }),
+    Dungeon = Window:AddTab({ Title = "Dungeon", Icon = "" }),
+    Shop = Window:AddTab({ Title = "Shop", Icon = "" }),
+    Player = Window:AddTab({ Title = "Player", Icon = "" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- Configurar Save/Interface Manager
+local playerName = game:GetService("Players").LocalPlayer.Name
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+InterfaceManager:SetFolder("Allan Hub")
+SaveManager:SetFolder("Allan Hub/AriseCrossover/" .. playerName)
+
+-- Selecionar aba inicial
+Window:SelectTab(1)
+
+-- Notificação de carregamento
+Fluent:Notify({
+    Title = "Allan Hub",
+    Content = "Interface carregada com sucesso!",
+    Duration = 4
+})
+-- Variáveis
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
-local workspace = game:GetService("Workspace")
-local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
-local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
-local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 
--- ===== VARIÁVEIS GLOBAIS =====
+local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+local enemiesFolder = Workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
+
 local teleportEnabled = false
-local killedNPCs = {}
-local dungeonkill = {}
+local autoAttackEnabled = false
 local selectedMobName = ""
 local movementMethod = "Tween"
+local attackCooldown = 0.5
 
--- ===== VARIÁVEIS DO AUTO CASTELO =====
-local ativarEvento = false
-local ativarDungeon = false
-local ativarGems = false
-local andarEntrada = 10
-local andarSaida = 1
-local currentFloor = 0
-local configFile = "allan_hub_castelo.json"
-local tempFile = "temp_dungeon.json"
-local dungeonActive = false
-
--- ===== SISTEMA DE CONFIG =====
-local ConfigSystem = {}
-ConfigSystem.Folder = "Allan Hub"
-ConfigSystem.SubFolder = "AriseCrossover"
-ConfigSystem.FileName = player.Name .. "_Config.json"
-ConfigSystem.FilePath = ConfigSystem.Folder .. "/" .. ConfigSystem.SubFolder .. "/" .. ConfigSystem.FileName
-ConfigSystem.DefaultConfig = {
-    SelectedMobName = "",
-    FarmSelectedMob = false,
-    AutoFarmNearestNPCs = false,
-    MainAutoDestroy = false,
-    MainAutoArise = false,
-    FarmingMethod = "Tween",
-    DamageMobs = false,
-    -- Auto Castelo configs
-    AutoCastle = false,
-    AutoDungeon = false,
-    UseGems = false,
-    FloorEntrance = 10,
-    FloorExit = 1
-}
-ConfigSystem.CurrentConfig = {}
-
--- Função para criar pastas
-ConfigSystem.CreateFolders = function()
-    local success = pcall(function()
-        if makefolder then
-            if not isfolder(ConfigSystem.Folder) then
-                makefolder(ConfigSystem.Folder)
-            end
-            if not isfolder(ConfigSystem.Folder .. "/" .. ConfigSystem.SubFolder) then
-                makefolder(ConfigSystem.Folder .. "/" .. ConfigSystem.SubFolder)
-            end
-        end
-    end)
-    return success
-end
-
--- Função para salvar config
-ConfigSystem.SaveConfig = function()
-    ConfigSystem.CreateFolders()
-    local jsonData = HttpService:JSONEncode(ConfigSystem.CurrentConfig)
-    local success, err = pcall(function()
-        if writefile then
-            writefile(ConfigSystem.FilePath, jsonData)
-            return true
-        end
-        return false
-    end)
-    if success then
-        print("Configuração salva com sucesso em: " .. ConfigSystem.FilePath)
-        return true
-    else
-        warn("Falha ao salvar configuração:", err)
-        return false
-    end
-end
-
--- Função para carregar config
-ConfigSystem.LoadConfig = function()
-    local success, content = pcall(function()
-        if readfile and isfile and isfile(ConfigSystem.FilePath) then
-            return readfile(ConfigSystem.FilePath)
-        end
-        return nil
-    end)
-
-    if success and content then
-        local data
-        success, data = pcall(function()
-            return HttpService:JSONDecode(content)
-        end)
-
-        if success and data then
-            ConfigSystem.CurrentConfig = data
-            print("Configuração carregada de: " .. ConfigSystem.FilePath)
-            return true
-        else
-            warn("Erro ao analisar configuração, criando nova.")
-        end
-    end
-
-    ConfigSystem.CurrentConfig = table.clone(ConfigSystem.DefaultConfig)
-    ConfigSystem.SaveConfig()
-    print("Inicializando nova configuração")
-    return false
-end
-
--- Carregar configuração
-ConfigSystem.LoadConfig()
-
--- Auto save
-local function setupAutoSave()
-    spawn(function()
-        while wait(5) do
-            pcall(function()
-                ConfigSystem.SaveConfig()
-            end)
-        end
-    end)
-end
-setupAutoSave()
-
--- ===== FUNÇÕES DO AUTO CASTELO =====
-local function safeDelete(path)
-    if isfile and isfile(path) then
-        if delfile then delfile(path)
-        elseif deletefile then deletefile(path)
-        else writefile(path, "") end
-    end
-end
-
-local function salvarConfigCastelo()
-    local data = {
-        entrada = andarEntrada, saida = andarSaida,
-        evento = ativarEvento, dungeon = ativarDungeon, gems = ativarGems,
-        dungeonActive = dungeonActive
-    }
-    writefile(configFile, HttpService:JSONEncode(data))
-end
-
-local function carregarConfigCastelo()
-    if isfile and isfile(configFile) then
-        local data = HttpService:JSONDecode(readfile(configFile))
-        andarEntrada = tonumber(data.entrada) or andarEntrada
-        andarSaida = tonumber(data.saida) or andarSaida
-        ativarEvento = data.evento or false
-        ativarDungeon = data.dungeon or false
-        ativarGems = data.gems or false
-        dungeonActive = data.dungeonActive or false
-    else
-        salvarConfigCastelo()
-    end
-end
-carregarConfigCastelo()
-
-local isInDungeon = function()
-    local enemies = workspace:FindFirstChild("__Enemies")
-    local dungeonFolder = workspace:FindFirstChild("Dungeon")
-    return enemies ~= nil or dungeonFolder ~= nil
-end
-
-local mobsVivos = function()
-    local folder = workspace:FindFirstChild("__Enemies")
-    if not folder then return false end
-
-    local count = 0
-    for _, mob in ipairs(folder:GetChildren()) do
-        if mob:IsA("Model") then
-            local humanoid = mob:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                count = count + 1
-            end
-        end
-    end
-    print("🎯 Mobs vivos encontrados:", count)
-    return count > 0
-end
-
-local entrarCastelo = function()
-    print("🏰 Entrando no castelo - Andar:", andarEntrada)
-    local args = {
-        [1] = { [1] = { Check = true, Floor = tostring(andarEntrada), Event = "CastleAction", Action = "Join" }, [2] = "\12" }
-    }
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-end
-
-local sairCastelo = function()
-    print("🚪 Saindo do castelo")
-    local args = {
-        [1] = { [1] = { Check = true, Floor = tostring(andarSaida), Event = "CastleAction", Action = "LeaveDungeon" }, [2] = "\12" }
-    }
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    dungeonActive = false
-    salvarConfigCastelo()
-    safeDelete(tempFile)
-end
-
-local iniciarDungeon = function()
-    print("▶️ Iniciando dungeon...")
-    local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Start" }, [2] = "\12" } }
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-end
-
-local criarDungeon = function()
-    if dungeonActive then 
-        print("⚠️ Dungeon já está ativa, pulando criação")
-        return 
-    end
-
-    if isInDungeon() then 
-        print("⚠️ Já está em uma dungeon")
-        dungeonActive = true
-        salvarConfigCastelo()
-        return 
-    end
-
-    print("🆕 Criando nova dungeon...")
-    local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Create" }, [2] = "\12" } }
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-
-    dungeonActive = true
-    salvarConfigCastelo()
-    writefile(tempFile, "1")
-
-    task.wait(5)
-    iniciarDungeon()
-end
-
-local resetarDungeon = function()
-    print("💎 Resetando dungeon com gems...")
-    local args = { [1] = { [1] = { Type = "Gems", Event = "DungeonAction", Action = "BuyTicket" }, [2] = "\12" } }
-    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    dungeonActive = false
-    salvarConfigCastelo()
-    safeDelete(tempFile)
-end
-
--- ===== FUNÇÕES DE COMBATE (ORIGINAIS) =====
-player.CharacterAdded:Connect(function(newCharacter)
-    character = newCharacter
-    hrp = newCharacter:WaitForChild("HumanoidRootPart")
-end)
-
-local function anticheat()
-    local player = game.Players.LocalPlayer
-    if player and player.Character then
-        local characterScripts = player.Character:FindFirstChild("CharacterScripts")
-        if characterScripts then
-            local flyingFixer = characterScripts:FindFirstChild("FlyingFixer")
-            if flyingFixer then flyingFixer:Destroy() end
-            local characterUpdater = characterScripts:FindFirstChild("CharacterUpdater")
-            if characterUpdater then characterUpdater:Destroy() end
-        end
-    end
-end
-
+-- Funções de suporte
 local function isEnemyDead(enemy)
     local healthBar = enemy:FindFirstChild("HealthBar")
     if healthBar and healthBar:FindFirstChild("Main") and healthBar.Main:FindFirstChild("Bar") then
@@ -281,25 +75,11 @@ local function isEnemyDead(enemy)
     return false
 end
 
-local function fireShowPetsRemote()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "ShowPets"
-            },
-            [2] = "\t"
-        }
-    }
-    remote:FireServer(unpack(args))
-end
-
 local function getNearestEnemy()
     local nearestEnemy, shortestDistance = nil, math.huge
-    local playerPosition = hrp.Position
-
     for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") and not killedNPCs[enemy.Name] then
-            local distance = (playerPosition - enemy:GetPivot().Position).Magnitude
+        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+            local distance = (hrp.Position - enemy.HumanoidRootPart.Position).Magnitude
             if distance < shortestDistance then
                 shortestDistance = distance
                 nearestEnemy = enemy
@@ -309,389 +89,553 @@ local function getNearestEnemy()
     return nearestEnemy
 end
 
-local function moveToTarget(target)
-    if not target or not target:FindFirstChild("HumanoidRootPart") then return end
-    local enemyHrp = target.HumanoidRootPart
+local function moveToTarget(enemy)
+    if not enemy or not enemy:FindFirstChild("HumanoidRootPart") then return end
+    local enemyHrp = enemy.HumanoidRootPart
 
     if movementMethod == "Teleport" then
         hrp.CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 6)
     elseif movementMethod == "Tween" then
         local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Linear)
-        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 6)})
-        tween:Play()
-    elseif movementMethod == "Walk" then
-        hrp.Parent:MoveTo(enemyHrp.Position)
+        TweenService:Create(hrp, tweenInfo, {CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 6)}):Play()
     end
 end
 
--- ===== FUNÇÕES DE TELEPORTE PARA PORTAL =====
-local function teleportarFirePortal()
-    -- Aguarda até que os elementos necessários estejam carregados
-    task.wait(2)
-    
-    local main = workspace:FindFirstChild("__Main")
-    if not main then 
-        print("⚠️ __Main não encontrado")
-        return 
-    end
-    
-    local world = main:FindFirstChild("__World")
-    if not world then 
-        print("⚠️ __World não encontrado")
-        return 
-    end
-for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" .. i)
-        if room then
-            local portal = room:FindFirstChild("FirePortal")
-            if portal and portal:IsA("BasePart") then
-                -- Verificar se o personagem ainda existe
-                if not hrp or not hrp.Parent then
-                    local char = player.Character
-                    if char then
-                        hrp = char:FindFirstChild("HumanoidRootPart")
-                    end
-                end
-                
-                if hrp then
-                    pcall(function()
-                        hrp.CFrame = portal.CFrame
-                        hrp.Velocity = Vector3.zero
-                    end)
-                    
-                    task.wait(0.1)
-                    
-                    local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
-                    if not prompt then
-                        for _, obj in ipairs(portal:GetDescendants()) do
-                            if obj:IsA("ProximityPrompt") then
-                                prompt = obj
-                                break
-                            end
-                        end
-                    end
-                    
-                    if prompt then
-                        pcall(function()
-                            for j = 1, 3 do
-                                fireproximityprompt(prompt)
-                                task.wait(0.05)
-                            end
-                            print("Portal ativado! Subindo do andar " .. i .. " para o andar " .. (i + 1))
-                        end)
-                    end
-                    break
-                end
+local function farmNearestEnemies()
+    while teleportEnabled do
+        local target = getNearestEnemy()
+        if target then
+            moveToTarget(target)
+            task.wait(0.5)
+            remote:FireServer({
+                {
+                    ["PetPos"] = {},
+                    ["AttackType"] = "All",
+                    ["Event"] = "Attack",
+                    ["Enemy"] = target.Name
+                },
+                "\7"
+            })
+            while teleportEnabled and target.Parent and not isEnemyDead(target) do
+                task.wait(0.1)
             end
         end
+        task.wait(0.2)
     end
 end
 
--- ===== LOOP PRINCIPAL DE AUTO DUNGEON =====
-local function autoDungeonLoop()
-    print("🔄 Iniciando loop de auto dungeon...")
-
-    while ativarDungeon do
-        task.wait(5)
-
-        if not isInDungeon() and not dungeonActive then
-            print("🏗️ Preparando para criar dungeon...")
-
-            if ativarEvento then 
-                entrarCastelo()
-                task.wait(5) 
-            end
-
-            criarDungeon()
-            task.wait(8)
-        end
-
-        if isInDungeon() then
-            print("🎮 Executando dungeon...")
-            -- Aqui você pode adicionar a lógica de combate se necessário
-            task.wait(3)
-
-            if ativarGems then
-                resetarDungeon()
-                task.wait(5)
-            else
-                sairCastelo()
-                task.wait(5)
-                if ativarEvento then entrarCastelo() end
-                task.wait(3)
-            end
-        end
-    end
-
-    print("🛑 Loop de auto dungeon parado")
-end
-
--- ===== MONITORAMENTO DE ANDAR =====
-task.spawn(function()
-    while true do
-        pcall(function()
-            if ativarEvento then
-                local floorValue = player:FindFirstChild("CurrentFloor")
-                if floorValue and tonumber(floorValue.Value) ~= currentFloor then
-                    currentFloor = tonumber(floorValue.Value)
-                    print("Novo andar detectado:", currentFloor)
-
-                    teleportarFirePortal()
-
-                    task.delay(1.5, function()
-                        pcall(function()
-                            local target = getNearestEnemy()
-                            if target then
-                                print("Inimigo detectado:", target.Name)
-                                moveToTarget(target)
-                            else
-                                print("Nenhum inimigo encontrado.")
-                            end
-                        end)
-                    end)
-
-                    if currentFloor == andarSaida then
-                        sairCastelo()
-                    end
-                end
-            end
-        end)
-        task.wait(1)
-    end
-end)
-
--- ===== INTERFACE FLUENT =====
-local Fluent, SaveManager, InterfaceManager
-
-local success, err = pcall(function()
-    Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-    SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-end)
-
-if not success then
-    warn("Erro ao carregar biblioteca Fluent: " .. tostring(err))
-    return
-end
-
-if not Fluent then
-    error("Não foi possível carregar a biblioteca Fluent. Verifique sua conexão com a internet ou executor.")
-    return
-end
-
-local Window = Fluent:CreateWindow({
-    Title = "Allan Hub | Arise Crossover - Modified",
-    SubTitle = "",
-    TabWidth = 140,
-    Size = UDim2.fromOffset(450, 350),
-    Acrylic = false,
-    Theme = "Amethyst",
-    MinimizeKey = Enum.KeyCode.LeftControl
-})
-
-local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "" }),
-    Castle = Window:AddTab({ Title = "Auto Castelo", Icon = "" }),
-    Status = Window:AddTab({ Title = "Status", Icon = "" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
-}
-
--- ===== TAB MAIN (ORIGINAL) =====
-Tabs.Main:AddToggle("TeleportMobs", {
-    Title = "Auto farm (nearest NPCs)",
-    Default = ConfigSystem.CurrentConfig.AutoFarmNearestNPCs or false,
+-- GUI Fluent - Aba Main
+Tabs.Main:AddToggle("FarmNearest", {
+    Title = "Auto Farm (Nearest NPCs)",
+    Default = false,
     Callback = function(state)
         teleportEnabled = state
-        ConfigSystem.CurrentConfig.AutoFarmNearestNPCs = state
-        ConfigSystem.SaveConfig()
+        if state then
+            task.spawn(farmNearestEnemies)
+        end
+    end
+})
+
+Tabs.Main:AddDropdown("MovementMethod", {
+    Title = "Farming Method",
+    Values = {"Tween", "Teleport"},
+    Default = "Tween",
+    Callback = function(option)
+        movementMethod = option
+    end
+})
+
+Tabs.Main:AddToggle("AutoAttack", {
+    Title = "Auto Attack",
+    Default = false,
+    Callback = function(state)
+        autoAttackEnabled = state
         if state then
             task.spawn(function()
-                while teleportEnabled do
+                while autoAttackEnabled do
                     local target = getNearestEnemy()
-                    if target and target.Parent then
-                        anticheat()
-                        moveToTarget(target)
-                        task.wait(0.5)
-                        fireShowPetsRemote()
+                    if target then
                         remote:FireServer({
                             {
-                                ["PetPos"] = {},
-                                ["AttackType"] = "All",
-                                ["Event"] = "Attack",
+                                ["Event"] = "PunchAttack",
                                 ["Enemy"] = target.Name
                             },
-                            "\7"
+                            "\4"
                         })
-
-                        while teleportEnabled and target.Parent and not isEnemyDead(target) do
-                            task.wait(0.1)
-                        end
-
-                        killedNPCs[target.Name] = true
                     end
-                    task.wait(0.2)
+                    task.wait(attackCooldown)
+                end
+            end)
+        end
+    end
+})
+-- Função para setar spawn e resetar personagem
+local function SetSpawnAndReset(spawnName)
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "ChangeSpawn",
+                ["Spawn"] = spawnName
+            },
+            [2] = "\n"
+        }
+    }
+    remote:FireServer(unpack(args))
+    task.wait(0.5)
+    if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+        player.Character:FindFirstChildOfClass("Humanoid").Health = 0
+    end
+end
+
+-- Botões de Teleporte para Spawns
+Tabs.Teleports:AddButton({
+    Title = "Leveling City",
+    Callback = function() SetSpawnAndReset("SoloWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Grass Village",
+    Callback = function() SetSpawnAndReset("NarutoWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Brum Island",
+    Callback = function() SetSpawnAndReset("OPWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Faceheal Town",
+    Callback = function() SetSpawnAndReset("BleachWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Lucky Kingdom",
+    Callback = function() SetSpawnAndReset("BCWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Nipon City",
+    Callback = function() SetSpawnAndReset("ChainsawWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Mori Town",
+    Callback = function() SetSpawnAndReset("JojoWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "Dragon City",
+    Callback = function() SetSpawnAndReset("DBWorld") end
+})
+
+Tabs.Teleports:AddButton({
+    Title = "XZ City",
+    Callback = function() SetSpawnAndReset("OPMWorld") end
+})
+
+-- Teleporte suave para posições específicas (exemplo de mounts)
+local function teleportWithTween(targetCFrame)
+    if hrp then
+        local tweenInfo = TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        local tweenGoal = {CFrame = targetCFrame}
+        local tween = TweenService:Create(hrp, tweenInfo, tweenGoal)
+        tween:Play()
+    end
+end
+
+-- Locais fixos
+local locations = {
+    {Name = "Mount 1", CFrame = CFrame.new(-6161, 140, 5512)},
+    {Name = "Mount 2", CFrame = CFrame.new(-5868, 132, 362)},
+    {Name = "Mount 3", CFrame = CFrame.new(-5430, 107, -5502)},
+    {Name = "Mount 4", CFrame = CFrame.new(-702, 133, -3538)},
+    {Name = "Mount 5", CFrame = CFrame.new(450, 117, 3435)},
+    {Name = "Mount 6", CFrame = CFrame.new(3230, 135, 36)},
+    {Name = "Mount 7", CFrame = CFrame.new(4325, 118, -4819)},
+}
+
+for _, loc in ipairs(locations) do
+    Tabs.Teleports:AddButton({
+        Title = loc.Name,
+        Callback = function() teleportWithTween(loc.CFrame) end
+    })
+end
+-- Variáveis para Dungeon
+local dungeonFolder = workspace:WaitForChild("__Main"):WaitForChild("__Dungeon")
+local autoDestroy = false
+local autoArise = false
+local teleportingEnabled = false
+local buyTicketEnabled = false
+
+-- Criar Dungeon
+local function createDungeon()
+    local args = {
+        [1] = {
+            [1] = { ["Event"] = "DungeonAction", ["Action"] = "Create" },
+            [2] = "\12"
+        }
+    }
+    remote:FireServer(unpack(args))
+    task.wait(3)
+    -- Iniciar depois de criar
+    local iniciarArgs = {
+        [1] = {
+            [1] = { ["Event"] = "DungeonAction", ["Action"] = "Start" },
+            [2] = "\12"
+        }
+    }
+    remote:FireServer(unpack(iniciarArgs))
+end
+
+-- Teleportar até objeto da Dungeon
+local function teleportToObject(object)
+    if object and object:IsA("Part") then
+        hrp.CFrame = object.CFrame
+        task.wait(2)
+        createDungeon()
+    end
+end
+
+-- Loop teleport até dungeon
+local function teleportLoop()
+    while teleportingEnabled do
+        for _, object in ipairs(dungeonFolder:GetChildren()) do
+            if object:IsA("Part") then
+                teleportToObject(object)
+                task.wait(1)
+            end
+        end
+        task.wait(0.5)
+    end
+end
+
+-- Toggles Fluent
+Tabs.Dungeon:AddToggle("AutoDestroyDungeon", {
+    Title = "Auto Destroy",
+    Default = false,
+    Callback = function(state)
+        autoDestroy = state
+        if state then
+            task.spawn(function()
+                while autoDestroy do
+                    task.wait(0.3)
+                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                        if enemy:IsA("Model") then
+                            local rootPart = enemy:FindFirstChild("HumanoidRootPart")
+                            local prompt = rootPart and rootPart:FindFirstChild("DestroyPrompt")
+                            if prompt then
+                                prompt:SetAttribute("MaxActivationDistance", 100000)
+                                fireproximityprompt(prompt)
+                            end
+                        end
+                    end
                 end
             end)
         end
     end
 })
 
-local Dropdown = Tabs.Main:AddDropdown("MovementMethod", {
-    Title = "Farming Method",
-    Values = {"Tween", "Teleport"},
-    Multi = false,
-    Default = 1,
-    Callback = function(option)
-        movementMethod = option
-        ConfigSystem.CurrentConfig.FarmingMethod = option
-        ConfigSystem.SaveConfig()
-    end 
-})
-
--- ===== TAB AUTO CASTELO =====
-local andaresEntrada = {}
-for i = 10, 110, 10 do table.insert(andaresEntrada, tostring(i)) end
-local andaresSaida = {}
-for i = 1, 117 do table.insert(andaresSaida, tostring(i)) end
-
-Tabs.Castle:AddDropdown("AndarEntrada", {
-    Title = "Selecionar Andar de Entrada",
-    Values = andaresEntrada,
-    Multi = false,
-    Default = tostring(andarEntrada),
-    Callback = function(v)
-        andarEntrada = tonumber(v)
-        ConfigSystem.CurrentConfig.FloorEntrance = andarEntrada
-        salvarConfigCastelo()
-        ConfigSystem.SaveConfig()
-    end
-})
-
-Tabs.Castle:AddDropdown("AndarSaida", {
-    Title = "Selecionar Andar de Saída", 
-    Values = andaresSaida,
-    Multi = false,
-    Default = tostring(andarSaida),
-    Callback = function(v)
-        andarSaida = tonumber(v)
-        ConfigSystem.CurrentConfig.FloorExit = andarSaida
-        salvarConfigCastelo()
-        ConfigSystem.SaveConfig()
-    end
-})
-
-Tabs.Castle:AddToggle("ToggleAutoCastelo", {
-    Title = "Auto Castelo",
-    Description = "Ativa/Desativa o Auto Castelo",
-    Default = ativarEvento,
+Tabs.Dungeon:AddToggle("AutoAriseDungeon", {
+    Title = "Auto Arise",
+    Default = false,
     Callback = function(state)
-        ativarEvento = state
-        ConfigSystem.CurrentConfig.AutoCastle = state
-        salvarConfigCastelo()
-        ConfigSystem.SaveConfig()
-        if state then entrarCastelo() end
-    end
-})
-
-Tabs.Castle:AddToggle("ToggleAutoDungeon", {
-    Title = "Auto Dungeon", 
-    Description = "Cria/Inicia/Reseta automaticamente",
-    Default = ativarDungeon,
-    Callback = function(state)
-        ativarDungeon = state
-        ConfigSystem.CurrentConfig.AutoDungeon = state
-        salvarConfigCastelo()
-        ConfigSystem.SaveConfig()
-        if state then 
-            task.spawn(autoDungeonLoop)
+        autoArise = state
+        if state then
+            task.spawn(function()
+                while autoArise do
+                    task.wait(0.3)
+                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                        if enemy:IsA("Model") then
+                            local rootPart = enemy:FindFirstChild("HumanoidRootPart")
+                            local arisePrompt = rootPart and rootPart:FindFirstChild("ArisePrompt")
+                            if arisePrompt then
+                                arisePrompt:SetAttribute("MaxActivationDistance", 100000)
+                                fireproximityprompt(arisePrompt)
+                            end
+                        end
+                    end
+                end
+            end)
         end
     end
 })
 
-Tabs.Castle:AddToggle("ToggleUseGems", {
-    Title = "Usar Gems para Reset",
-    Description = "Compra ticket com gems para resetar", 
-    Default = ativarGems,
+Tabs.Dungeon:AddToggle("TeleportToDungeon", {
+    Title = "Teleport to Dungeon",
+    Default = false,
     Callback = function(state)
-        ativarGems = state
-        ConfigSystem.CurrentConfig.UseGems = state
-        salvarConfigCastelo()
-        ConfigSystem.SaveConfig()
+        teleportingEnabled = state
+        if state then
+            task.spawn(teleportLoop)
+        end
     end
 })
 
-Tabs.Castle:AddButton({
-    Title = "🔄 Reset Dungeon Status",
-    Description = "Limpa flags de dungeon",
+Tabs.Dungeon:AddToggle("AutoBuyDungeonTicket", {
+    Title = "Auto Buy Dungeon Ticket",
+    Default = false,
+    Callback = function(state)
+        buyTicketEnabled = state
+        if state then
+            task.spawn(function()
+                while buyTicketEnabled do
+                    local args = {
+                        [1] = {
+                            [1] = { ["Type"] = "Gems", ["Event"] = "DungeonAction", ["Action"] = "BuyTicket" },
+                            [2] = "\n"
+                        }
+                    }
+                    remote:FireServer(unpack(args))
+                    task.wait(5)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Dungeon:AddToggle("AutoEnterGuildDungeon", {
+    Title = "Auto Enter Guild Dungeon",
+    Default = false,
+    Callback = function(state)
+        if state then
+            task.spawn(function()
+                while state do
+                    local args = {
+                        [1] = {
+                            [1] = { ["Event"] = "DungeonAction", ["Action"] = "TestEnter" },
+                            [2] = "\n"
+                        }
+                    }
+                    remote:FireServer(unpack(args))
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end
+})
+-- Shop System
+local selectedShop = "WeaponShop1"
+local selectedWeapon = ""
+local autoBuyEnabled = false
+
+-- Lista de armas por loja
+local weaponsByShop = {
+    ["WeaponShop1"] = {"SpikeMace", "GemStaff", "DualKando"},
+    ["WeaponShop2"] = {"MonsterSlayer", "DualBasicStaffs", "PirateSaber"},
+    ["WeaponShop3"] = {"DualPirateSaber", "SteelSaber", "SteelButterfly"},
+    ["WeaponShop4"] = {"SteelNaginata", "GreatKopesh", "BoneMace"},
+    ["WeaponShop5"] = {"DualGreatSaber", "BasicStaff", "GreatTrident"},
+    ["WeaponShop6"] = {"OzSword2", "CrystalSword2", "DragonAxe2"},
+    ["WeaponShop7"] = {"BloodStaff2", "DualCrimsonStaff2", "GreatScythe2"},
+    ["WeaponShop8"] = {"BeholderStaff2", "RuneAxe2", "DualDragonAxe2"},
+    ["WeaponShop9"] = {"SteelSword2", "SteelSpear2", "EnergyGreatSword2"},
+}
+
+-- Função de compra
+local function buyWeapon()
+    if selectedShop and selectedWeapon ~= "" then
+        local args = {
+            [1] = {
+                [1] = {
+                    ["Action"] = "Buy",
+                    ["Shop"] = selectedShop,
+                    ["Item"] = selectedWeapon,
+                    ["Event"] = "ItemShopAction"
+                },
+                [2] = "\n"
+            }
+        }
+        remote:FireServer(unpack(args))
+        print("Comprado:", selectedWeapon, "da loja:", selectedShop)
+    end
+end
+
+-- Dropdown de Loja
+Tabs.Shop:AddDropdown("ShopDropdown", {
+    Title = "Select Shop",
+    Values = {"WeaponShop1","WeaponShop2","WeaponShop3","WeaponShop4","WeaponShop5","WeaponShop6","WeaponShop7","WeaponShop8","WeaponShop9"},
+    Default = selectedShop,
+    Callback = function(shop)
+        selectedShop = shop
+        -- Atualizar armas disponíveis
+        local weaponDropdown = Fluent.Options.WeaponDropdown
+        if weaponDropdown then
+            weaponDropdown:SetValues(weaponsByShop[shop] or {})
+            if weaponsByShop[shop] and #weaponsByShop[shop] > 0 then
+                selectedWeapon = weaponsByShop[shop][1]
+                weaponDropdown:SetValue(selectedWeapon)
+            end
+        end
+    end
+})
+
+-- Dropdown de Arma
+Tabs.Shop:AddDropdown("WeaponDropdown", {
+    Title = "Select Weapon",
+    Values = weaponsByShop[selectedShop] or {},
+    Default = weaponsByShop[selectedShop] and weaponsByShop[selectedShop][1] or "",
+    Callback = function(weapon)
+        selectedWeapon = weapon
+    end
+})
+
+-- Botão Comprar Manual
+Tabs.Shop:AddButton({
+    Title = "Buy Selected Weapon",
+    Callback = function() buyWeapon() end
+})
+
+-- Toggle Auto Buy
+Tabs.Shop:AddToggle("AutoBuyWeapon", {
+    Title = "Auto Buy Weapon",
+    Default = false,
+    Callback = function(state)
+        autoBuyEnabled = state
+        if state then
+            task.spawn(function()
+                while autoBuyEnabled do
+                    buyWeapon()
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+-- Variáveis do Player
+local LocalPlayer = Players.LocalPlayer
+local speedValue = 16
+local jumpValue = 50
+local speedEnabled = false
+local jumpEnabled = false
+local noclipEnabled = false
+local antiAfkConnection
+
+-- Função atualizar personagem
+local function updateCharacter()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        local humanoid = LocalPlayer.Character.Humanoid
+        humanoid.WalkSpeed = speedEnabled and speedValue or 16
+        humanoid.JumpPower = jumpEnabled and jumpValue or 50
+    end
+end
+
+-- Inputs Fluent
+Tabs.Player:AddInput("SpeedInput", {
+    Title = "Speed",
+    Default = tostring(speedValue),
+    Numeric = true,
+    Finished = true,
+    Callback = function(val)
+        speedValue = tonumber(val) or 16
+        updateCharacter()
+    end
+})
+
+Tabs.Player:AddInput("JumpInput", {
+    Title = "Jump Power",
+    Default = tostring(jumpValue),
+    Numeric = true,
+    Finished = true,
+    Callback = function(val)
+        jumpValue = tonumber(val) or 50
+        updateCharacter()
+    end
+})
+
+-- Toggles Fluent
+Tabs.Player:AddToggle("SpeedToggle", {
+    Title = "Enable Speed",
+    Default = false,
+    Callback = function(state)
+        speedEnabled = state
+        updateCharacter()
+    end
+})
+
+Tabs.Player:AddToggle("JumpToggle", {
+    Title = "Enable Jump Power",
+    Default = false,
+    Callback = function(state)
+        jumpEnabled = state
+        updateCharacter()
+    end
+})
+
+Tabs.Player:AddToggle("NoClipToggle", {
+    Title = "Enable NoClip",
+    Default = false,
+    Callback = function(state)
+        noclipEnabled = state
+        if state then
+            task.spawn(function()
+                while noclipEnabled do
+                    for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                    task.wait()
+                end
+            end)
+        else
+            for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+})
+
+Tabs.Player:AddToggle("AntiAfkToggle", {
+    Title = "Anti AFK",
+    Default = false,
+    Callback = function(enabled)
+        if enabled then
+            if not antiAfkConnection then
+                antiAfkConnection = LocalPlayer.Idled:Connect(function()
+                    local vu = game:GetService("VirtualUser")
+                    vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+                    task.wait(1)
+                    vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+                end)
+            end
+        else
+            if antiAfkConnection then
+                antiAfkConnection:Disconnect()
+                antiAfkConnection = nil
+            end
+        end
+    end
+})
+
+-- Botão Boost FPS
+Tabs.Player:AddButton({
+    Title = "Boost FPS",
     Callback = function()
-        dungeonActive = false
-        salvarConfigCastelo()
-        safeDelete(tempFile)
-        print("🔄 Status da dungeon resetado!")
+        for _, v in pairs(game:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                v.Enabled = false
+            end
+            if v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
+                v.Enabled = false
+            end
+        end
+        settings().Rendering.QualityLevel = 1
     end
 })
 
--- ===== TAB STATUS =====
-local statusParagraph = Tabs.Status:AddParagraph({
-    Title = "Status Atual",
-    Content = "Aguardando..."
-})
-
-local function updateStatus()
-    local status = string.format([[
-🏰 Em Castelo: %s
-⚔️ Em Dungeon: %s  
-👹 Mobs Vivos: %s
-🎯 Dungeon Ativa: %s
-🔄 Auto Dungeon: %s
-📍 Andar Atual: %s
-]], 
-        ativarEvento and "✅" or "❌",
-        isInDungeon() and "✅" or "❌",
-        mobsVivos() and "✅" or "❌", 
-        dungeonActive and "✅" or "❌",
-        ativarDungeon and "✅" or "❌",
-        currentFloor or "N/A"
-    )
-    statusParagraph:SetDesc(status)
-end
-
-task.spawn(function()
-    while true do
-        updateStatus()
-        task.wait(2)
+-- Botão Server Hop
+Tabs.Player:AddButton({
+    Title = "Server Hop",
+    Callback = function()
+        local PlaceID = game.PlaceId
+        local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..PlaceID.."/servers/Public?sortOrder=Asc&limit=100"))
+        for _, server in pairs(servers.data) do
+            if server.playing < server.maxPlayers then
+                game:GetService("TeleportService"):TeleportToPlaceInstance(PlaceID, server.id, LocalPlayer)
+                break
+            end
+        end
     end
-end)
--- ===== CONFIGURAÇÕES =====
-if SaveManager and InterfaceManager then
-    SaveManager:SetLibrary(Fluent)
-    InterfaceManager:SetLibrary(Fluent)
-
-    local playerName = player.Name
-    InterfaceManager:SetFolder("Allan Hub")
-    SaveManager:SetFolder("Allan Hub/AriseCrossover/" .. playerName)
-
-    Tabs.Settings:AddParagraph({
-        Title = "Configuração automática",
-        Content = "Configuração salva automaticamente para: " .. playerName
-    })
-else
-    Tabs.Settings:AddParagraph({
-        Title = "Aviso",
-        Content = "SaveManager/InterfaceManager não carregados. Configurações podem não ser salvas."
-    })
-end
-
-Window:SelectTab(1)
-
-Fluent:Notify({
-    Title = "Allan Hub",
-    Content = "Script modificado carregado com sucesso!",
-    Duration = 3
 })
-
--- Autostart se estiver ativo no config
-if ativarEvento then entrarCastelo() end
-if ativarDungeon then task.spawn(autoDungeonLoop) end
-
-print("✅ Allan Hub Arise Modified carregado com sucesso!")
