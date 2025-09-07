@@ -1,3 +1,59 @@
+if not game or not game.GetService then
+    warn("Ambiente do jogo não está disponível.")
+    return
+end
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
+local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+
+-- ===== VARIÁVEIS GLOBAIS =====
+local teleportEnabled = false
+local killedNPCs = {}
+local dungeonkill = {}
+local selectedMobName = ""
+local movementMethod = "Tween"
+
+-- ===== VARIÁVEIS DO AUTO CASTELO =====
+local ativarEvento = false
+local ativarDungeon = false
+local ativarGems = false
+local andarEntrada = 10
+local andarSaida = 1
+local currentFloor = 0
+local configFile = "allan_hub_castelo.json"
+local tempFile = "temp_dungeon.json"
+local dungeonActive = false
+
+-- ===== SISTEMA DE CONFIG =====
+local ConfigSystem = {}
+ConfigSystem.Folder = "Allan Hub"
+ConfigSystem.SubFolder = "AriseCrossover"
+ConfigSystem.FileName = player.Name .. "_Config.json"
+ConfigSystem.FilePath = ConfigSystem.Folder .. "/" .. ConfigSystem.SubFolder .. "/" .. ConfigSystem.FileName
+ConfigSystem.DefaultConfig = {
+    SelectedMobName = "",
+    FarmSelectedMob = false,
+    AutoFarmNearestNPCs = false,
+    MainAutoDestroy = false,
+    MainAutoArise = false,
+    FarmingMethod = "Tween",
+    DamageMobs = false,
+    -- Auto Castelo configs
+    AutoCastle = false,
+    AutoDungeon = false,
+    UseGems = false,
+    FloorEntrance = 10,
+    FloorExit = 1
+}
 ConfigSystem.CurrentConfig = {}
 
 -- Função para criar pastas
@@ -79,6 +135,459 @@ local function setupAutoSave()
     end)
 end
 setupAutoSave()
+
+-- ===== FUNÇÕES DO AUTO CASTELO =====
+local function safeDelete(path)
+    if isfile and isfile(path) then
+        if delfile then delfile(path)
+        elseif deletefile then deletefile(path)
+        else writefile(path, "") end
+    end
+end
+
+local function salvarConfigCastelo()
+    local data = {
+        entrada = andarEntrada, saida = andarSaida,
+        evento = ativarEvento, dungeon = ativarDungeon, gems = ativarGems,
+        dungeonActive = dungeonActive
+    }
+    writefile(configFile, HttpService:JSONEncode(data))
+end
+
+local function carregarConfigCastelo()
+    if isfile and isfile(configFile) then
+        local data = HttpService:JSONDecode(readfile(configFile))
+        andarEntrada = tonumber(data.entrada) or andarEntrada
+        andarSaida = tonumber(data.saida) or andarSaida
+        ativarEvento = data.evento or false
+        ativarDungeon = data.dungeon or false
+        ativarGems = data.gems or false
+        dungeonActive = data.dungeonActive or false
+    else
+        salvarConfigCastelo()
+    end
+end
+carregarConfigCastelo()
+
+local isInDungeon = function()
+    local enemies = workspace:FindFirstChild("__Enemies")
+    local dungeonFolder = workspace:FindFirstChild("Dungeon")
+    return enemies ~= nil or dungeonFolder ~= nil
+end
+
+local mobsVivos = function()
+    local folder = workspace:FindFirstChild("__Enemies")
+    if not folder then return false end
+
+    local count = 0
+    for _, mob in ipairs(folder:GetChildren()) do
+        if mob:IsA("Model") then
+            local humanoid = mob:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                count = count + 1
+            end
+        end
+    end
+    print("🎯 Mobs vivos encontrados:", count)
+    return count > 0
+end
+
+local entrarCastelo = function()
+    print("🏰 Entrando no castelo - Andar:", andarEntrada)
+    local args = {
+        [1] = { [1] = { Check = true, Floor = tostring(andarEntrada), Event = "CastleAction", Action = "Join" }, [2] = "\12" }
+    }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+end
+
+local sairCastelo = function()
+    print("🚪 Saindo do castelo")
+    local args = {
+        [1] = { [1] = { Check = true, Floor = tostring(andarSaida), Event = "CastleAction", Action = "LeaveDungeon" }, [2] = "\12" }
+    }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    dungeonActive = false
+    salvarConfigCastelo()
+    safeDelete(tempFile)
+end
+
+local iniciarDungeon = function()
+    print("▶️ Iniciando dungeon...")
+    local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Start" }, [2] = "\12" } }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+end
+
+local criarDungeon = function()
+    if dungeonActive then 
+        print("⚠️ Dungeon já está ativa, pulando criação")
+        return 
+    end
+
+    if isInDungeon() then 
+        print("⚠️ Já está em uma dungeon")
+        dungeonActive = true
+        salvarConfigCastelo()
+        return 
+    end
+
+    print("🆕 Criando nova dungeon...")
+    local args = { [1] = { [1] = { Event = "DungeonAction", Action = "Create" }, [2] = "\12" } }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+
+    dungeonActive = true
+    salvarConfigCastelo()
+    writefile(tempFile, "1")
+
+    task.wait(5)
+    iniciarDungeon()
+end
+
+local resetarDungeon = function()
+    print("💎 Resetando dungeon com gems...")
+    local args = { [1] = { [1] = { Type = "Gems", Event = "DungeonAction", Action = "BuyTicket" }, [2] = "\12" } }
+    game.ReplicatedStorage.BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    dungeonActive = false
+    salvarConfigCastelo()
+    safeDelete(tempFile)
+end
+
+-- ===== FUNÇÕES DE COMBATE (ORIGINAIS) =====
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    hrp = newCharacter:WaitForChild("HumanoidRootPart")
+end)
+
+local function anticheat()
+    local player = game.Players.LocalPlayer
+    if player and player.Character then
+        local characterScripts = player.Character:FindFirstChild("CharacterScripts")
+        if characterScripts then
+            local flyingFixer = characterScripts:FindFirstChild("FlyingFixer")
+            if flyingFixer then flyingFixer:Destroy() end
+            local characterUpdater = characterScripts:FindFirstChild("CharacterUpdater")
+            if characterUpdater then characterUpdater:Destroy() end
+        end
+    end
+end
+
+local function isEnemyDead(enemy)
+    local healthBar = enemy:FindFirstChild("HealthBar")
+    if healthBar and healthBar:FindFirstChild("Main") and healthBar.Main:FindFirstChild("Bar") then
+        local amount = healthBar.Main.Bar:FindFirstChild("Amount")
+        if amount and amount:IsA("TextLabel") and amount.ContentText == "0 HP" then
+            return true
+        end
+    end
+    return false
+end
+
+local function fireShowPetsRemote()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "ShowPets"
+            },
+            [2] = "\t"
+        }
+    }
+    remote:FireServer(unpack(args))
+end
+
+local function getNearestEnemy()
+    local nearestEnemy, shortestDistance = nil, math.huge
+    local playerPosition = hrp.Position
+
+    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") and not killedNPCs[enemy.Name] then
+            local distance = (playerPosition - enemy:GetPivot().Position).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                nearestEnemy = enemy
+            end
+        end
+    end
+    return nearestEnemy
+end
+
+local function moveToTarget(target)
+    if not target or not target:FindFirstChild("HumanoidRootPart") then return end
+    local enemyHrp = target.HumanoidRootPart
+
+    if movementMethod == "Teleport" then
+        hrp.CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 6)
+    elseif movementMethod == "Tween" then
+        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 6)})
+        tween:Play()
+    elseif movementMethod == "Walk" then
+        hrp.Parent:MoveTo(enemyHrp.Position)
+    end
+end
+
+-- ===== FUNÇÕES DE TELEPORTE PARA PORTAL =====
+local function teleportarFirePortal()
+    -- Aguarda até que os elementos necessários estejam carregados
+    task.wait(2)
+    
+    local main = workspace:FindFirstChild("__Main")
+    if not main then 
+        print("⚠️ __Main não encontrado")
+        return 
+    end
+    
+    local world = main:FindFirstChild("__World")
+    if not world then 
+        print("⚠️ __World não encontrado")
+        return 
+    end
+for i = 1, 200 do
+        local room = world:FindFirstChild("Room_" .. i)
+        if room then
+            local portal = room:FindFirstChild("FirePortal")
+            if portal and portal:IsA("BasePart") then
+                -- Verificar se o personagem ainda existe
+                if not hrp or not hrp.Parent then
+                    local char = player.Character
+                    if char then
+                        hrp = char:FindFirstChild("HumanoidRootPart")
+                    end
+                end
+                
+                if hrp then
+                    pcall(function()
+                        hrp.CFrame = portal.CFrame
+                        hrp.Velocity = Vector3.zero
+                    end)
+                    
+                    task.wait(0.1)
+                    
+                    local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
+                    if not prompt then
+                        for _, obj in ipairs(portal:GetDescendants()) do
+                            if obj:IsA("ProximityPrompt") then
+                                prompt = obj
+                                break
+                            end
+                        end
+                    end
+                    
+                    if prompt then
+                        pcall(function()
+                            for j = 1, 3 do
+                                fireproximityprompt(prompt)
+                                task.wait(0.05)
+                            end
+                            print("Portal ativado! Subindo do andar " .. i .. " para o andar " .. (i + 1))
+                        end)
+                    end
+                    break
+                end
+            end
+        end
+    end
+end
+
+-- ===== LOOP PRINCIPAL DE AUTO DUNGEON =====
+local function autoDungeonLoop()
+    print("🔄 Iniciando loop de auto dungeon...")
+
+    while ativarDungeon do
+        task.wait(5)
+
+        if not isInDungeon() and not dungeonActive then
+            print("🏗️ Preparando para criar dungeon...")
+
+            if ativarEvento then 
+                entrarCastelo()
+                task.wait(5) 
+            end
+
+            criarDungeon()
+            task.wait(8)
+        end
+
+        if isInDungeon() then
+            print("🎮 Executando dungeon...")
+            -- Aqui você pode adicionar a lógica de combate se necessário
+            task.wait(3)
+
+            if ativarGems then
+                resetarDungeon()
+                task.wait(5)
+            else
+                sairCastelo()
+                task.wait(5)
+                if ativarEvento then entrarCastelo() end
+                task.wait(3)
+            end
+        end
+    end
+
+    print("🛑 Loop de auto dungeon parado")
+end
+
+-- ===== MONITORAMENTO DE ANDAR =====
+task.spawn(function()
+    while true do
+        pcall(function()
+            if ativarEvento then
+                local floorValue = player:FindFirstChild("CurrentFloor")
+                if floorValue and tonumber(floorValue.Value) ~= currentFloor then
+                    currentFloor = tonumber(floorValue.Value)
+                    print("Novo andar detectado:", currentFloor)
+
+                    teleportarFirePortal()
+
+                    task.delay(1.5, function()
+                        pcall(function()
+                            local target = getNearestEnemy()
+                            if target then
+                                print("Inimigo detectado:", target.Name)
+                                moveToTarget(target)
+                            else
+                                print("Nenhum inimigo encontrado.")
+                            end
+                        end)
+                    end)
+
+                    if currentFloor == andarSaida then
+                        sairCastelo()
+                    end
+                end
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+-- ===== INTERFACE FLUENT =====
+local Fluent, SaveManager, InterfaceManager
+
+local success, err = pcall(function()
+    Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+    SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+end)
+
+if not success then
+    warn("Erro ao carregar biblioteca Fluent: " .. tostring(err))
+    return
+end
+
+if not Fluent then
+    error("Não foi possível carregar a biblioteca Fluent. Verifique sua conexão com a internet ou executor.")
+    return
+end
+
+local Window = Fluent:CreateWindow({
+    Title = "Allan Hub | Arise Crossover - Modified",
+    SubTitle = "",
+    TabWidth = 140,
+    Size = UDim2.fromOffset(450, 350),
+    Acrylic = false,
+    Theme = "Amethyst",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Castle = Window:AddTab({ Title = "Auto Castelo", Icon = "" }),
+    Status = Window:AddTab({ Title = "Status", Icon = "" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- ===== TAB MAIN (ORIGINAL) =====
+Tabs.Main:AddToggle("TeleportMobs", {
+    Title = "Auto farm (nearest NPCs)",
+    Default = ConfigSystem.CurrentConfig.AutoFarmNearestNPCs or false,
+    Callback = function(state)
+        teleportEnabled = state
+        ConfigSystem.CurrentConfig.AutoFarmNearestNPCs = state
+        ConfigSystem.SaveConfig()
+        if state then
+            task.spawn(function()
+                while teleportEnabled do
+                    local target = getNearestEnemy()
+                    if target and target.Parent then
+                        anticheat()
+                        moveToTarget(target)
+                        task.wait(0.5)
+                        fireShowPetsRemote()
+                        remote:FireServer({
+                            {
+                                ["PetPos"] = {},
+                                ["AttackType"] = "All",
+                                ["Event"] = "Attack",
+                                ["Enemy"] = target.Name
+                            },
+                            "\7"
+                        })
+
+                        while teleportEnabled and target.Parent and not isEnemyDead(target) do
+                            task.wait(0.1)
+                        end
+
+                        killedNPCs[target.Name] = true
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+    end
+})
+
+local Dropdown = Tabs.Main:AddDropdown("MovementMethod", {
+    Title = "Farming Method",
+    Values = {"Tween", "Teleport"},
+    Multi = false,
+    Default = 1,
+    Callback = function(option)
+        movementMethod = option
+        ConfigSystem.CurrentConfig.FarmingMethod = option
+        ConfigSystem.SaveConfig()
+    end 
+})
+
+-- ===== TAB AUTO CASTELO =====
+local andaresEntrada = {}
+for i = 10, 110, 10 do table.insert(andaresEntrada, tostring(i)) end
+local andaresSaida = {}
+for i = 1, 117 do table.insert(andaresSaida, tostring(i)) end
+
+Tabs.Castle:AddDropdown("AndarEntrada", {
+    Title = "Selecionar Andar de Entrada",
+    Values = andaresEntrada,
+    Multi = false,
+    Default = tostring(andarEntrada),
+    Callback = function(v)
+        andarEntrada = tonumber(v)
+        ConfigSystem.CurrentConfig.FloorEntrance = andarEntrada
+        salvarConfigCastelo()
+        ConfigSystem.SaveConfig()
+    end
+})
+
+Tabs.Castle:AddDropdown("AndarSaida", {
+    Title = "Selecionar Andar de Saída", 
+    Values = andaresSaida,
+    Multi = false,
+    Default = tostring(andarSaida),
+    Callback = function(v)
+        andarSaida = tonumber(v)
+        ConfigSystem.CurrentConfig.FloorExit = andarSaida
+        salvarConfigCastelo()
+        ConfigSystem.SaveConfig()
+    end
+})
+
+Tabs.Castle:AddToggle("ToggleAutoCastelo", {
+    Title = "Auto Castelo",
+    Description = "Ativa/Desativa o Auto Castelo",
+    Default = ativarEvento,
+    Callback = function(state)
+        ativarEvento = state
+        ConfigSystem.CurrentConfig.AutoCastle = state
+        salvarConfigCastelo()
         ConfigSystem.SaveConfig()
         if state then entrarCastelo() end
     end
@@ -121,6 +630,7 @@ Tabs.Castle:AddButton({
         print("🔄 Status da dungeon resetado!")
     end
 })
+
 -- ===== TAB STATUS =====
 local statusParagraph = Tabs.Status:AddParagraph({
     Title = "Status Atual",
@@ -152,19 +662,25 @@ task.spawn(function()
         task.wait(2)
     end
 end)
-
 -- ===== CONFIGURAÇÕES =====
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
+if SaveManager and InterfaceManager then
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
 
-local playerName = game:GetService("Players").LocalPlayer.Name
-InterfaceManager:SetFolder("Allan Hub")
-SaveManager:SetFolder("Allan Hub/AriseCrossover/" .. playerName)
+    local playerName = player.Name
+    InterfaceManager:SetFolder("Allan Hub")
+    SaveManager:SetFolder("Allan Hub/AriseCrossover/" .. playerName)
 
-Tabs.Settings:AddParagraph({
-    Title = "Cấu hình tự động",
-    Content = "Cấu hình của bạn đang được tự động lưu theo tên nhân vật: " .. playerName
-})
+    Tabs.Settings:AddParagraph({
+        Title = "Configuração automática",
+        Content = "Configuração salva automaticamente para: " .. playerName
+    })
+else
+    Tabs.Settings:AddParagraph({
+        Title = "Aviso",
+        Content = "SaveManager/InterfaceManager não carregados. Configurações podem não ser salvas."
+    })
+end
 
 Window:SelectTab(1)
 
