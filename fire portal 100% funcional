@@ -2532,7 +2532,7 @@ end
 -- Toggle com salvamento
 -- ==========================
 Tabs.dungeon:AddToggle("TeleportMobs", {
-    Title = "Auto Dungeon",
+    Title = "Dungeon INF",
     Default = ConfigSystem.CurrentConfig.AutoFarmDungeon,
     Flag = "AutoFarmDungeon",
     Callback = function(state)
