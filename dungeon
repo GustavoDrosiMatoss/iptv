@@ -475,7 +475,6 @@ local Window = Fluent:CreateWindow({
     Theme = "Luffy",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
-
 local Tabs = {
     Discord = Window:AddTab({ Title = "INFO", Icon = ""}),
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
@@ -484,11 +483,10 @@ local Tabs = {
     dungeon = Window:AddTab({ Title = "Dungeon ", Icon = "" }),
     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
-    Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
     desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
-
 }
+
 
 -- Tạo mapping giữa các map và danh sách mob tương ứng
 local mobsByWorld = {
