@@ -3439,10 +3439,9 @@ Tabs.dungeon:AddToggle("CastleToggle", {
     end
 })
 -- ==========================
--- Deserto Infinito (Config + Funções + GUI)
+-- Configuração Deserto Infinito
 -- ==========================
 
--- Garantir chaves no ConfigSystem
 if ConfigSystem.DefaultConfig.DesertInfiniteToggle == nil then
     ConfigSystem.DefaultConfig.DesertInfiniteToggle = false
 end
@@ -3464,7 +3463,6 @@ if ConfigSystem.CurrentConfig.DesertInfiniteTeleport == nil then
     ConfigSystem.CurrentConfig.DesertInfiniteTeleport = ConfigSystem.DefaultConfig.DesertInfiniteTeleport
 end
 
--- Variáveis locais
 local desertEnabled = ConfigSystem.CurrentConfig.DesertInfiniteToggle
 local teleportEnabled = ConfigSystem.CurrentConfig.DesertInfiniteTeleport
 local speedValue = ConfigSystem.CurrentConfig.DesertInfiniteSpeed
@@ -3474,12 +3472,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
 local player = game.Players.LocalPlayer
 
--- ==========================
--- Funções principais
--- ==========================
-
 local function iniciarDesertoInfinito()
-    -- Criar
     local argsCreate = {
         [1] = {
             [1] = {
@@ -3493,7 +3486,6 @@ local function iniciarDesertoInfinito()
 
     task.wait(1)
 
-    -- Start
     local argsStart = {
         [1] = {
             [1] = {
@@ -3530,7 +3522,7 @@ local function manterTeleport()
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                 player.Character.HumanoidRootPart.CFrame = teleportPosition
             end
-            task.wait(1) -- força teleport a cada 1s
+            task.wait(1)
         end
     end)
 end
@@ -3541,7 +3533,6 @@ end
 
 Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
 
--- Toggle Auto Iniciar Deserto
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
     Title = "Ativar Deserto Infinito",
     Default = desertEnabled,
@@ -3549,14 +3540,12 @@ Tabs.desert:AddToggle("DesertInfiniteToggle", {
         desertEnabled = state
         ConfigSystem.CurrentConfig.DesertInfiniteToggle = state
         ConfigSystem.SaveConfig()
-
         if state then
             iniciarDesertoInfinito()
         end
     end
 })
 
--- Input de Velocidade
 Tabs.desert:AddInput("DesertInfiniteSpeed", {
     Title = "Velocidade",
     Default = tostring(speedValue),
@@ -3574,7 +3563,6 @@ Tabs.desert:AddInput("DesertInfiniteSpeed", {
     end
 })
 
--- Toggle Teleport fixo
 Tabs.desert:AddToggle("DesertInfiniteTeleport", {
     Title = "Teleport Fixo",
     Default = teleportEnabled,
@@ -3582,7 +3570,6 @@ Tabs.desert:AddToggle("DesertInfiniteTeleport", {
         teleportEnabled = state
         ConfigSystem.CurrentConfig.DesertInfiniteTeleport = state
         ConfigSystem.SaveConfig()
-
         if state then
             manterTeleport()
             warn("[Deserto Infinito] Teleport fixo ativado.")
