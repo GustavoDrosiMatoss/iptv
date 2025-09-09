@@ -3477,24 +3477,18 @@ local player = game.Players.LocalPlayer
 -- ==========================
 local desertSessionActive = false
 
--- Detectar se já está no deserto
+-- Detectar se já está no deserto usando workspace
 local function estaNoDeserto()
-    local state = ReplicatedStorage:FindFirstChild("DungeonState")
-    if state and state.Value == "InfiniteMode" then
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return false end
+    local world = main:FindFirstChild("__World")
+    if not world then return false end
+
+    -- nome do mapa (ajuste se o nome for diferente no seu jogo)
+    if world.Name == "InfiniteDesert" then
         return true
     end
     return false
-end
-
--- Resetar flag ao sair
-local state = ReplicatedStorage:FindFirstChild("DungeonState")
-if state then
-    state:GetPropertyChangedSignal("Value"):Connect(function()
-        if state.Value ~= "InfiniteMode" then
-            desertSessionActive = false
-            warn("[Deserto Infinito] Sessão finalizada, pode criar de novo.")
-        end
-    end)
 end
 
 -- ==========================
