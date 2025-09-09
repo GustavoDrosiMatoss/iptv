@@ -486,6 +486,8 @@ local Tabs = {
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
     Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
+    desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
+
 }
 
 -- Tạo mapping giữa các map và danh sách mob tương ứng
