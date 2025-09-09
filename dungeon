@@ -3472,7 +3472,43 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
 local player = game.Players.LocalPlayer
 
+-- ==========================
+-- Controle de Sessão
+-- ==========================
+local desertSessionActive = false
+
+-- Detectar se já está no deserto
+local function estaNoDeserto()
+    local state = ReplicatedStorage:FindFirstChild("DungeonState")
+    if state and state.Value == "InfiniteMode" then
+        return true
+    end
+    return false
+end
+
+-- Resetar flag ao sair
+local state = ReplicatedStorage:FindFirstChild("DungeonState")
+if state then
+    state:GetPropertyChangedSignal("Value"):Connect(function()
+        if state.Value ~= "InfiniteMode" then
+            desertSessionActive = false
+            warn("[Deserto Infinito] Sessão finalizada, pode criar de novo.")
+        end
+    end)
+end
+
+-- ==========================
+-- Funções principais
+-- ==========================
 local function iniciarDesertoInfinito()
+    if desertSessionActive or estaNoDeserto() then
+        warn("[Deserto Infinito] Já está dentro, não vou criar outra sessão.")
+        return
+    end
+
+    desertSessionActive = true
+
+    -- Criar
     local argsCreate = {
         [1] = {
             [1] = {
@@ -3486,6 +3522,7 @@ local function iniciarDesertoInfinito()
 
     task.wait(1)
 
+    -- Start
     local argsStart = {
         [1] = {
             [1] = {
@@ -3530,7 +3567,6 @@ end
 -- ==========================
 -- Criação da Aba GUI
 -- ==========================
-
 Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
 
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
