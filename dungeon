@@ -485,6 +485,8 @@ local Tabs = {
     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+    Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
+
 }
 
 -- Tạo mapping giữa các map và danh sách mob tương ứng
@@ -3438,7 +3440,7 @@ Tabs.dungeon:AddToggle("CastleToggle", {
     end
 })
 -- ==========================
--- Configuração Deserto Infinito
+-- Deserto Infinito (Config + Funções + GUI)
 -- ==========================
 
 -- Garantir chaves no ConfigSystem
@@ -3538,7 +3540,7 @@ end
 -- Criação da Aba GUI
 -- ==========================
 
-Tabs.desert = Window:AddTab("Deserto Infinito")
+Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
 
 -- Toggle Auto Iniciar Deserto
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
