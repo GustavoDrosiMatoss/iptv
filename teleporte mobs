@@ -1,126 +1,378 @@
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local hrp = char:WaitForChild("HumanoidRootPart")
-
-local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies")
-
-local visitedPositions = {}
-local currentTarget = nil
-local stuckCounter = 0
-
--- Função para verificar se uma posição já foi visitada recentemente
-local function isPositionVisited(position)
-    for _, visitedPos in pairs(visitedPositions) do
-        if (position - visitedPos).Magnitude < 10 then -- Se estiver muito próximo de uma posição visitada
-            return true
-        end
-    end
-    return false
-end
-
--- Função para adicionar posição à lista de visitadas
-local function addVisitedPosition(position)
-    table.insert(visitedPositions, position)
-    -- Limita o tamanho da lista para não consumir muita memória
-    if #visitedPositions > 10 then
-        table.remove(visitedPositions, 1)
-    end
-end
-
-local function getClosestUnvisitedMob()
-    local closestMob = nil
-    local shortestDistance = math.huge
-    local allMobs = {}
+-- ==========================
+-- Funções auxiliares compartilhadas
+-- ==========================
+local function createAndStartDungeon()
+    print("[DEBUG] Criando e iniciando dungeon...")
     
-    -- Primeiro, coleta todos os mobs disponíveis
-    for _, mobFolder in pairs(enemiesFolder:GetChildren()) do
-        if mobFolder and mobFolder.Parent then
-            local mob = mobFolder:FindFirstChild("HumanoidRootPart") or mobFolder:FindFirstChildWhichIsA("BasePart", true)
-            
-            if mob and mob:IsA("BasePart") and mob.Parent then
-                -- Verifica se tem Humanoid e se está vivo
-                local humanoid = mobFolder:FindFirstChildOfClass("Humanoid")
-                local isAlive = true
-                
-                if humanoid then
-                    isAlive = humanoid.Health > 0
-                end
-                
-                if isAlive then
-                    table.insert(allMobs, {mob = mob, folder = mobFolder})
-                end
+    -- Criar dungeon
+    local createArgs = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\12"
+        }
+    }
+    pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(createArgs))
+    end)
+    print("✔ Dungeon criada.")
+    
+    task.wait(3)
+
+    -- Iniciar dungeon
+    local startArgs = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\12"
+        }
+    }
+    pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
+    end)
+    print("▶ Dungeon iniciada.")
+end
+
+local function leaveDungeon()
+    print("[AUTO-EXIT] Saindo da dungeon...")
+    local args = {
+        [1] = {
+            [1] = { ["Event"] = "LeaveDungeon" },
+            [2] = "\12"
+        }
+    }
+    pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    end)
+    task.wait(2)
+end
+
+local function getDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+local function getClosestEnemy()
+    if not workspace:FindFirstChild("__Main") or not workspace.__Main:FindFirstChild("__Enemies") then
+        return nil
+    end
+    
+    local enemiesFolder = workspace.__Main.__Enemies.Server
+    local closestEnemy = nil
+    local closestDistance = math.huge
+    local player = game.Players.LocalPlayer
+    local playerCharacter = player.Character
+
+    if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") then 
+        return nil 
+    end
+    local playerPosition = playerCharacter.HumanoidRootPart.Position
+
+    for _, enemy in pairs(enemiesFolder:GetChildren()) do
+        local hp = enemy:GetAttribute("HP")
+        if hp and hp > 0 and enemy:FindFirstChild("HumanoidRootPart") then
+            local distance = getDistance(playerPosition, enemy.HumanoidRootPart.Position)
+            if distance < closestDistance then
+                closestDistance = distance
+                closestEnemy = enemy
             end
         end
     end
-    
-    -- Procura por mobs não visitados primeiro
-    for _, mobData in pairs(allMobs) do
-        local mob = mobData.mob
-        if not isPositionVisited(mob.Position) then
-            local dist = (hrp.Position - mob.Position).Magnitude
-            if dist < shortestDistance then
-                shortestDistance = dist
-                closestMob = mob
-            end
-        end
-    end
-    
-    -- Se não encontrar mobs não visitados, limpa a lista e pega qualquer um
-    if not closestMob and #allMobs > 0 then
-        visitedPositions = {} -- Limpa as posições visitadas
-        for _, mobData in pairs(allMobs) do
-            local mob = mobData.mob
-            local dist = (hrp.Position - mob.Position).Magnitude
-            if dist < shortestDistance then
-                shortestDistance = dist
-                closestMob = mob
-            end
-        end
-    end
-    
-    return closestMob
+
+    return closestEnemy
 end
 
-local function teleportToMobLoop()
-    while true do
-        local mob = getClosestUnvisitedMob()
-        
-        if mob and mob.Parent then
-            -- Verifica se é o mesmo alvo da vez anterior
-            if currentTarget and currentTarget == mob then
-                stuckCounter = stuckCounter + 1
-                if stuckCounter > 3 then
-                    print("Parece que estou preso no mesmo mob, marcando como visitado...")
-                    addVisitedPosition(mob.Position)
-                    stuckCounter = 0
-                    currentTarget = nil
-                    task.wait(1)
-                    continue
+local function moveToEnemy(enemy, currentTween)
+    local tweenService = game:GetService("TweenService")
+    local player = game.Players.LocalPlayer
+    local playerCharacter = player.Character
+    
+    if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") or not enemy:FindFirstChild("HumanoidRootPart") then
+        return false, currentTween
+    end
+
+    if currentTween then
+        currentTween:Cancel()
+    end
+
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    currentTween = tweenService:Create(
+        playerCharacter.HumanoidRootPart, 
+        tweenInfo, 
+        {CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)}
+    )
+
+    currentTween:Play()
+
+    return true, currentTween
+end
+
+local function isInCastleTime()
+    local hora = os.date("*t")
+    local minuto = hora.min
+    return (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55)
+end
+
+-- ==========================
+-- SISTEMA 1: Dungeon INF (Sair após limpar)
+-- ==========================
+ConfigSystem.DefaultConfig.DungeonINF = ConfigSystem.DefaultConfig.DungeonINF or false
+ConfigSystem.CurrentConfig.DungeonINF = ConfigSystem.CurrentConfig.DungeonINF or ConfigSystem.DefaultConfig.DungeonINF
+
+local dungeonINFEnabled = ConfigSystem.CurrentConfig.DungeonINF
+local currentTweenINF = nil
+local lastEnemyCheckINF = tick()
+local maxTimeWithoutEnemiesINF = 5
+
+local function monitorDungeonINF()
+    print("[DUNGEON INF] 🎯 Sistema iniciado - Farma e sai quando acaba!")
+    
+    while dungeonINFEnabled do
+        pcall(function()
+            -- 🚫 Impede conflito com Auto Farm
+            if ConfigSystem.CurrentConfig.AutoFarmDungeon then
+                print("[DUNGEON INF] ⚠️ CONFLITO: Auto Farm Dungeon está ativo! Use apenas um sistema.")
+                task.wait(5)
+                return
+            end
+
+            -- ⏰ Verificar horário do Castle
+            if isInCastleTime() then
+                if workspace:FindFirstChild("__Main") then
+                    leaveDungeon()
+                    print("[DUNGEON INF] 🏰 Saiu para o Castle Infernal!")
                 end
+                task.wait(60)
+                return
+            end
+
+            -- 🏠 Verificar se está fora da dungeon
+            if not workspace:FindFirstChild("__Main") then
+                print("[DUNGEON INF] 🚪 Fora da dungeon. Criando nova...")
+                createAndStartDungeon()
+                task.wait(5)
+                lastEnemyCheckINF = tick()
             else
-                stuckCounter = 0
-                currentTarget = mob
+                -- 👹 Procurar inimigos
+                local closestEnemy = getClosestEnemy()
+                local currentTime = tick()
+
+                if closestEnemy then
+                    lastEnemyCheckINF = currentTime
+                    print("[DUNGEON INF] ⚔️ Atacando:", closestEnemy.Name)
+
+                    local success
+                    success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)
+                    
+                    if success then
+                        -- Esperar inimigo morrer
+                        local attempts = 0
+                        while dungeonINFEnabled 
+                              and closestEnemy.Parent 
+                              and closestEnemy:GetAttribute("HP") 
+                              and closestEnemy:GetAttribute("HP") > 0 
+                              and attempts < 50 do
+                            task.wait(0.2)
+                            attempts += 1
+                        end
+                    end
+                else
+                    -- ⏱️ Sem inimigos - contar tempo
+                    local timeWithoutEnemies = currentTime - lastEnemyCheckINF
+                    
+                    if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
+                        print("[DUNGEON INF] ✅ Dungeon limpa! Saindo...")
+                        leaveDungeon()
+                        task.wait(15) -- Espera antes de criar nova
+                    else
+                        local remaining = maxTimeWithoutEnemiesINF - timeWithoutEnemies
+                        print(string.format("[DUNGEON INF] 🔍 Procurando inimigos... (%.1fs restantes)", remaining))
+                        task.wait(1)
+                    end
+                end
             end
-            
-            hrp.CFrame = mob.CFrame + Vector3.new(0, 5, 0)
-            print("Teletransportado para mob na posição:", math.floor(mob.Position.X), math.floor(mob.Position.Y), math.floor(mob.Position.Z))
-            
-            -- Após 2 segundos no mesmo mob, marca como visitado
-            task.wait(2)
-            addVisitedPosition(mob.Position)
-            
-        else
-            print("Nenhum mob encontrado! Aguardando...")
-            visitedPositions = {} -- Limpa a lista se não encontrar mobs
-            currentTarget = nil
-            stuckCounter = 0
-            task.wait(2)
-        end
-        
+        end)
+
         task.wait(0.1)
     end
+
+    -- Cleanup
+    if currentTweenINF then
+        currentTweenINF:Cancel()
+        currentTweenINF = nil
+    end
+    print("[DUNGEON INF] 🛑 Sistema desativado.")
 end
 
--- Ativar auto-teleport:
-teleportToMobLoop()
+-- ==========================
+-- SISTEMA 2: Auto Farm Dungeon (Recriar infinito)
+-- ==========================
+ConfigSystem.DefaultConfig.AutoFarmDungeon = ConfigSystem.DefaultConfig.AutoFarmDungeon or false
+ConfigSystem.CurrentConfig.AutoFarmDungeon = ConfigSystem.CurrentConfig.AutoFarmDungeon or ConfigSystem.DefaultConfig.AutoFarmDungeon
+
+local autoFarmEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeon
+local currentTweenAuto = nil
+local lastEnemyCheckAuto = tick()
+local maxTimeWithoutEnemiesAuto = 1 -- ⚡ SUPER RÁPIDO: 1 segundo!
+
+local function monitorAutoFarm()
+    print("[AUTO FARM] 🔄 Sistema iniciado - Farm infinito com recriação!")
+
+    while autoFarmEnabled do
+        pcall(function()
+            -- 🚫 Impede conflito com Dungeon INF
+            if ConfigSystem.CurrentConfig.DungeonINF then
+                print("[AUTO FARM] ⚠️ CONFLITO: Dungeon INF está ativo! Use apenas um sistema.")
+                task.wait(5)
+                return
+            end
+
+            -- ⏰ Verificar horário do Castle
+            if isInCastleTime() then
+                if workspace:FindFirstChild("__Main") then
+                    leaveDungeon()
+                    print("[AUTO FARM] 🏰 Saiu para o Castle Infernal!")
+                end
+                task.wait(60)
+                return
+            end
+
+            -- 🏠 Verificar se está fora da dungeon
+            if not workspace:FindFirstChild("__Main") then
+                print("[AUTO FARM] 🚪 Fora da dungeon. Criando nova...")
+                createAndStartDungeon()
+                task.wait(5)
+                lastEnemyCheckAuto = tick()
+            else
+                -- 👹 Procurar inimigos
+                local closestEnemy = getClosestEnemy()
+                local currentTime = tick()
+
+                if closestEnemy then
+                    lastEnemyCheckAuto = currentTime
+                    print("[AUTO FARM] ⚔️ Atacando:", closestEnemy.Name)
+
+                    local success
+                    success, currentTweenAuto = moveToEnemy(closestEnemy, currentTweenAuto)
+                    
+                    if success then
+                        -- Esperar inimigo morrer
+                        local attempts = 0
+                        while autoFarmEnabled 
+                              and closestEnemy.Parent 
+                              and closestEnemy:GetAttribute("HP") 
+                              and closestEnemy:GetAttribute("HP") > 0 
+                              and attempts < 50 do
+                            task.wait(0.2)
+                            attempts += 1
+                        end
+                    end
+                else
+                    -- ⏱️ Sem inimigos - recriar dungeon
+                    local timeWithoutEnemies = currentTime - lastEnemyCheckAuto
+                    
+                    if timeWithoutEnemies >= maxTimeWithoutEnemiesAuto then
+                        print("[AUTO FARM] ⚡ Recriando dungeon SUPER RÁPIDO!")
+                        
+                        -- Sair da atual
+                        if currentTweenAuto then
+                            currentTweenAuto:Cancel()
+                            currentTweenAuto = nil
+                        end
+                        
+                        leaveDungeon()
+                        task.wait(2) -- Reduzido para 2 segundos
+                        
+                        -- Criar nova
+                        createAndStartDungeon()
+                        task.wait(3) -- Reduzido para 3 segundos
+                        lastEnemyCheckAuto = tick()
+                    else
+                        local remaining = maxTimeWithoutEnemiesAuto - timeWithoutEnemies
+                        -- Só mostra log a cada 0.5s para não spammar muito
+                        if math.floor(remaining * 10) % 5 == 0 then
+                            print(string.format("[AUTO FARM] ⚡ MODO TURBO: %.1fs sem mobs (recria em %.1fs)", timeWithoutEnemies, remaining))
+                        end
+                        task.wait(0.2) -- Check mais rápido
+                    end
+                end
+            end
+        end)
+
+        task.wait(0.1)
+    end
+
+    -- Cleanup
+    if currentTweenAuto then
+        currentTweenAuto:Cancel()
+        currentTweenAuto = nil
+    end
+    print("[AUTO FARM] 🛑 Sistema desativado.")
+end
+
+-- ==========================
+-- TOGGLES
+-- ==========================
+
+-- Toggle 1: Dungeon INF
+Tabs.dungeon:AddToggle("DungeonINF", {
+    Title = "🎯 Dungeon INF",
+    Description = "Farma e sai quando limpa a dungeon",
+    Default = ConfigSystem.CurrentConfig.DungeonINF,
+    Flag = "DungeonINF",
+    Callback = function(state)
+        dungeonINFEnabled = state
+        ConfigSystem.CurrentConfig.DungeonINF = state
+        ConfigSystem.SaveConfig()
+
+        if state then
+            -- Desativar Auto Farm se estiver ativo
+            if ConfigSystem.CurrentConfig.AutoFarmDungeon then
+                print("⚠️ Desativando Auto Farm para evitar conflitos...")
+                autoFarmEnabled = false
+                ConfigSystem.CurrentConfig.AutoFarmDungeon = false
+                ConfigSystem.SaveConfig()
+            end
+            
+            task.spawn(monitorDungeonINF)
+        else
+            if currentTweenINF then
+                currentTweenINF:Cancel()
+                currentTweenINF = nil
+            end
+        end
+    end
+})
+
+-- Toggle 2: Auto Farm Dungeon
+Tabs.dungeon:AddToggle("AutoFarmDungeon", {
+    Title = "⚡ Auto Farm Dungeon TURBO",
+    Description = "Farm SUPER RÁPIDO - recria em 1s sem inimigos!",
+    Default = ConfigSystem.CurrentConfig.AutoFarmDungeon,
+    Flag = "AutoFarmDungeon",
+    Callback = function(state)
+        autoFarmEnabled = state
+        ConfigSystem.CurrentConfig.AutoFarmDungeon = state
+        ConfigSystem.SaveConfig()
+
+        if state then
+            -- Desativar Dungeon INF se estiver ativo
+            if ConfigSystem.CurrentConfig.DungeonINF then
+                print("⚠️ Desativando Dungeon INF para evitar conflitos...")
+                dungeonINFEnabled = false
+                ConfigSystem.CurrentConfig.DungeonINF = false
+                ConfigSystem.SaveConfig()
+            end
+            
+            task.spawn(monitorAutoFarm)
+        else
+            if currentTweenAuto then
+                currentTweenAuto:Cancel()
+                currentTweenAuto = nil
+            end
+        end
+    end
+})
