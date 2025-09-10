@@ -2345,7 +2345,7 @@ Tabs.shop:AddToggle("AutoSellToggle", {
     end
 })
 -- ==========================
--- Função para criar a dungeon
+-- Funções auxiliares compartilhadas
 -- ==========================
 local function createDungeon()
     print("[DEBUG] Tentando criar dungeon...")
@@ -2376,21 +2376,6 @@ local function createDungeon()
     print("▶ Dungeon iniciada.")
 end
 
--- ==========================
--- Configuração Auto Farm Dungeon
--- ==========================
-ConfigSystem.DefaultConfig.AutoFarmDungeon = ConfigSystem.DefaultConfig.AutoFarmDungeon or false
-ConfigSystem.CurrentConfig.AutoFarmDungeon = ConfigSystem.CurrentConfig.AutoFarmDungeon or ConfigSystem.DefaultConfig.AutoFarmDungeon
-local teleportEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeon
-
-local currentTween = nil
-local noEnemiesTimer = 0
-local lastEnemyCheck = tick()
-local maxTimeWithoutEnemies = 5 -- 5 segundos sem inimigos antes de sair da dungeon
-
--- ==========================
--- Funções auxiliares
--- ==========================
 local function leaveDungeon()
     print("[AUTO-EXIT] Saindo da dungeon...")
     local args = {
@@ -2434,12 +2419,12 @@ local function getClosestEnemy()
     return closestEnemy
 end
 
-local function moveToEnemy(enemy)
+local function moveToEnemy(enemy, currentTween)
     local tweenService = game:GetService("TweenService")
     local player = game.Players.LocalPlayer
     local playerCharacter = player.Character
     if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") or not enemy.Position then
-        return false
+        return false, currentTween
     end
 
     if currentTween then
@@ -2451,24 +2436,33 @@ local function moveToEnemy(enemy)
 
     local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     currentTween = tweenService:Create(playerCharacter.PrimaryPart, tweenInfo, {CFrame = enemy.CFrame})
-    
+
     currentTween:Play()
-    
+
     task.spawn(function()
         currentTween.Completed:Wait()
         currentTween = nil
     end)
-    
-    return true
+
+    return true, currentTween
 end
 
 -- ==========================
--- Monitoramento Auto Farm
+-- SISTEMA 1: Auto Farm Dungeon INF
 -- ==========================
-local function monitorEnemies()
-    print("[AUTO-FARM] Iniciando auto farm (sair da dungeon após 5s sem mobs).")
+ConfigSystem.DefaultConfig.AutoFarmDungeonINF = ConfigSystem.DefaultConfig.AutoFarmDungeonINF or false
+ConfigSystem.CurrentConfig.AutoFarmDungeonINF = ConfigSystem.CurrentConfig.AutoFarmDungeonINF or ConfigSystem.DefaultConfig.AutoFarmDungeonINF
 
-    while teleportEnabled do
+-- Variáveis específicas do sistema INF
+local teleportINFEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonINF
+local currentTweenINF = nil
+local lastEnemyCheckINF = tick()
+local maxTimeWithoutEnemiesINF = 5
+
+local function monitorEnemiesINF()
+    print("[AUTO-FARM INF] Iniciando auto farm (sair da dungeon após 5s sem mobs).")
+
+    while teleportINFEnabled do
         pcall(function()
             -- ⏰ Checa horário do Castle Infernal
             local hora = os.date("*t")
@@ -2476,7 +2470,7 @@ local function monitorEnemies()
 
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                print(string.format("[AUTO-EXIT] Saiu da dungeon às %02d:%02d (horário Castle)", hora.hour, hora.min))
+                print(string.format("[AUTO-EXIT INF] Saiu da dungeon às %02d:%02d (horário Castle)", hora.hour, hora.min))
                 task.wait(60) -- espera 1 min antes de verificar de novo
             else
                 if not workspace:FindFirstChild("__Main") then
@@ -2488,14 +2482,15 @@ local function monitorEnemies()
                     local currentTime = tick()
 
                     if closestEnemy then
-                        noEnemiesTimer = 0
-                        lastEnemyCheck = currentTime
+                        lastEnemyCheckINF = currentTime
+                        print("[AUTO-FARM INF] Movendo para inimigo:", closestEnemy.Name)
 
-                        print("[AUTO-FARM] Movendo para inimigo:", closestEnemy.Name)
-
-                        if moveToEnemy(closestEnemy) then
+                        local success
+                        success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)
+                        
+                        if success then
                             local attempts = 0
-                            while teleportEnabled 
+                            while teleportINFEnabled 
                                   and closestEnemy.Parent 
                                   and closestEnemy:GetAttribute("HP") 
                                   and closestEnemy:GetAttribute("HP") > 0 
@@ -2503,12 +2498,12 @@ local function monitorEnemies()
                                 task.wait(0.1)
                                 attempts += 1
                             end
-                            print("[AUTO-FARM] Inimigo eliminado!")
+                            print("[AUTO-FARM INF] Inimigo eliminado!")
                         end
                     else
-                        local timeWithoutEnemies = currentTime - lastEnemyCheck
-                        if timeWithoutEnemies >= maxTimeWithoutEnemies then
-                            print("[AUTO-EXIT] Nenhum inimigo encontrado em 5s. Saindo da dungeon...")
+                        local timeWithoutEnemies = currentTime - lastEnemyCheckINF
+                        if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
+                            print("[AUTO-EXIT INF] Nenhum inimigo encontrado em 5s. Saindo da dungeon...")
                             leaveDungeon()
                             task.wait(10) -- espera 10s fora antes de tentar recriar
                         else
@@ -2522,142 +2517,42 @@ local function monitorEnemies()
         task.wait(0.1)
     end
 
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
+    if currentTweenINF then
+        currentTweenINF:Cancel()
+        currentTweenINF = nil
     end
-    print("[AUTO-FARM] Auto farm desativado.")
+    print("[AUTO-FARM INF] Auto farm desativado.")
 end
 
 -- ==========================
--- Toggle com salvamento
+-- SISTEMA 2: Auto Farm Dungeon (Recriação)
 -- ==========================
-Tabs.dungeon:AddToggle("TeleportMobs", {
-    Title = "Dungeon INF",
-    Default = ConfigSystem.CurrentConfig.AutoFarmDungeon,
-    Flag = "AutoFarmDungeon",
-    Callback = function(state)
-        teleportEnabled = state
-        ConfigSystem.CurrentConfig.AutoFarmDungeon = state
-        ConfigSystem.SaveConfig()
+ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate = ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate or false
+ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate or ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate
 
-        if state then
-            task.spawn(monitorEnemies)
-        else
-            if currentTween then
-                currentTween:Cancel()
-                currentTween = nil
-            end
-            print("[AUTO-FARM] Desativado pelo usuário.")
-        end
-    end
-})
-
--- Função para criar a dungeon
-local function createDungeon()
-    print("[DEBUG] Tentando criar dungeon...")
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\12"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("✔ Dungeon criada.")
-    task.wait(3)
-
-    -- Iniciar a dungeon
-    local iniciarArgs = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\12"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
-    print("▶ Dungeon iniciada.")
-end
--- ==========================
--- Configuração Auto Farm Dungeon
--- ==========================
-ConfigSystem.DefaultConfig.AutoFarmDungeon = ConfigSystem.DefaultConfig.AutoFarmDungeon or false
-ConfigSystem.CurrentConfig.AutoFarmDungeon = ConfigSystem.CurrentConfig.AutoFarmDungeon or ConfigSystem.DefaultConfig.AutoFarmDungeon
-local teleportEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeon
-
-local currentTween = nil
-local noEnemiesTimer = 0
-local lastEnemyCheck = tick()
-local maxTimeWithoutEnemies = 5 -- 5 segundos sem inimigos antes de recriar
-
--- ==========================
--- Funções auxiliares
--- ==========================
-local function leaveDungeon()
-    print("[AUTO-EXIT] Saindo da dungeon devido ao horário...")
-    local args = {
-        [1] = {
-            [1] = { ["Event"] = "LeaveDungeon" },
-            [2] = "\12"
-        }
-    }
-    pcall(function()
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    end)
-end
-
-local function createAndStartDungeon()
-    print("[AUTO-ENTER] Criando nova dungeon...")
-    local args = {
-        [1] = {
-            [1] = { ["Event"] = "DungeonAction", ["Action"] = "Create" },
-            [2] = "\12"
-        }
-    }
-    pcall(function()
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    end)
-
-    task.wait(3)
-
-    local iniciarArgs = {
-        [1] = {
-            [1] = { ["Event"] = "DungeonAction", ["Action"] = "Start" },
-            [2] = "\12"
-        }
-    }
-    pcall(function()
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
-    end)
-
-    print("▶ Nova dungeon iniciada.")
-end
+-- Variáveis específicas do sistema Recreate
+local teleportRecreateEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate
+local currentTweenRecreate = nil
+local lastEnemyCheckRecreate = tick()
+local maxTimeWithoutEnemiesRecreate = 5
 
 local function recreateDungeon()
     print("[AUTO-RECREATE] Sem inimigos por muito tempo. Recriando dungeon...")
 
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
+    if currentTweenRecreate then
+        currentTweenRecreate:Cancel()
+        currentTweenRecreate = nil
     end
 
-    createAndStartDungeon()
-    noEnemiesTimer = 0
-    lastEnemyCheck = tick()
+    createDungeon()
+    lastEnemyCheckRecreate = tick()
     task.wait(5)
 end
 
--- ==========================
--- Monitoramento Auto Farm
--- ==========================
-local function monitorEnemies()
-    print("[AUTO-FARM] Iniciando auto farm com recriação automática (5s sem mobs).")
+local function monitorEnemiesRecreate()
+    print("[AUTO-FARM RECREATE] Iniciando auto farm com recriação automática (5s sem mobs).")
 
-    while teleportEnabled do
+    while teleportRecreateEnabled do
         pcall(function()
             -- ⏰ Checa horário
             local hora = os.date("*t")
@@ -2665,11 +2560,11 @@ local function monitorEnemies()
 
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                print(string.format("[AUTO-EXIT] Saiu da dungeon às %02d:%02d (horário bloqueado)", hora.hour, hora.min))
+                print(string.format("[AUTO-EXIT RECREATE] Saiu da dungeon às %02d:%02d (horário bloqueado)", hora.hour, hora.min))
                 task.wait(60)
             else
                 if not workspace:FindFirstChild("__Main") then
-                    createAndStartDungeon()
+                    createDungeon()
                     task.wait(5)
                 end
 
@@ -2677,14 +2572,15 @@ local function monitorEnemies()
                 local currentTime = tick()
 
                 if closestEnemy then
-                    noEnemiesTimer = 0
-                    lastEnemyCheck = currentTime
+                    lastEnemyCheckRecreate = currentTime
+                    print("[AUTO-FARM RECREATE] Movendo para inimigo:", closestEnemy.Name)
 
-                    print("[AUTO-FARM] Movendo para inimigo:", closestEnemy.Name)
-
-                    if moveToEnemy(closestEnemy) then
+                    local success
+                    success, currentTweenRecreate = moveToEnemy(closestEnemy, currentTweenRecreate)
+                    
+                    if success then
                         local attempts = 0
-                        while teleportEnabled 
+                        while teleportRecreateEnabled 
                               and closestEnemy.Parent 
                               and closestEnemy:GetAttribute("HP") 
                               and closestEnemy:GetAttribute("HP") > 0 
@@ -2692,16 +2588,16 @@ local function monitorEnemies()
                             task.wait(0.1)
                             attempts += 1
                         end
-                        print("[AUTO-FARM] Inimigo eliminado!")
+                        print("[AUTO-FARM RECREATE] Inimigo eliminado!")
                     end
                 else
-                    local timeWithoutEnemies = currentTime - lastEnemyCheck
-                    if timeWithoutEnemies >= maxTimeWithoutEnemies then
+                    local timeWithoutEnemies = currentTime - lastEnemyCheckRecreate
+                    if timeWithoutEnemies >= maxTimeWithoutEnemiesRecreate then
                         recreateDungeon()
                     else
-                        local remainingTime = maxTimeWithoutEnemies - timeWithoutEnemies
+                        local remainingTime = maxTimeWithoutEnemiesRecreate - timeWithoutEnemies
                         if math.floor(remainingTime) % 5 == 0 then
-                            print(string.format("[AUTO-FARM] Sem inimigos há %.1fs. Recriando em %.1fs...", 
+                            print(string.format("[AUTO-FARM RECREATE] Sem inimigos há %.1fs. Recriando em %.1fs...", 
                                 timeWithoutEnemies, remainingTime))
                         end
                     end
@@ -2713,37 +2609,60 @@ local function monitorEnemies()
         task.wait(0.1)
     end
 
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
+    if currentTweenRecreate then
+        currentTweenRecreate:Cancel()
+        currentTweenRecreate = nil
     end
-    print("[AUTO-FARM] Auto farm desativado.")
+    print("[AUTO-FARM RECREATE] Auto farm desativado.")
 end
 
 -- ==========================
--- Toggle com salvamento
+-- Toggles separados
 -- ==========================
-Tabs.dungeon:AddToggle("TeleportMobs", {
-    Title = "Auto farm Dungeon",
-    Default = ConfigSystem.CurrentConfig.AutoFarmDungeon,
-    Flag = "AutoFarmDungeon",
+
+-- Toggle para Dungeon INF
+Tabs.dungeon:AddToggle("DungeonINF", {
+    Title = "Dungeon INF",
+    Default = ConfigSystem.CurrentConfig.AutoFarmDungeonINF,
+    Flag = "AutoFarmDungeonINF",
     Callback = function(state)
-        teleportEnabled = state
-        ConfigSystem.CurrentConfig.AutoFarmDungeon = state
+        teleportINFEnabled = state
+        ConfigSystem.CurrentConfig.AutoFarmDungeonINF = state
         ConfigSystem.SaveConfig()
 
         if state then
-            task.spawn(monitorEnemies)
+            task.spawn(monitorEnemiesINF)
         else
-            if currentTween then
-                currentTween:Cancel()
-                currentTween = nil
+            if currentTweenINF then
+                currentTweenINF:Cancel()
+                currentTweenINF = nil
             end
-            print("[AUTO-FARM] Desativado pelo usuário.")
+            print("[AUTO-FARM INF] Desativado pelo usuário.")
         end
     end
 })
 
+-- Toggle para Auto Farm Dungeon (com recriação)
+Tabs.dungeon:AddToggle("AutoFarmDungeon", {
+    Title = "Auto Farm Dungeon",
+    Default = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate,
+    Flag = "AutoFarmDungeonRecreate",
+    Callback = function(state)
+        teleportRecreateEnabled = state
+        ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = state
+        ConfigSystem.SaveConfig()
+
+        if state then
+            task.spawn(monitorEnemiesRecreate)
+        else
+            if currentTweenRecreate then
+                currentTweenRecreate:Cancel()
+                currentTweenRecreate = nil
+            end
+            print("[AUTO-FARM RECREATE] Desativado pelo usuário.")
+        end
+    end
+})
 
 -- Sistema de Castelo - Auto Castle atualizado
 local castleEnabled = false
