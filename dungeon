@@ -3463,9 +3463,18 @@ if ConfigSystem.CurrentConfig.DesertInfiniteTeleport == nil then
     ConfigSystem.CurrentConfig.DesertInfiniteTeleport = ConfigSystem.DefaultConfig.DesertInfiniteTeleport
 end
 
+-- Nova configuração para auto velocidade
+if ConfigSystem.DefaultConfig.DesertAutoSpeed == nil then
+    ConfigSystem.DefaultConfig.DesertAutoSpeed = false
+end
+if ConfigSystem.CurrentConfig.DesertAutoSpeed == nil then
+    ConfigSystem.CurrentConfig.DesertAutoSpeed = ConfigSystem.DefaultConfig.DesertAutoSpeed
+end
+
 local desertEnabled = ConfigSystem.CurrentConfig.DesertInfiniteToggle
 local teleportEnabled = ConfigSystem.CurrentConfig.DesertInfiniteTeleport
 local speedValue = ConfigSystem.CurrentConfig.DesertInfiniteSpeed
+local autoSpeedEnabled = ConfigSystem.CurrentConfig.DesertAutoSpeed
 
 local teleportPosition = CFrame.new(474.099365, 4454.42578, -1875.93811, 0, 0, -1, 1, 0, 0, 0, -1, 0)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -3478,6 +3487,7 @@ local player = game.Players.LocalPlayer
 local desertSessionActive = false
 local lastDesertCheck = 0
 local CHECK_INTERVAL = 2 -- segundos entre verificações
+local autoSpeedLoop = false
 
 -- Múltiplas formas de detectar se está no deserto
 local function estaNoDeserto()
@@ -3542,6 +3552,7 @@ end
 -- Função para resetar o estado da sessão
 local function resetarEstadoSessao()
     desertSessionActive = false
+    pararAutoVelocidade()
     warn("[Deserto Infinito] Estado da sessão resetado")
 end
 
@@ -3619,6 +3630,11 @@ local function iniciarDesertoInfinito()
         task.wait(2)
         aplicarVelocidade(speedValue)
         
+        -- Iniciar auto velocidade se estiver ativada
+        if autoSpeedEnabled then
+            iniciarAutoVelocidade()
+        end
+        
         -- Iniciar monitoramento
         monitorarSaidaDeserto()
     end)
@@ -3645,13 +3661,67 @@ local function aplicarVelocidade(valor)
     warn("[Deserto Infinito] Velocidade ajustada para:", valor)
 end
 
+-- Nova função para auto velocidade contínua
+local function iniciarAutoVelocidade()
+    if autoSpeedLoop then
+        warn("[Deserto Infinito] Auto velocidade já está rodando")
+        return
+    end
+    
+    autoSpeedLoop = true
+    warn("[Deserto Infinito] Auto velocidade ativada")
+    
+    task.spawn(function()
+        while autoSpeedEnabled and autoSpeedLoop do
+            if estaNoDeserto() then
+                aplicarVelocidade(speedValue)
+                task.wait(3) -- Aplicar velocidade a cada 3 segundos
+            else
+                task.wait(1)
+            end
+        end
+        autoSpeedLoop = false
+        warn("[Deserto Infinito] Auto velocidade desativada")
+    end)
+end
+
+local function pararAutoVelocidade()
+    autoSpeedEnabled = false
+    autoSpeedLoop = false
+    warn("[Deserto Infinito] Auto velocidade parada")
+end
+
 local function manterTeleport()
     task.spawn(function()
         while teleportEnabled do
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and estaNoDeserto() then
+                -- Teleportar para a posição
                 player.Character.HumanoidRootPart.CFrame = teleportPosition
+                
+                -- Parar completamente o personagem
+                local humanoid = player.Character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+                    humanoid.PlatformStand = true
+                end
+                
+                -- Zerar velocidade
+                local rootPart = player.Character.HumanoidRootPart
+                if rootPart then
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
+                    rootPart.AngularVelocity = Vector3.new(0, 0, 0)
+                end
             end
-            task.wait(1)
+            task.wait(0.1) -- Verificação mais frequente para manter parado
+        end
+        
+        -- Quando desativar teleport, liberar o personagem
+        if player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.PlatformStand = false
+                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+            end
         end
     end)
 end
@@ -3709,8 +3779,38 @@ Tabs.desert:AddInput("DesertInfiniteSpeed", {
     end
 })
 
+Tabs.desert:AddToggle("DesertAutoSpeed", {
+    Title = "Auto Velocidade",
+    Description = "Aplica velocidade automaticamente a cada 3 segundos",
+    Default = autoSpeedEnabled,
+    Callback = function(state)
+        autoSpeedEnabled = state
+        ConfigSystem.CurrentConfig.DesertAutoSpeed = state
+        ConfigSystem.SaveConfig()
+        
+        if state then
+            if estaNoDeserto() then
+                iniciarAutoVelocidade()
+            else
+                warn("[Deserto Infinito] Entre no deserto para ativar auto velocidade")
+            end
+        else
+            pararAutoVelocidade()
+        end
+    end
+})
+
+Tabs.desert:AddButton({
+    Title = "Aplicar Velocidade Agora",
+    Description = "Aplica a velocidade imediatamente",
+    Callback = function()
+        aplicarVelocidade(speedValue)
+    end
+})
+
 Tabs.desert:AddToggle("DesertInfiniteTeleport", {
-    Title = "Teleport Fixo",
+    Title = "Teleport Fixo + Parar",
+    Description = "Teleporta e mantém o personagem parado",
     Default = teleportEnabled,
     Callback = function(state)
         teleportEnabled = state
@@ -3718,9 +3818,17 @@ Tabs.desert:AddToggle("DesertInfiniteTeleport", {
         ConfigSystem.SaveConfig()
         if state then
             manterTeleport()
-            warn("[Deserto Infinito] Teleport fixo ativado.")
+            warn("[Deserto Infinito] Teleport fixo + parar ativado.")
         else
-            warn("[Deserto Infinito] Teleport fixo desativado.")
+            warn("[Deserto Infinito] Teleport fixo + parar desativado.")
+            -- Liberar personagem quando desativar
+            if player.Character then
+                local humanoid = player.Character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid.PlatformStand = false
+                    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                end
+            end
         end
     end
 })
