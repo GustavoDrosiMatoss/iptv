@@ -3157,7 +3157,6 @@ Tabs.dungeon:AddInput("CastleExitFloor", {
     end
 })
 
--- =======================
 -- Configuração do andar de entrada (padrão 1)
 ConfigSystem.DefaultConfig.CastleEntryFloor = ConfigSystem.DefaultConfig.CastleEntryFloor or 1
 ConfigSystem.CurrentConfig.CastleEntryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor or ConfigSystem.DefaultConfig.CastleEntryFloor
@@ -3200,6 +3199,27 @@ local function getCurrentCastleFloor()
         warn("[Castle] Fora do castelo (nenhuma Room encontrada).")
     end
     return current
+end
+
+-- Comprar ticket com gems
+local function buyCastleTicket()
+    warn("[Castle] Tentando comprar ticket com Gems...")
+    local args = {
+        [1] = {
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "CastleAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\12"
+        }
+    }
+    local ok, err = pcall(function() remote:FireServer(unpack(args)) end)
+    if ok then
+        warn("[Castle] Ticket comprado com sucesso.")
+    else
+        warn("[Castle] Erro ao comprar ticket:", err)
+    end
 end
 
 -- Entrar no castelo
@@ -3265,7 +3285,9 @@ function autoCastle()
             local currentFloor = getCurrentCastleFloor()
 
             if not currentFloor then
-                -- Não está no castelo, tenta entrar
+                -- Fora do castelo → compra ticket e entra
+                buyCastleTicket()
+                task.wait(1)
                 joinCastle()
                 task.wait(5)
             else
@@ -3282,7 +3304,10 @@ function autoCastle()
                     -- Inicia failsafe até sair realmente
                     forceLeaveUntilOut()
 
+                    -- Aguarda, compra ticket e reinicia
                     task.wait(5)
+                    buyCastleTicket()
+                    task.wait(1)
                     joinCastle()
                     task.wait(3)
                 end
@@ -3327,6 +3352,8 @@ Tabs.dungeon:AddToggle("CastleToggle", {
         if state then
             task.spawn(function()
                 warn("[Castle] Ativado → Entrando...")
+                buyCastleTicket()
+                task.wait(1)
                 joinCastle()
                 task.wait(2)
 
