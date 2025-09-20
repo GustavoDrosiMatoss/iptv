@@ -3801,8 +3801,12 @@ Tabs.desert:AddButton({
         end
     end
 })
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
+local player = game.Players.LocalPlayer
+
 -- ==========================
--- Configuração Castelo Infinito (VERSÃO CORRIGIDA)
+-- Configuração Castelo Infinito
 -- ==========================
 
 if ConfigSystem.DefaultConfig.CastleInfiniteToggle == nil then
@@ -3830,17 +3834,12 @@ local castleEnabled = ConfigSystem.CurrentConfig.CastleInfiniteToggle
 local speedValue = ConfigSystem.CurrentConfig.CastleInfiniteSpeed
 local autoSpeedEnabled = ConfigSystem.CurrentConfig.CastleAutoSpeed
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
-local player = game.Players.LocalPlayer
-
 -- ==========================
 -- Controle de Sessão
 -- ==========================
 local castleSessionActive = false
 local autoSpeedLoop = false
 
--- Detectar se está no castelo
 local function estaNoCastelo()
     local main = workspace:FindFirstChild("__Main")
     if main then
@@ -3852,7 +3851,6 @@ local function estaNoCastelo()
     return false
 end
 
--- Resetar estado da sessão
 local function resetarEstadoSessao()
     castleSessionActive = false
     autoSpeedLoop = false
