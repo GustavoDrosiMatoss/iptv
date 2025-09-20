@@ -3400,7 +3400,7 @@ local dungeonMode = ConfigSystem.CurrentConfig.DesertDungeonMode
 local DUNGEON_ID = 5116548088
 
 -- ==========================
--- Função iniciar modificada (usa Event conforme seleção)
+-- Função principal do Deserto / Castelo Infinito
 -- ==========================
 local function iniciarDesertoInfinito()
     if desertSessionActive then
@@ -3423,7 +3423,7 @@ local function iniciarDesertoInfinito()
         -- Escolher nome do Event de acordo com a seleção
         local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
 
-        -- Enviar Create usando o event selecionado
+        -- Enviar Create
         local argsCreate = {
             [1] = {
                 [1] = {
@@ -3438,23 +3438,19 @@ local function iniciarDesertoInfinito()
 
         task.wait(3)
 
-        -- Se ainda não estiver detectado no deserto, enviar Start usando o mesmo event e o mesmo dungeon id
-        if not estaNoDeserto() then
-            local argsStart = {
+        -- Enviar Start
+        local argsStart = {
+            [1] = {
                 [1] = {
-                    [1] = {
-                        ["Dungeon"] = DUNGEON_ID,
-                        ["Event"] = eventName,
-                        ["Action"] = "Start"
-                    },
-                    [2] = "\12"
-                }
+                    ["Dungeon"] = DUNGEON_ID,
+                    ["Event"] = eventName,
+                    ["Action"] = "Start"
+                },
+                [2] = "\12"
             }
-            remote:FireServer(unpack(argsStart))
-            warn("[Deserto Infinito] Comando Start enviado. Dungeon:", DUNGEON_ID, "Event:", eventName)
-        else
-            warn("[Deserto Infinito] Já no local, pulando comando Start")
-        end
+        }
+        remote:FireServer(unpack(argsStart))
+        warn("[Deserto Infinito] Comando Start enviado. Dungeon:", DUNGEON_ID, "Event:", eventName)
 
         task.wait(2)
         aplicarVelocidade(speedValue)
@@ -3468,14 +3464,16 @@ local function iniciarDesertoInfinito()
 end
 
 -- ==========================
--- GUI para escolher entre Deserto e Castelo
+-- GUI da aba Deserto (com seleção de modo)
 -- ==========================
+Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
+
 Tabs.desert:AddDropdown("DesertDungeonMode", {
     Title = "Selecionar Modo",
-    Values = { "Deserto (InfiniteModeAction)", "Castelo (InfiniteCastleAction)" },
-    Default = (dungeonMode == 1 and "Deserto (InfiniteModeAction)") or "Castelo (InfiniteCastleAction)",
+    Values = { "Deserto Infinito", "Castelo Infinito" },
+    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
     Callback = function(value)
-        if value == "Deserto (InfiniteModeAction)" then
+        if value == "Deserto Infinito" then
             dungeonMode = 1
         else
             dungeonMode = 2
@@ -3486,11 +3484,108 @@ Tabs.desert:AddDropdown("DesertDungeonMode", {
     end
 })
 
--- Botão para iniciar explicitamente com o modo selecionado
+Tabs.desert:AddToggle("DesertInfiniteToggle", {
+    Title = "Ativar Deserto/Castelo Infinito",
+    Default = desertEnabled,
+    Callback = function(state)
+        desertEnabled = state
+        ConfigSystem.CurrentConfig.DesertInfiniteToggle = state
+        ConfigSystem.SaveConfig()
+        if state then
+            iniciarDesertoInfinito()
+        else
+            resetarEstadoSessao()
+        end
+    end
+})
+
+Tabs.desert:AddInput("DesertInfiniteSpeed", {
+    Title = "Velocidade",
+    Default = tostring(speedValue),
+    Placeholder = "Ex: 2",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            speedValue = num
+            ConfigSystem.CurrentConfig.DesertInfiniteSpeed = num
+            ConfigSystem.SaveConfig()
+            aplicarVelocidade(num)
+        end
+    end
+})
+
+Tabs.desert:AddToggle("DesertAutoSpeed", {
+    Title = "Auto Velocidade",
+    Description = "Aplica velocidade automaticamente a cada 3 segundos",
+    Default = autoSpeedEnabled,
+    Callback = function(state)
+        autoSpeedEnabled = state
+        ConfigSystem.CurrentConfig.DesertAutoSpeed = state
+        ConfigSystem.SaveConfig()
+
+        if state then
+            if estaNoDeserto() then
+                iniciarAutoVelocidade()
+            else
+                warn("[Deserto Infinito] Entre no deserto/castelo para ativar auto velocidade")
+            end
+        else
+            pararAutoVelocidade()
+        end
+    end
+})
+
 Tabs.desert:AddButton({
-    Title = "Iniciar com modo selecionado",
-    Description = "Envia Create e Start usando o event selecionado",
+    Title = "Aplicar Velocidade Agora",
+    Description = "Aplica a velocidade imediatamente",
     Callback = function()
-        iniciarDesertoInfinito()
+        aplicarVelocidade(speedValue)
+    end
+})
+
+Tabs.desert:AddToggle("DesertInfiniteTeleport", {
+    Title = "Teleport Fixo + Parar",
+    Description = "Teleporta e mantém o personagem parado",
+    Default = teleportEnabled,
+    Callback = function(state)
+        teleportEnabled = state
+        ConfigSystem.CurrentConfig.DesertInfiniteTeleport = state
+        ConfigSystem.SaveConfig()
+        if state then
+            manterTeleport()
+            warn("[Deserto Infinito] Teleport fixo + parar ativado.")
+        else
+            warn("[Deserto Infinito] Teleport fixo + parar desativado.")
+            if player.Character then
+                local humanoid = player.Character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid.PlatformStand = false
+                    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                end
+            end
+        end
+    end
+})
+
+Tabs.desert:AddButton({
+    Title = "Resetar Estado",
+    Description = "Use se o script não detectar que você saiu do deserto/castelo",
+    Callback = function()
+        resetarEstadoSessao()
+        warn("[Deserto Infinito] Estado resetado manualmente")
+    end
+})
+
+Tabs.desert:AddButton({
+    Title = "Verificar Status",
+    Description = "Mostrar se está no deserto/castelo e estado da sessão",
+    Callback = function()
+        warn("[DEBUG] No deserto/castelo:", estaNoDeserto())
+        warn("[DEBUG] Sessão ativa:", desertSessionActive)
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            warn("[DEBUG] Posição:", player.Character.HumanoidRootPart.Position)
+        end
     end
 })
