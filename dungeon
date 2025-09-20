@@ -485,8 +485,8 @@ local Tabs = {
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
     desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
+    castle = Window:AddTab({ Title = "Castelo Infinito", Icon = "" })
 }
-
 
 -- Tạo mapping giữa các map và danh sách mob tương ứng
 local mobsByWorld = {
@@ -3806,9 +3806,33 @@ local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
 local player = game.Players.LocalPlayer
 
 -- ==========================
--- Configuração Castelo Infinito
+-- Configuração Castelo Infinito (VERSÃO CORRIGIDA PARA INTEGRAR NO SCRIPT)
 -- ==========================
 
+-- Primeiro, encontre a linha onde há: local Tabs = { ... }
+-- E adicione ", castle" no final da lista
+
+-- Exemplo de como deve ficar:
+-- local Tabs = {
+--     Discord = Window:AddTab({ Title = "INFO", Icon = ""}),
+--     Main = Window:AddTab({ Title = "Main", Icon = "" }),
+--     tp = Window:AddTab({ Title = "Teleports", Icon = "" }),
+--     mount = Window:AddTab({ Title = "Mount Location/farm", Icon = "" }),
+--     dungeon = Window:AddTab({ Title = "Dungeon ", Icon = "" }),
+--     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
+--     Player = Window:AddTab({ Title = "Player", Icon = "" }),
+--     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+--     desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
+--     castle = Window:AddTab({ Title = "Castelo Infinito", Icon = "" })  -- ADICIONE ESTA LINHA
+-- }
+
+-- AGORA COLE ESTE CÓDIGO NO FINAL DO SEU SCRIPT, ANTES DAS LINHAS DE SaveManager:
+
+-- ==========================
+-- Configuração Castelo Infinito (ADICIONE NO FINAL DO SCRIPT)
+-- ==========================
+
+-- Verificar e inicializar configurações
 if ConfigSystem.DefaultConfig.CastleInfiniteToggle == nil then
     ConfigSystem.DefaultConfig.CastleInfiniteToggle = false
 end
@@ -3830,9 +3854,14 @@ if ConfigSystem.CurrentConfig.CastleAutoSpeed == nil then
     ConfigSystem.CurrentConfig.CastleAutoSpeed = ConfigSystem.DefaultConfig.CastleAutoSpeed
 end
 
-local castleEnabled = ConfigSystem.CurrentConfig.CastleInfiniteToggle
+-- Variáveis locais
+local castleInfiniteEnabled = ConfigSystem.CurrentConfig.CastleInfiniteToggle
 local speedValue = ConfigSystem.CurrentConfig.CastleInfiniteSpeed
 local autoSpeedEnabled = ConfigSystem.CurrentConfig.CastleAutoSpeed
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
+local castlePlayer = game.Players.LocalPlayer
 
 -- ==========================
 -- Controle de Sessão
@@ -3840,6 +3869,7 @@ local autoSpeedEnabled = ConfigSystem.CurrentConfig.CastleAutoSpeed
 local castleSessionActive = false
 local autoSpeedLoop = false
 
+-- Detectar se está no castelo
 local function estaNoCastelo()
     local main = workspace:FindFirstChild("__Main")
     if main then
@@ -3851,6 +3881,7 @@ local function estaNoCastelo()
     return false
 end
 
+-- Resetar estado da sessão
 local function resetarEstadoSessao()
     castleSessionActive = false
     autoSpeedLoop = false
@@ -3956,13 +3987,13 @@ end
 -- ==========================
 -- Criação da Aba GUI
 -- ==========================
-Tabs.castle = Window:AddTab({ Title = "Castelo Infinito", Icon = "" })
+-- IMPORTANTE: Primeiro você precisa adicionar a aba castle na lista de Tabs (veja o início deste código)
 
 Tabs.castle:AddToggle("CastleInfiniteToggle", {
     Title = "Ativar Castelo Infinito",
-    Default = castleEnabled,
+    Default = castleInfiniteEnabled,
     Callback = function(state)
-        castleEnabled = state
+        castleInfiniteEnabled = state
         ConfigSystem.CurrentConfig.CastleInfiniteToggle = state
         ConfigSystem.SaveConfig()
         if state then
@@ -4034,8 +4065,8 @@ Tabs.castle:AddButton({
     Callback = function()
         warn("[DEBUG] No castelo:", estaNoCastelo())
         warn("[DEBUG] Sessão ativa:", castleSessionActive)
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            warn("[DEBUG] Posição:", player.Character.HumanoidRootPart.Position)
+        if castlePlayer.Character and castlePlayer.Character:FindFirstChild("HumanoidRootPart") then
+            warn("[DEBUG] Posição:", castlePlayer.Character.HumanoidRootPart.Position)
         end
     end
 })
