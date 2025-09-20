@@ -3762,6 +3762,18 @@ local function pararAutoVelocidade()
     autoSpeedEnabled = false
     autoSpeedLoop = false
 end
+-- Adicionar Dropdown para escolher entre Deserto ou Castelo Infinito
+Tabs.desert:AddDropdown("DesertDungeonMode", {
+    Title = "Selecionar Modo",
+    Values = { "Deserto Infinito", "Castelo Infinito" },
+    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
+    Callback = function(value)
+        dungeonMode = (value == "Deserto Infinito") and 1 or 2
+        ConfigSystem.CurrentConfig.DesertDungeonMode = dungeonMode
+        ConfigSystem.SaveConfig()
+        warn("[Deserto Infinito] Modo selecionado:", value)
+    end
+})
 
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
     Title = "Ativar Deserto/Castelo Infinito",
