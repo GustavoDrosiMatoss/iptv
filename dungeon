@@ -3852,3 +3852,73 @@ Tabs.desert:AddButton({
         warn("==============================")
     end
 })
+-- ==========================
+-- AUTO CLICK (PunchAttackAoE) COM SALVAMENTO
+-- ==========================
+
+-- Config padrão
+if ConfigSystem.DefaultConfig.AutoClick == nil then
+    ConfigSystem.DefaultConfig.AutoClick = false
+end
+
+-- Config atual
+if ConfigSystem.CurrentConfig.AutoClick == nil then
+    ConfigSystem.CurrentConfig.AutoClick = ConfigSystem.DefaultConfig.AutoClick
+end
+
+-- Variáveis
+local autoClickAtivo = ConfigSystem.CurrentConfig.AutoClick
+local autoClickLoop = false
+
+local function executarAutoClick()
+    if autoClickLoop then return end
+    autoClickLoop = true
+    task.spawn(function()
+        while autoClickAtivo and autoClickLoop do
+            local args = {
+                [1] = {
+                    [1] = {
+                        ["Event"] = "PunchAttackAoE",
+                        ["Enemys"] = {}
+                    },
+                    [2] = "\4"
+                }
+            }
+            if remote then
+                remote:FireServer(unpack(args))
+                warn("[AutoClick] Ataque enviado")
+            end
+            task.wait(0.2) -- intervalo entre ataques
+        end
+        autoClickLoop = false
+    end)
+end
+
+local function pararAutoClick()
+    autoClickAtivo = false
+    autoClickLoop = false
+end
+
+-- ==========================
+-- BOTÃO NA TAB MAIN
+-- ==========================
+
+Tabs.Main:AddToggle("AutoClickToggle", {
+    Title = "Auto Click (PunchAttackAoE)",
+    Default = autoClickAtivo,
+    Callback = function(state)
+        autoClickAtivo = state
+        ConfigSystem.CurrentConfig.AutoClick = state
+        ConfigSystem.SaveConfig()
+        if state then
+            executarAutoClick()
+        else
+            pararAutoClick()
+        end
+    end
+})
+
+-- Se estava ativo antes de reiniciar, reativa sozinho
+if autoClickAtivo then
+    executarAutoClick()
+end
