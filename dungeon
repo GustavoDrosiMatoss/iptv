@@ -3420,7 +3420,7 @@ local function iniciarDesertoInfinito()
     desertSessionActive = true
 
     task.spawn(function()
-        -- Escolher nome do Event de acordo com a seleção
+        -- Pega o Event conforme o modo selecionado
         local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
 
         -- Enviar Create
@@ -3430,10 +3430,10 @@ local function iniciarDesertoInfinito()
                     ["Event"] = eventName,
                     ["Action"] = "Create"
                 },
-                [2] = "\12"
+                [2] = "\13"
             }
         }
-        remote:FireServer(unpack(argsCreate))
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(argsCreate))
         warn("[Deserto Infinito] Comando Create enviado com Event:", eventName)
 
         task.wait(3)
@@ -3442,15 +3442,15 @@ local function iniciarDesertoInfinito()
         local argsStart = {
             [1] = {
                 [1] = {
-                    ["Dungeon"] = DUNGEON_ID,
+                    ["Dungeon"] = 5116548088,
                     ["Event"] = eventName,
                     ["Action"] = "Start"
                 },
-                [2] = "\12"
+                [2] = "\13"
             }
         }
-        remote:FireServer(unpack(argsStart))
-        warn("[Deserto Infinito] Comando Start enviado. Dungeon:", DUNGEON_ID, "Event:", eventName)
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(argsStart))
+        warn("[Deserto Infinito] Comando Start enviado. Dungeon:", 5116548088, "Event:", eventName)
 
         task.wait(2)
         aplicarVelocidade(speedValue)
@@ -3462,7 +3462,6 @@ local function iniciarDesertoInfinito()
         monitorarSaidaDeserto()
     end)
 end
-
 -- ==========================
 -- GUI da aba Deserto (com seleção de modo)
 -- ==========================
