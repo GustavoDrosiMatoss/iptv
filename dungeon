@@ -3601,7 +3601,7 @@ local function resetarEstadoSessao()
 end
 
 -- ==========================
--- FUNÇÃO PRINCIPAL MELHORADA
+-- FUNÇÃO PRINCIPAL CORRIGIDA PARA O START
 -- ==========================
 
 local function iniciarDesertoInfinito()
@@ -3628,9 +3628,11 @@ local function iniciarDesertoInfinito()
         local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
         warn(string.format("[DEBUG] Usando evento: %s", eventName))
 
-        -- Create com retry
+        -- ETAPA 1: CREATE
+        warn("[DEBUG] === INICIANDO ETAPA CREATE ===")
         local createSuccess = false
-        for tentativa = 1, 3 do
+        
+        for tentativa = 1, 5 do -- Aumentei para 5 tentativas
             local argsCreate = {
                 [1] = {
                     [1] = {
@@ -3643,136 +3645,182 @@ local function iniciarDesertoInfinito()
             
             if remote then 
                 remote:FireServer(unpack(argsCreate))
-                warn(string.format("[DEBUG] Comando Create enviado - Tentativa %d", tentativa))
+                warn(string.format("[DEBUG] Comando Create enviado - Tentativa %d/5", tentativa))
             end
             
-            task.wait(2)
+            -- Esperar mais tempo para o Create processar
+            task.wait(4)
             
-            -- Verificar se foi criado com sucesso
+            -- Verificar se foi criado
             local criado, tipoCriado = estaNoMundoInfinito()
             if criado then
                 createSuccess = true
-                warn(string.format("[DEBUG] Create bem-sucedido - Tipo: %s", tipoCriado or "desconhecido"))
+                warn(string.format("[DEBUG] ✅ Create bem-sucedido - Tipo: %s", tipoCriado or "desconhecido"))
                 break
+            else
+                warn(string.format("[DEBUG] ❌ Create falhou na tentativa %d", tentativa))
+                if tentativa < 5 then
+                    warn("[DEBUG] Tentando novamente...")
+                end
             end
         end
         
         if not createSuccess then
-            warn("[ERRO] Falha ao criar o mundo infinito após 3 tentativas")
+            warn("[ERRO] ❌ Falha ao criar o mundo infinito após 5 tentativas")
             resetarEstadoSessao()
             return
         end
 
-        task.wait(1)
-
-        -- Start
-        local argsStart = {
-            [1] = {
-                [1] = {
-                    ["Dungeon"] = DUNGEON_ID,
-                    ["Event"] = eventName,
-                    ["Action"] = "Start"
-                },
-                [2] = "\13"
-            }
-        }
+        -- ETAPA 2: START
+        warn("[DEBUG] === INICIANDO ETAPA START ===")
+        local startSuccess = false
         
-        if remote then 
-            remote:FireServer(unpack(argsStart))
-            warn("[DEBUG] Comando Start enviado")
+        for tentativa = 1, 3 do
+            -- Aguardar um pouco antes do Start
+            task.wait(3)
+            
+            local argsStart = {
+                [1] = {
+                    [1] = {
+                        ["Dungeon"] = DUNGEON_ID,
+                        ["Event"] = eventName,
+                        ["Action"] = "Start"
+                    },
+                    [2] = "\13"
+                }
+            }
+            
+            if remote then 
+                remote:FireServer(unpack(argsStart))
+                warn(string.format("[DEBUG] Comando Start enviado - Tentativa %d/3", tentativa))
+            end
+            
+            -- Aguardar processamento do Start
+            task.wait(5)
+            
+            -- Verificar se ainda está no mundo (não foi dissolvido)
+            local aindaNoMundo, tipoAtual = estaNoMundoInfinito()
+            if aindaNoMundo then
+                startSuccess = true
+                warn(string.format("[DEBUG] ✅ Start bem-sucedido - Ainda no mundo: %s", tipoAtual or "desconhecido"))
+                break
+            else
+                warn(string.format("[DEBUG] ❌ Start falhou na tentativa %d - Party foi dissolvida", tentativa))
+                if tentativa < 3 then
+                    warn("[DEBUG] Recriando party e tentando Start novamente...")
+                    -- Recriar a party
+                    local argsRecreate = {
+                        [1] = {
+                            [1] = {
+                                ["Event"] = eventName,
+                                ["Action"] = "Create"
+                            },
+                            [2] = "\13"
+                        }
+                    }
+                    if remote then remote:FireServer(unpack(argsRecreate)) end
+                    task.wait(4)
+                end
+            end
+        end
+        
+        if not startSuccess then
+            warn("[ERRO] ❌ Falha ao iniciar o mundo infinito após 3 tentativas")
+            resetarEstadoSessao()
+            return
         end
 
+        -- ETAPA 3: ATIVAÇÃO DOS CONTROLES
+        warn("[DEBUG] === ATIVANDO CONTROLES ===")
         task.wait(2)
         aplicarVelocidade(speedValue)
         if autoSpeedEnabled then iniciarAutoVelocidade() end
         monitorarSaidaDeserto()
+        
+        warn("[DEBUG] ✅ Deserto/Castelo Infinito iniciado com sucesso!")
     end)
 end
 
 -- ==========================
--- GUI COMPLETA
+-- FUNÇÃO DE APLICAR VELOCIDADE CORRIGIDA
 -- ==========================
 
-Tabs.desert:AddDropdown("DesertDungeonMode", {
-    Title = "Selecionar Modo",
-    Values = { "Deserto Infinito", "Castelo Infinito" },
-    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
-    Callback = function(value)
-        dungeonMode = (value == "Deserto Infinito") and 1 or 2
-        ConfigSystem.CurrentConfig.DesertDungeonMode = dungeonMode
-        ConfigSystem.SaveConfig()
-        warn("[Deserto Infinito] Modo selecionado:", value)
+local function aplicarVelocidade(valor)
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
+        warn("[DEBUG] Não pode aplicar velocidade - Character/HRP não encontrado")
+        return 
     end
-})
-
-Tabs.desert:AddToggle("DesertInfiniteToggle", {
-    Title = "Ativar Deserto/Castelo Infinito",
-    Default = desertEnabled,
-    Callback = function(state)
-        desertEnabled = state
-        ConfigSystem.CurrentConfig.DesertInfiniteToggle = state
-        ConfigSystem.SaveConfig()
-        if state then iniciarDesertoInfinito() else resetarEstadoSessao() end
+    
+    -- Verificar se ainda está no mundo infinito
+    local noMundo, tipo = estaNoMundoInfinito()
+    if not noMundo then
+        warn("[DEBUG] Não aplicando velocidade - não está no mundo infinito")
+        return
     end
-})
-
-Tabs.desert:AddInput("DesertInfiniteSpeed", {
-    Title = "Velocidade",
-    Default = tostring(speedValue),
-    Placeholder = "Ex: 2",
-    Numeric = true,
-    Finished = true,
-    Callback = function(value)
-        local num = tonumber(value)
-        if num and num > 0 then
-            speedValue = num
-            ConfigSystem.CurrentConfig.DesertInfiniteSpeed = num
-            ConfigSystem.SaveConfig()
-            aplicarVelocidade(num)
-        end
+    
+    -- Usar o evento correto baseado no tipo de mundo
+    local speedEvent = "InfiniteModeAction" -- Padrão para deserto
+    if tipo == "castle" or dungeonMode == 2 then
+        speedEvent = "InfiniteCastleAction"
     end
-})
-
-Tabs.desert:AddToggle("DesertAutoSpeed", {
-    Title = "Auto Velocidade",
-    Default = autoSpeedEnabled,
-    Callback = function(state)
-        autoSpeedEnabled = state
-        ConfigSystem.CurrentConfig.DesertAutoSpeed = state
-        ConfigSystem.SaveConfig()
-        if state then
-            if estaNoDeserto() then iniciarAutoVelocidade() end
-        else
-            pararAutoVelocidade()
-        end
+    
+    local argsSpeed = {
+        [1] = {
+            [1] = {
+                ["Speed"] = valor,
+                ["Event"] = speedEvent,
+                ["Action"] = "SpeedUp"
+            },
+            [2] = "\13"
+        }
+    }
+    
+    if remote then 
+        remote:FireServer(unpack(argsSpeed))
+        warn(string.format("[DEBUG] ✅ Velocidade %d aplicada usando evento: %s", valor, speedEvent))
     end
-})
+end
 
-Tabs.desert:AddToggle("DesertInfiniteTeleport", {
-    Title = "Teleport Fixo + Parar",
-    Default = teleportEnabled,
-    Callback = function(state)
-        teleportEnabled = state
-        ConfigSystem.CurrentConfig.DesertInfiniteTeleport = state
-        ConfigSystem.SaveConfig()
-        if state then manterTeleport() end
+-- ==========================
+-- BOTÕES DE DEBUG MELHORADOS
+-- ==========================
+
+-- Substitua os botões existentes por estes:
+
+Tabs.desert:AddButton({
+    Title = "🔄 Forçar Recriação",
+    Description = "Force uma nova criação mesmo se já estiver ativo",
+    Callback = function()
+        warn("[DEBUG] === FORÇANDO RECRIAÇÃO ===")
+        resetarEstadoSessao()
+        task.wait(2)
+        iniciarDesertoInfinito()
     end
 })
 
 Tabs.desert:AddButton({
     Title = "Resetar Estado",
-    Callback = function() resetarEstadoSessao() end
+    Callback = function() 
+        resetarEstadoSessao()
+        warn("[DEBUG] Estado resetado pelo usuário")
+    end
 })
 
 Tabs.desert:AddButton({
-    Title = "Verificar Status (Debug)",
+    Title = "🔍 Debug Completo",
+    Description = "Mostra informações detalhadas do sistema",
     Callback = function()
         local emMundo, tipo = estaNoMundoInfinito()
-        warn("=== DEBUG DESERTO INFINITO ===")
+        warn("=== 🔍 DEBUG COMPLETO DESERTO INFINITO ===")
         warn("[DEBUG] Sessão ativa:", desertSessionActive)
+        warn("[DEBUG] Auto Speed ativo:", autoSpeedEnabled)
+        warn("[DEBUG] Auto Speed Loop:", autoSpeedLoop)
+        warn("[DEBUG] Teleport ativo:", teleportEnabled)
         warn("[DEBUG] Modo configurado:", (dungeonMode == 1 and "Deserto") or "Castelo")
         warn("[DEBUG] Em mundo infinito:", emMundo)
         warn("[DEBUG] Tipo detectado:", tipo or "nenhum")
+        warn("[DEBUG] Dungeon ID:", DUNGEON_ID)
+        warn("[DEBUG] Velocidade configurada:", speedValue)
         
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local pos = player.Character.HumanoidRootPart.Position
@@ -3785,12 +3833,36 @@ Tabs.desert:AddButton({
             local world = main:FindFirstChild("__World")
             if world then
                 warn("[DEBUG] Nome do mundo atual:", world.Name)
+                -- Listar filhos do mundo para debug
+                warn("[DEBUG] Filhos do mundo:")
+                for i, child in pairs(world:GetChildren()) do
+                    if i <= 5 then -- Limitar a 5 para não spammar
+                        warn(string.format("[DEBUG]   - %s (%s)", child.Name, child.ClassName))
+                    end
+                end
             else
                 warn("[DEBUG] __World não encontrado")
             end
         else
             warn("[DEBUG] __Main não encontrado")
         end
-        warn("==============================")
+        
+        -- Verificar remote
+        if remote then
+            warn("[DEBUG] Remote conectado: ✅")
+        else
+            warn("[DEBUG] Remote conectado: ❌")
+        end
+        
+        warn("==========================================")
+    end
+})
+
+Tabs.desert:AddButton({
+    Title = "⚡ Teste Velocidade",
+    Description = "Testa aplicar velocidade manualmente",
+    Callback = function()
+        warn("[DEBUG] === TESTANDO VELOCIDADE ===")
+        aplicarVelocidade(speedValue)
     end
 })
