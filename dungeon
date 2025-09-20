@@ -3781,46 +3781,86 @@ local function aplicarVelocidade(valor)
     end
 end
 
--- ==========================
--- BOTÕES DE DEBUG MELHORADOS
--- ==========================
+Tabs.desert:AddDropdown("DesertDungeonMode", {
+    Title = "Selecionar Modo",
+    Values = { "Deserto Infinito", "Castelo Infinito" },
+    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
+    Callback = function(value)
+        dungeonMode = (value == "Deserto Infinito") and 1 or 2
+        ConfigSystem.CurrentConfig.DesertDungeonMode = dungeonMode
+        ConfigSystem.SaveConfig()
+        warn("[Deserto Infinito] Modo selecionado:", value)
+    end
+})
 
--- Substitua os botões existentes por estes:
+Tabs.desert:AddToggle("DesertInfiniteToggle", {
+    Title = "Ativar Deserto/Castelo Infinito",
+    Default = desertEnabled,
+    Callback = function(state)
+        desertEnabled = state
+        ConfigSystem.CurrentConfig.DesertInfiniteToggle = state
+        ConfigSystem.SaveConfig()
+        if state then iniciarDesertoInfinito() else resetarEstadoSessao() end
+    end
+})
 
-Tabs.desert:AddButton({
-    Title = "🔄 Forçar Recriação",
-    Description = "Force uma nova criação mesmo se já estiver ativo",
-    Callback = function()
-        warn("[DEBUG] === FORÇANDO RECRIAÇÃO ===")
-        resetarEstadoSessao()
-        task.wait(2)
-        iniciarDesertoInfinito()
+Tabs.desert:AddInput("DesertInfiniteSpeed", {
+    Title = "Velocidade",
+    Default = tostring(speedValue),
+    Placeholder = "Ex: 2",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            speedValue = num
+            ConfigSystem.CurrentConfig.DesertInfiniteSpeed = num
+            ConfigSystem.SaveConfig()
+            aplicarVelocidade(num)
+        end
+    end
+})
+
+Tabs.desert:AddToggle("DesertAutoSpeed", {
+    Title = "Auto Velocidade",
+    Default = autoSpeedEnabled,
+    Callback = function(state)
+        autoSpeedEnabled = state
+        ConfigSystem.CurrentConfig.DesertAutoSpeed = state
+        ConfigSystem.SaveConfig()
+        if state then
+            if estaNoDeserto() then iniciarAutoVelocidade() end
+        else
+            pararAutoVelocidade()
+        end
+    end
+})
+
+Tabs.desert:AddToggle("DesertInfiniteTeleport", {
+    Title = "Teleport Fixo + Parar",
+    Default = teleportEnabled,
+    Callback = function(state)
+        teleportEnabled = state
+        ConfigSystem.CurrentConfig.DesertInfiniteTeleport = state
+        ConfigSystem.SaveConfig()
+        if state then manterTeleport() end
     end
 })
 
 Tabs.desert:AddButton({
     Title = "Resetar Estado",
-    Callback = function() 
-        resetarEstadoSessao()
-        warn("[DEBUG] Estado resetado pelo usuário")
-    end
+    Callback = function() resetarEstadoSessao() end
 })
 
 Tabs.desert:AddButton({
-    Title = "🔍 Debug Completo",
-    Description = "Mostra informações detalhadas do sistema",
+    Title = "Verificar Status (Debug)",
     Callback = function()
         local emMundo, tipo = estaNoMundoInfinito()
-        warn("=== 🔍 DEBUG COMPLETO DESERTO INFINITO ===")
+        warn("=== DEBUG DESERTO INFINITO ===")
         warn("[DEBUG] Sessão ativa:", desertSessionActive)
-        warn("[DEBUG] Auto Speed ativo:", autoSpeedEnabled)
-        warn("[DEBUG] Auto Speed Loop:", autoSpeedLoop)
-        warn("[DEBUG] Teleport ativo:", teleportEnabled)
         warn("[DEBUG] Modo configurado:", (dungeonMode == 1 and "Deserto") or "Castelo")
         warn("[DEBUG] Em mundo infinito:", emMundo)
         warn("[DEBUG] Tipo detectado:", tipo or "nenhum")
-        warn("[DEBUG] Dungeon ID:", DUNGEON_ID)
-        warn("[DEBUG] Velocidade configurada:", speedValue)
         
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local pos = player.Character.HumanoidRootPart.Position
@@ -3833,36 +3873,12 @@ Tabs.desert:AddButton({
             local world = main:FindFirstChild("__World")
             if world then
                 warn("[DEBUG] Nome do mundo atual:", world.Name)
-                -- Listar filhos do mundo para debug
-                warn("[DEBUG] Filhos do mundo:")
-                for i, child in pairs(world:GetChildren()) do
-                    if i <= 5 then -- Limitar a 5 para não spammar
-                        warn(string.format("[DEBUG]   - %s (%s)", child.Name, child.ClassName))
-                    end
-                end
             else
                 warn("[DEBUG] __World não encontrado")
             end
         else
             warn("[DEBUG] __Main não encontrado")
         end
-        
-        -- Verificar remote
-        if remote then
-            warn("[DEBUG] Remote conectado: ✅")
-        else
-            warn("[DEBUG] Remote conectado: ❌")
-        end
-        
-        warn("==========================================")
-    end
-})
-
-Tabs.desert:AddButton({
-    Title = "⚡ Teste Velocidade",
-    Description = "Testa aplicar velocidade manualmente",
-    Callback = function()
-        warn("[DEBUG] === TESTANDO VELOCIDADE ===")
-        aplicarVelocidade(speedValue)
+        warn("==============================")
     end
 })
