@@ -3801,3 +3801,243 @@ Tabs.desert:AddButton({
         end
     end
 })
+-- ==========================
+-- Configuração Castelo Infinito (VERSÃO CORRIGIDA)
+-- ==========================
+
+if ConfigSystem.DefaultConfig.CastleInfiniteToggle == nil then
+    ConfigSystem.DefaultConfig.CastleInfiniteToggle = false
+end
+if ConfigSystem.CurrentConfig.CastleInfiniteToggle == nil then
+    ConfigSystem.CurrentConfig.CastleInfiniteToggle = ConfigSystem.DefaultConfig.CastleInfiniteToggle
+end
+
+if ConfigSystem.DefaultConfig.CastleInfiniteSpeed == nil then
+    ConfigSystem.DefaultConfig.CastleInfiniteSpeed = 2
+end
+if ConfigSystem.CurrentConfig.CastleInfiniteSpeed == nil then
+    ConfigSystem.CurrentConfig.CastleInfiniteSpeed = ConfigSystem.DefaultConfig.CastleInfiniteSpeed
+end
+
+if ConfigSystem.DefaultConfig.CastleAutoSpeed == nil then
+    ConfigSystem.DefaultConfig.CastleAutoSpeed = false
+end
+if ConfigSystem.CurrentConfig.CastleAutoSpeed == nil then
+    ConfigSystem.CurrentConfig.CastleAutoSpeed = ConfigSystem.DefaultConfig.CastleAutoSpeed
+end
+
+local castleEnabled = ConfigSystem.CurrentConfig.CastleInfiniteToggle
+local speedValue = ConfigSystem.CurrentConfig.CastleInfiniteSpeed
+local autoSpeedEnabled = ConfigSystem.CurrentConfig.CastleAutoSpeed
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
+local player = game.Players.LocalPlayer
+
+-- ==========================
+-- Controle de Sessão
+-- ==========================
+local castleSessionActive = false
+local autoSpeedLoop = false
+
+-- Detectar se está no castelo
+local function estaNoCastelo()
+    local main = workspace:FindFirstChild("__Main")
+    if main then
+        local world = main:FindFirstChild("__World")
+        if world and world.Name == "InfiniteCastle" then
+            return true
+        end
+    end
+    return false
+end
+
+-- Resetar estado da sessão
+local function resetarEstadoSessao()
+    castleSessionActive = false
+    autoSpeedLoop = false
+    warn("[Castelo Infinito] Estado da sessão resetado")
+end
+
+-- ==========================
+-- Funções principais
+-- ==========================
+local function aplicarVelocidade(valor)
+    if not estaNoCastelo() then
+        warn("[Castelo Infinito] Não está no castelo, não aplicando velocidade")
+        return
+    end
+
+    local argsSpeed = {
+        [1] = {
+            [1] = {
+                ["Speed"] = valor,
+                ["Event"] = "InfiniteCastleAction",
+                ["Action"] = "SpeedUp"
+            },
+            [2] = "\13"
+        }
+    }
+    remote:FireServer(unpack(argsSpeed))
+    warn("[Castelo Infinito] Velocidade ajustada para:", valor)
+end
+
+local function iniciarAutoVelocidade()
+    if autoSpeedLoop then return end
+    autoSpeedLoop = true
+    warn("[Castelo Infinito] Auto velocidade ativada")
+
+    task.spawn(function()
+        while autoSpeedEnabled and autoSpeedLoop do
+            if estaNoCastelo() then
+                aplicarVelocidade(speedValue)
+                task.wait(3)
+            else
+                task.wait(1)
+            end
+        end
+        autoSpeedLoop = false
+        warn("[Castelo Infinito] Auto velocidade desativada")
+    end)
+end
+
+local function pararAutoVelocidade()
+    autoSpeedEnabled = false
+    autoSpeedLoop = false
+    warn("[Castelo Infinito] Auto velocidade parada")
+end
+
+local function iniciarCasteloInfinito()
+    if castleSessionActive then
+        warn("[Castelo Infinito] Sessão já ativa")
+        return
+    end
+
+    warn("[Castelo Infinito] Iniciando nova sessão...")
+    castleSessionActive = true
+
+    task.spawn(function()
+        -- Criar
+        local argsCreate = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "InfiniteCastleAction",
+                    ["Action"] = "Create"
+                },
+                [2] = "\13"
+            }
+        }
+        remote:FireServer(unpack(argsCreate))
+        warn("[Castelo Infinito] Comando Create enviado")
+
+        task.wait(3)
+
+        -- Start
+        local argsStart = {
+            [1] = {
+                [1] = {
+                    ["Dungeon"] = 5116548088,
+                    ["Event"] = "InfiniteCastleAction",
+                    ["Action"] = "Start"
+                },
+                [2] = "\13"
+            }
+        }
+        remote:FireServer(unpack(argsStart))
+        warn("[Castelo Infinito] Comando Start enviado")
+
+        task.wait(2)
+        aplicarVelocidade(speedValue)
+
+        if autoSpeedEnabled then
+            iniciarAutoVelocidade()
+        end
+    end)
+end
+
+-- ==========================
+-- Criação da Aba GUI
+-- ==========================
+Tabs.castle = Window:AddTab({ Title = "Castelo Infinito", Icon = "" })
+
+Tabs.castle:AddToggle("CastleInfiniteToggle", {
+    Title = "Ativar Castelo Infinito",
+    Default = castleEnabled,
+    Callback = function(state)
+        castleEnabled = state
+        ConfigSystem.CurrentConfig.CastleInfiniteToggle = state
+        ConfigSystem.SaveConfig()
+        if state then
+            iniciarCasteloInfinito()
+        else
+            resetarEstadoSessao()
+        end
+    end
+})
+
+Tabs.castle:AddInput("CastleInfiniteSpeed", {
+    Title = "Velocidade",
+    Default = tostring(speedValue),
+    Placeholder = "Ex: 2",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            speedValue = num
+            ConfigSystem.CurrentConfig.CastleInfiniteSpeed = num
+            ConfigSystem.SaveConfig()
+            aplicarVelocidade(num)
+        end
+    end
+})
+
+Tabs.castle:AddToggle("CastleAutoSpeed", {
+    Title = "Auto Velocidade",
+    Description = "Aplica velocidade automaticamente a cada 3 segundos",
+    Default = autoSpeedEnabled,
+    Callback = function(state)
+        autoSpeedEnabled = state
+        ConfigSystem.CurrentConfig.CastleAutoSpeed = state
+        ConfigSystem.SaveConfig()
+
+        if state then
+            if estaNoCastelo() then
+                iniciarAutoVelocidade()
+            else
+                warn("[Castelo Infinito] Entre no castelo para ativar auto velocidade")
+            end
+        else
+            pararAutoVelocidade()
+        end
+    end
+})
+
+Tabs.castle:AddButton({
+    Title = "Aplicar Velocidade Agora",
+    Description = "Aplica a velocidade imediatamente",
+    Callback = function()
+        aplicarVelocidade(speedValue)
+    end
+})
+
+Tabs.castle:AddButton({
+    Title = "Resetar Estado",
+    Description = "Use se o script não detectar que você saiu do castelo",
+    Callback = function()
+        resetarEstadoSessao()
+        warn("[Castelo Infinito] Estado resetado manualmente")
+    end
+})
+
+Tabs.castle:AddButton({
+    Title = "Verificar Status",
+    Description = "Mostrar se está no castelo e estado da sessão",
+    Callback = function()
+        warn("[DEBUG] No castelo:", estaNoCastelo())
+        warn("[DEBUG] Sessão ativa:", castleSessionActive)
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            warn("[DEBUG] Posição:", player.Character.HumanoidRootPart.Position)
+        end
+    end
+})
