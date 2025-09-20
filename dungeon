@@ -3438,11 +3438,69 @@ local autoSpeedLoop = false
 local teleportPosition = CFrame.new(474.099365, 4454.42578, -1875.93811) -- posição padrão, pode alterar se quiser
 
 -- ==========================
--- Funções auxiliares
+-- FUNÇÕES DE DETECÇÃO CORRIGIDAS
 -- ==========================
+
+-- Função melhorada para detectar se está no deserto/castelo infinito
+local function estaNoMundoInfinito()
+    -- Método 1: Verificar o mundo atual
+    local main = workspace:FindFirstChild("__Main")
+    if main then
+        local world = main:FindFirstChild("__World")
+        if world then
+            -- Verifica se está no Deserto Infinito
+            if world.Name == "InfiniteDesert" or world.Name == "DesertInfinite" then
+                warn("[DEBUG] Detectado no Deserto Infinito")
+                return true, "desert"
+            end
+            -- Verifica se está no Castelo Infinito
+            if world.Name == "InfiniteCastle" or world.Name == "CastleInfinite" then
+                warn("[DEBUG] Detectado no Castelo Infinito")
+                return true, "castle"
+            end
+        end
+    end
+    
+    -- Método 2: Verificar pela posição (backup)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local position = player.Character.HumanoidRootPart.Position
+        local altitude = position.Y
+        
+        -- Se está muito alto, provavelmente está em um mundo infinito
+        if altitude > 4000 then
+            warn("[DEBUG] Detectado por altitude (Y > 4000):", altitude)
+            return true, "unknown"
+        end
+        
+        -- Verificações específicas por coordenadas conhecidas
+        if altitude > 2000 and altitude < 6000 then
+            -- Pode estar em deserto infinito
+            if math.abs(position.X) < 2000 and math.abs(position.Z) < 2000 then
+                warn("[DEBUG] Detectado no Deserto por coordenadas")
+                return true, "desert"
+            end
+        end
+    end
+    
+    -- Método 3: Verificar GUI ou outros indicadores
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        -- Procurar por GUI específica do modo infinito
+        for _, gui in pairs(playerGui:GetChildren()) do
+            if gui.Name:find("Infinite") or gui.Name:find("Desert") or gui.Name:find("Castle") then
+                warn("[DEBUG] Detectado por GUI:", gui.Name)
+                return true, "gui"
+            end
+        end
+    end
+    
+    return false, nil
+end
+
+-- Função específica para cada modo (compatibilidade)
 local function estaNoDeserto()
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return false end
-    return player.Character.HumanoidRootPart.Position.Y > 4000
+    local emMundoInfinito, tipo = estaNoMundoInfinito()
+    return emMundoInfinito
 end
 
 local function aplicarVelocidade(valor)
@@ -3480,16 +3538,35 @@ local function pararAutoVelocidade()
     autoSpeedLoop = false
 end
 
+-- ==========================
+-- MONITORAMENTO MELHORADO
+-- ==========================
+
 local function monitorarSaidaDeserto()
     task.spawn(function()
+        local tentativasConsecutivas = 0
+        local maxTentativas = 3  -- Só reseta após 3 verificações seguidas
+        
         while desertSessionActive do
-            task.wait(5)
-            if not estaNoDeserto() then
-                desertSessionActive = false
-                pararAutoVelocidade()
-                warn("[Deserto Infinito] Saiu do deserto/castelo, resetando sessão")
-                break
+            local emMundoInfinito, tipo = estaNoMundoInfinito()
+            
+            if not emMundoInfinito then
+                tentativasConsecutivas = tentativasConsecutivas + 1
+                warn(string.format("[DEBUG] Não detectado no mundo infinito - Tentativa %d/%d", 
+                    tentativasConsecutivas, maxTentativas))
+                
+                if tentativasConsecutivas >= maxTentativas then
+                    desertSessionActive = false
+                    pararAutoVelocidade()
+                    warn("[Deserto Infinito] Confirmado que saiu do mundo infinito, resetando sessão")
+                    break
+                end
+            else
+                tentativasConsecutivas = 0  -- Reset contador se detectar novamente
+                warn(string.format("[DEBUG] Confirmado no mundo infinito - Tipo: %s", tipo or "desconhecido"))
             end
+            
+            task.wait(3)  -- Verifica a cada 3 segundos
         end
     end)
 end
@@ -3524,28 +3601,69 @@ local function resetarEstadoSessao()
 end
 
 -- ==========================
--- Função principal de criação/início
+-- FUNÇÃO PRINCIPAL MELHORADA
 -- ==========================
+
 local function iniciarDesertoInfinito()
-    if desertSessionActive then return end
+    if desertSessionActive then 
+        warn("[Deserto Infinito] Sessão já ativa, ignorando...")
+        return 
+    end
+    
+    -- Verificar se já está em um mundo infinito
+    local jaEsta, tipo = estaNoMundoInfinito()
+    if jaEsta then
+        warn(string.format("[Deserto Infinito] Já está no mundo infinito (%s), apenas ativando controles...", tipo or "desconhecido"))
+        desertSessionActive = true
+        aplicarVelocidade(speedValue)
+        if autoSpeedEnabled then iniciarAutoVelocidade() end
+        monitorarSaidaDeserto()
+        return
+    end
+    
+    warn("[Deserto Infinito] Iniciando nova sessão...")
     desertSessionActive = true
 
     task.spawn(function()
         local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
+        warn(string.format("[DEBUG] Usando evento: %s", eventName))
 
-        -- Create
-        local argsCreate = {
-            [1] = {
+        -- Create com retry
+        local createSuccess = false
+        for tentativa = 1, 3 do
+            local argsCreate = {
                 [1] = {
-                    ["Event"] = eventName,
-                    ["Action"] = "Create"
-                },
-                [2] = "\13"
+                    [1] = {
+                        ["Event"] = eventName,
+                        ["Action"] = "Create"
+                    },
+                    [2] = "\13"
+                }
             }
-        }
-        if remote then remote:FireServer(unpack(argsCreate)) end
+            
+            if remote then 
+                remote:FireServer(unpack(argsCreate))
+                warn(string.format("[DEBUG] Comando Create enviado - Tentativa %d", tentativa))
+            end
+            
+            task.wait(2)
+            
+            -- Verificar se foi criado com sucesso
+            local criado, tipoCriado = estaNoMundoInfinito()
+            if criado then
+                createSuccess = true
+                warn(string.format("[DEBUG] Create bem-sucedido - Tipo: %s", tipoCriado or "desconhecido"))
+                break
+            end
+        end
+        
+        if not createSuccess then
+            warn("[ERRO] Falha ao criar o mundo infinito após 3 tentativas")
+            resetarEstadoSessao()
+            return
+        end
 
-        task.wait(3)
+        task.wait(1)
 
         -- Start
         local argsStart = {
@@ -3558,7 +3676,11 @@ local function iniciarDesertoInfinito()
                 [2] = "\13"
             }
         }
-        if remote then remote:FireServer(unpack(argsStart)) end
+        
+        if remote then 
+            remote:FireServer(unpack(argsStart))
+            warn("[DEBUG] Comando Start enviado")
+        end
 
         task.wait(2)
         aplicarVelocidade(speedValue)
@@ -3568,9 +3690,8 @@ local function iniciarDesertoInfinito()
 end
 
 -- ==========================
--- GUI completa
+-- GUI COMPLETA
 -- ==========================
-Tabs.desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" })
 
 Tabs.desert:AddDropdown("DesertDungeonMode", {
     Title = "Selecionar Modo",
@@ -3644,12 +3765,32 @@ Tabs.desert:AddButton({
 })
 
 Tabs.desert:AddButton({
-    Title = "Verificar Status",
+    Title = "Verificar Status (Debug)",
     Callback = function()
+        local emMundo, tipo = estaNoMundoInfinito()
+        warn("=== DEBUG DESERTO INFINITO ===")
         warn("[DEBUG] Sessão ativa:", desertSessionActive)
-        warn("[DEBUG] Modo:", (dungeonMode == 1 and "Deserto") or "Castelo")
+        warn("[DEBUG] Modo configurado:", (dungeonMode == 1 and "Deserto") or "Castelo")
+        warn("[DEBUG] Em mundo infinito:", emMundo)
+        warn("[DEBUG] Tipo detectado:", tipo or "nenhum")
+        
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            warn("[DEBUG] Posição:", player.Character.HumanoidRootPart.Position)
+            local pos = player.Character.HumanoidRootPart.Position
+            warn(string.format("[DEBUG] Posição: X=%.1f, Y=%.1f, Z=%.1f", pos.X, pos.Y, pos.Z))
         end
+        
+        -- Verificar mundo atual
+        local main = workspace:FindFirstChild("__Main")
+        if main then
+            local world = main:FindFirstChild("__World")
+            if world then
+                warn("[DEBUG] Nome do mundo atual:", world.Name)
+            else
+                warn("[DEBUG] __World não encontrado")
+            end
+        else
+            warn("[DEBUG] __Main não encontrado")
+        end
+        warn("==============================")
     end
 })
