@@ -3805,3 +3805,133 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2").dataRemoteEvent
 local player = game.Players.LocalPlayer
 
+-- ==========================
+-- Configuração Castelo Infinito
+-- ==========================
+if ConfigSystem.DefaultConfig.CastleInfiniteToggle == nil then
+    ConfigSystem.DefaultConfig.CastleInfiniteToggle = false
+end
+if ConfigSystem.CurrentConfig.CastleInfiniteToggle == nil then
+    ConfigSystem.CurrentConfig.CastleInfiniteToggle = ConfigSystem.DefaultConfig.CastleInfiniteToggle
+end
+
+if ConfigSystem.DefaultConfig.CastleInfiniteSpeed == nil then
+    ConfigSystem.DefaultConfig.CastleInfiniteSpeed = 2
+end
+if ConfigSystem.CurrentConfig.CastleInfiniteSpeed == nil then
+    ConfigSystem.CurrentConfig.CastleInfiniteSpeed = ConfigSystem.DefaultConfig.CastleInfiniteSpeed
+end
+
+if ConfigSystem.DefaultConfig.CastleAutoSpeed == nil then
+    ConfigSystem.DefaultConfig.CastleAutoSpeed = false
+end
+if ConfigSystem.CurrentConfig.CastleAutoSpeed == nil then
+    ConfigSystem.CurrentConfig.CastleAutoSpeed = ConfigSystem.DefaultConfig.CastleAutoSpeed
+end
+
+local castleEnabled = ConfigSystem.CurrentConfig.CastleInfiniteToggle
+local castleSpeedValue = ConfigSystem.CurrentConfig.CastleInfiniteSpeed
+local castleAutoSpeedEnabled = ConfigSystem.CurrentConfig.CastleAutoSpeed
+
+local castleSessionActive = false
+local castleAutoSpeedLoop = false
+
+-- Funções Castelo
+local function aplicarVelocidadeCastelo(valor)
+    if not castleSessionActive then return end
+    local argsSpeed = {
+        [1] = {
+            [1] = {
+                ["Speed"] = valor,
+                ["Event"] = "InfiniteCastleAction",
+                ["Action"] = "SpeedUp"
+            },
+            [2] = "\13"
+        }
+    }
+    remote:FireServer(unpack(argsSpeed))
+end
+
+local function iniciarAutoVelocidadeCastelo()
+    if castleAutoSpeedLoop then return end
+    castleAutoSpeedLoop = true
+    task.spawn(function()
+        while castleAutoSpeedEnabled and castleAutoSpeedLoop do
+            aplicarVelocidadeCastelo(castleSpeedValue)
+            task.wait(3)
+        end
+        castleAutoSpeedLoop = false
+    end)
+end
+
+local function pararAutoVelocidadeCastelo()
+    castleAutoSpeedEnabled = false
+    castleAutoSpeedLoop = false
+end
+
+local function resetarEstadoCastelo()
+    castleSessionActive = false
+    pararAutoVelocidadeCastelo()
+end
+
+local function iniciarCasteloInfinito()
+    if castleSessionActive then return end
+    castleSessionActive = true
+    task.spawn(function()
+        local argsCreate = {
+            [1] = {
+                [1] = {["Event"] = "InfiniteCastleAction", ["Action"] = "Create"},
+                [2] = "\13"
+            }
+        }
+        remote:FireServer(unpack(argsCreate))
+        task.wait(3)
+        local argsStart = {
+            [1] = {
+                [1] = {["Dungeon"] = 5116548088, ["Event"] = "InfiniteCastleAction", ["Action"] = "Start"},
+                [2] = "\13"
+            }
+        }
+        remote:FireServer(unpack(argsStart))
+        task.wait(2)
+        aplicarVelocidadeCastelo(castleSpeedValue)
+        if castleAutoSpeedEnabled then iniciarAutoVelocidadeCastelo() end
+    end)
+end
+
+-- GUI Castelo
+Tabs.castle:AddToggle("CastleInfiniteToggle", {
+    Title = "Ativar Castelo Infinito",
+    Default = castleEnabled,
+    Callback = function(state)
+        castleEnabled = state
+        ConfigSystem.CurrentConfig.CastleInfiniteToggle = state
+        ConfigSystem.SaveConfig()
+        if state then iniciarCasteloInfinito() else resetarEstadoCastelo() end
+    end
+})
+Tabs.castle:AddInput("CastleInfiniteSpeed", {
+    Title = "Velocidade",
+    Default = tostring(castleSpeedValue),
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            castleSpeedValue = num
+            ConfigSystem.CurrentConfig.CastleInfiniteSpeed = num
+            ConfigSystem.SaveConfig()
+            aplicarVelocidadeCastelo(num)
+        end
+    end
+})
+Tabs.castle:AddToggle("CastleAutoSpeed", {
+    Title = "Auto Velocidade",
+    Default = castleAutoSpeedEnabled,
+    Callback = function(state)
+        castleAutoSpeedEnabled = state
+        ConfigSystem.CurrentConfig.CastleAutoSpeed = state
+        ConfigSystem.SaveConfig()
+        if state then iniciarAutoVelocidadeCastelo() else pararAutoVelocidadeCastelo() end
+    end
+})
