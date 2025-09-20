@@ -3702,28 +3702,30 @@ local function iniciarDesertoInfinito()
     end)
 end
 -- ==========================
--- FUNÇÃO DE APLICAR VELOCIDADE CORRIGIDA
+-- FUNÇÕES DE VELOCIDADE
 -- ==========================
+
+local autoSpeedLoop = false
 
 local function aplicarVelocidade(valor)
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
         warn("[DEBUG] Não pode aplicar velocidade - Character/HRP não encontrado")
         return 
     end
-    
+
     -- Verificar se ainda está no mundo infinito
     local noMundo, tipo = estaNoMundoInfinito()
     if not noMundo then
         warn("[DEBUG] Não aplicando velocidade - não está no mundo infinito")
         return
     end
-    
+
     -- Usar o evento correto baseado no tipo de mundo
     local speedEvent = "InfiniteModeAction" -- Padrão para deserto
     if tipo == "castle" or dungeonMode == 2 then
         speedEvent = "InfiniteCastleAction"
     end
-    
+
     local argsSpeed = {
         [1] = {
             [1] = {
@@ -3734,24 +3736,32 @@ local function aplicarVelocidade(valor)
             [2] = "\13"
         }
     }
-    
+
     if remote then 
         remote:FireServer(unpack(argsSpeed))
         warn(string.format("[DEBUG] ✅ Velocidade %d aplicada usando evento: %s", valor, speedEvent))
     end
 end
 
-Tabs.desert:AddDropdown("DesertDungeonMode", {
-    Title = "Selecionar Modo",
-    Values = { "Deserto Infinito", "Castelo Infinito" },
-    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
-    Callback = function(value)
-        dungeonMode = (value == "Deserto Infinito") and 1 or 2
-        ConfigSystem.CurrentConfig.DesertDungeonMode = dungeonMode
-        ConfigSystem.SaveConfig()
-        warn("[Deserto Infinito] Modo selecionado:", value)
-    end
-})
+local function iniciarAutoVelocidade()
+    if autoSpeedLoop then return end
+    autoSpeedLoop = true
+    task.spawn(function()
+        while autoSpeedEnabled and autoSpeedLoop do
+            if estaNoDeserto() then
+                aplicarVelocidade(speedValue)
+                warn(string.format("[AutoVelocidade] Reaplicando velocidade %d", speedValue))
+            end
+            task.wait(10) -- reaplica a cada 10 segundos
+        end
+        autoSpeedLoop = false
+    end)
+end
+
+local function pararAutoVelocidade()
+    autoSpeedEnabled = false
+    autoSpeedLoop = false
+end
 
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
     Title = "Ativar Deserto/Castelo Infinito",
