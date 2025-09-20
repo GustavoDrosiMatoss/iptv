@@ -3609,8 +3609,8 @@ local function iniciarDesertoInfinito()
         warn("[Deserto Infinito] Sessão já ativa, ignorando...")
         return 
     end
-    
-    -- Verificar se já está em um mundo infinito
+
+    -- Verificar se já está em um mundo infinito (proteção)
     local jaEsta, tipo = estaNoMundoInfinito()
     if jaEsta then
         warn(string.format("[Deserto Infinito] Já está no mundo infinito (%s), apenas ativando controles...", tipo or "desconhecido"))
@@ -3620,7 +3620,7 @@ local function iniciarDesertoInfinito()
         monitorarSaidaDeserto()
         return
     end
-    
+
     warn("[Deserto Infinito] Iniciando nova sessão...")
     desertSessionActive = true
 
@@ -3628,57 +3628,30 @@ local function iniciarDesertoInfinito()
         local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
         warn(string.format("[DEBUG] Usando evento: %s", eventName))
 
-        -- ETAPA 1: CREATE
-        warn("[DEBUG] === INICIANDO ETAPA CREATE ===")
-        local createSuccess = false
-        
-        for tentativa = 1, 5 do -- Aumentei para 5 tentativas
-            local argsCreate = {
+        -- ETAPA 1: CREATE (SEM VERIFICAÇÃO)
+        warn("[DEBUG] === ENVIANDO CREATE ===")
+        local argsCreate = {
+            [1] = {
                 [1] = {
-                    [1] = {
-                        ["Event"] = eventName,
-                        ["Action"] = "Create"
-                    },
-                    [2] = "\13"
-                }
+                    ["Event"] = eventName,
+                    ["Action"] = "Create"
+                },
+                [2] = "\13"
             }
-            
-            if remote then 
-                remote:FireServer(unpack(argsCreate))
-                warn(string.format("[DEBUG] Comando Create enviado - Tentativa %d/5", tentativa))
-            end
-            
-            -- Esperar mais tempo para o Create processar
-            task.wait(4)
-            
-            -- Verificar se foi criado
-            local criado, tipoCriado = estaNoMundoInfinito()
-            if criado then
-                createSuccess = true
-                warn(string.format("[DEBUG] ✅ Create bem-sucedido - Tipo: %s", tipoCriado or "desconhecido"))
-                break
-            else
-                warn(string.format("[DEBUG] ❌ Create falhou na tentativa %d", tentativa))
-                if tentativa < 5 then
-                    warn("[DEBUG] Tentando novamente...")
-                end
-            end
+        }
+        if remote then 
+            remote:FireServer(unpack(argsCreate))
+            warn("[DEBUG] Comando Create enviado (sem checar retorno)")
         end
-        
-        if not createSuccess then
-            warn("[ERRO] ❌ Falha ao criar o mundo infinito após 5 tentativas")
-            resetarEstadoSessao()
-            return
-        end
+
+        -- Pequena espera antes do Start
+        task.wait(3)
 
         -- ETAPA 2: START
         warn("[DEBUG] === INICIANDO ETAPA START ===")
         local startSuccess = false
-        
+
         for tentativa = 1, 3 do
-            -- Aguardar um pouco antes do Start
-            task.wait(3)
-            
             local argsStart = {
                 [1] = {
                     [1] = {
@@ -3689,41 +3662,29 @@ local function iniciarDesertoInfinito()
                     [2] = "\13"
                 }
             }
-            
+
             if remote then 
                 remote:FireServer(unpack(argsStart))
                 warn(string.format("[DEBUG] Comando Start enviado - Tentativa %d/3", tentativa))
             end
-            
-            -- Aguardar processamento do Start
-            task.wait(5)
-            
-            -- Verificar se ainda está no mundo (não foi dissolvido)
+
+            -- Aguardar um pouco para ver se não dissolveu
+            task.wait(4)
+
+            -- Proteção: se já estiver no mundo infinito, não recria
             local aindaNoMundo, tipoAtual = estaNoMundoInfinito()
             if aindaNoMundo then
                 startSuccess = true
-                warn(string.format("[DEBUG] ✅ Start bem-sucedido - Ainda no mundo: %s", tipoAtual or "desconhecido"))
+                warn(string.format("[DEBUG] ✅ Start bem-sucedido - Mundo detectado: %s", tipoAtual or "desconhecido"))
                 break
             else
-                warn(string.format("[DEBUG] ❌ Start falhou na tentativa %d - Party foi dissolvida", tentativa))
+                warn(string.format("[DEBUG] ❌ Start falhou na tentativa %d", tentativa))
                 if tentativa < 3 then
-                    warn("[DEBUG] Recriando party e tentando Start novamente...")
-                    -- Recriar a party
-                    local argsRecreate = {
-                        [1] = {
-                            [1] = {
-                                ["Event"] = eventName,
-                                ["Action"] = "Create"
-                            },
-                            [2] = "\13"
-                        }
-                    }
-                    if remote then remote:FireServer(unpack(argsRecreate)) end
-                    task.wait(4)
+                    warn("[DEBUG] Tentando Start novamente (sem recriar)...")
                 end
             end
         end
-        
+
         if not startSuccess then
             warn("[ERRO] ❌ Falha ao iniciar o mundo infinito após 3 tentativas")
             resetarEstadoSessao()
@@ -3736,11 +3697,10 @@ local function iniciarDesertoInfinito()
         aplicarVelocidade(speedValue)
         if autoSpeedEnabled then iniciarAutoVelocidade() end
         monitorarSaidaDeserto()
-        
+
         warn("[DEBUG] ✅ Deserto/Castelo Infinito iniciado com sucesso!")
     end)
 end
-
 -- ==========================
 -- FUNÇÃO DE APLICAR VELOCIDADE CORRIGIDA
 -- ==========================
