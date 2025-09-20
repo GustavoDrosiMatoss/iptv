@@ -487,7 +487,6 @@ local Tabs = {
     desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
     castle = Window:AddTab({ Title = "Castelo Infinito", Icon = "" })
 }
-
 -- Tạo mapping giữa các map và danh sách mob tương ứng
 local mobsByWorld = {
     ["SoloWorld"] = {"Soondoo", "Gonshee", "Daek", "Longin", "Anders", "Largalgan"},
