@@ -3914,7 +3914,7 @@ Tabs.tp:AddButton({
     Title = "Jeju Event",
     Description = "Teleportar para Jeju Event",
     Callback = function()
-        teleportInstant(CFrame.new(5000.00, 40.00, 5000.00)) -- <<< substitui pela coordenada correta
+        teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
 
