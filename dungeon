@@ -3906,3 +3906,42 @@ Tabs.Main:AddToggle("AutoClickToggle", {
 if autoClickAtivo then
     atualizarAutoClick(true)
 end
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- Atualiza HRP ao renascer
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+end)
+
+-- Função de teleporte direto
+local function teleportInstant(targetCFrame)
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = targetCFrame
+    end
+end
+
+-- Lista de locais
+local teleportLocations = {
+    {Name = "Slayer", CFrame = CFrame.new(-6178.12, 25.88, 1162.91)},
+    {Name = "Kaiju", CFrame = CFrame.new(4444.13, 20.69, 119.92)},
+    {Name = "Cursed", CFrame = CFrame.new(561.72, 31.21, 4455.98)},
+    {Name = "Nen City", CFrame = CFrame.new(-4781.73, 34.66, -2669.36)},
+    {Name = "Mage", CFrame = CFrame.new(-4546.13, 41.53, -7541.96)},
+    {Name = "Wall", CFrame = CFrame.new(-8374.79, 40.25, -1801.58)},
+    {Name = "Hunter", CFrame = CFrame.new(-219.01, 24.17, -15.40)},
+    {Name = "Hurricane", CFrame = CFrame.new(-1290.84, 24.91, -4614.62)},
+    {Name = "Shield", CFrame = CFrame.new(2401.57, 31.00, -3764.92)},
+}
+
+-- Criar botões na aba "Teleports"
+for _, loc in ipairs(teleportLocations) do
+    tp:AddButton({
+        Title = loc.Name,
+        Description = "Teleportar para " .. loc.Name,
+        Callback = function()
+            teleportInstant(loc.CFrame)
+        end
+    })
+end
