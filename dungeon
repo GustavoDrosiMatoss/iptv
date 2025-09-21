@@ -3992,10 +3992,30 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(2401.57, 31.00, -3764.92))
     end
 })
+
 Tabs.tp:AddButton({
     Title = "tp guild",
-    Description = "Teleportar para tp guild",
+    Description = "Desmontar e teleportar para a guilda",
     Callback = function()
-        teleportInstant(CFrame.new(9557.85, -205.24, 106.22))
+        -- Primeiro, desmonta
+        local args = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "MountAction",
+                    ["Action"] = "Dismount"
+                },
+                [2] = "\13"
+            }
+        }
+
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+
+        -- Aguarda um pequeno tempo para o mapa carregar
+        task.delay(0.5, function()
+            local player = game.Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local hrp = character:WaitForChild("HumanoidRootPart")
+            hrp.CFrame = CFrame.new(9557.85, -205.24, 106.22)
+        end)
     end
 })
