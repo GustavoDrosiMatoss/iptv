@@ -3481,7 +3481,7 @@ end
 -- TELEPORT DINÂMICO
 -- ==========================
 local desertCenter = Vector3.new(474.10, 4383.76, -1875.94)
-local castleCenter = Vector3.new(445.19, 4384.64, -1898.02)
+local castleCenter = Vector3.new(446.69, 4384.64, -1897.36)
 
 local function getTeleportPosition()
     local emMundo, tipo = estaNoMundoInfinito()
