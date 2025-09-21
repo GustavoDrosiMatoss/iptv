@@ -2513,8 +2513,82 @@ aba:AddButton({
     end
 })
 
+-- Botão para criar dungeon apenas
+aba:AddButton({
+    Title = "Criar Dungeon",
+    Description = "Cria uma dungeon simples",
+    Callback = function()
+        local remote = game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent
+        local criarArgs = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "DungeonAction",
+                    ["Action"] = "Create"
+                },
+                [2] = "\12"
+            }
+        }
+        remote:FireServer(unpack(criarArgs))
+        Fluent:Notify({ Title = "✔ Dungeon", Content = "Dungeon criada!", Duration = 3 })
+    end
+})
+
+-- Botão para iniciar dungeon
+aba:AddButton({
+    Title = "Iniciar Dungeon",
+    Description = "Inicia a dungeon atual",
+    Callback = function()
+        local remote = game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent
+        local iniciarArgs = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "DungeonAction",
+                    ["Action"] = "Start"
+                },
+                [2] = "\12"
+            }
+        }
+        remote:FireServer(unpack(iniciarArgs))
+        Fluent:Notify({ Title = "▶ Início", Content = "Dungeon iniciada!", Duration = 3 })
+    end
+})
+
+-- Botão para adicionar runa à dungeon
+aba:AddButton({
+    Title = "Adicionar Runa",
+    Description = "Adiciona a runa selecionada à dungeon",
+    Callback = function()
+        if not runaSelecionada then
+            Fluent:Notify({ Title = "Erro", Content = "Nenhuma runa selecionada!", Duration = 3 })
+            return
+        end
+        
+        local runaCode = runasMap[runaSelecionada]
+        if not runaCode then
+            Fluent:Notify({ Title = "Erro", Content = "Runa inválida!", Duration = 3 })
+            return
+        end
+        
+        local remote = game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent
+        local adicionarArgs = {
+            [1] = {
+                [1] = {
+                    ["Dungeon"] = 7368292297,
+                    ["Action"] = "AddItems",
+                    ["Slot"] = 5,
+                    ["Event"] = "DungeonAction",
+                    ["Item"] = runaCode
+                },
+                [2] = "\12"
+            }
+        }
+        remote:FireServer(unpack(adicionarArgs))
+        Fluent:Notify({ Title = "🔮 Runa", Content = "Runa adicionada: " .. runaSelecionada, Duration = 3 })
+    end
+})
+
 -- Toggle com recriação automática de dungeon
-Tabs.dungeon:AddToggle("TeleportMobs", {
+aba:AddToggle("TeleportMobs", {
     Title = "Auto farm Dungeon",
     Default = false,
     Flag = "AutoFarmDungeon",
