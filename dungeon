@@ -3939,7 +3939,7 @@ Tabs.tp:AddButton({
             local player = game.Players.LocalPlayer
             local character = player.Character or player.CharacterAdded:Wait()
             local hrp = character:WaitForChild("HumanoidRootPart")
-            hrp.CFrame = CFrame.new(9557.85, -205.24, 106.22)
+            hrp.CFrame = CFrame.new(9557.17, -205.24, 105.69)
         end)
     end
 })
