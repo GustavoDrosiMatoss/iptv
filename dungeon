@@ -3909,6 +3909,101 @@ Tabs.tp:AddButton({
                 [2] = "\13"
             }
         }
+Tabs.tp:AddButton({
+    Title = "Solo City",
+    Description = "Teleportar para Solo City",
+    Callback = function()
+        teleportInstant(CFrame.new(577.97, 28.43, 261.45))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Brum City",
+    Description = "Teleportar para Brum City",
+    Callback = function()
+        teleportInstant(CFrame.new(-2851.11, 49.40, -2011.40))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Kidama City",
+    Description = "Teleportar para Kidama City",
+    Callback = function()
+        teleportInstant(CFrame.new(-3345.23, 21.96, -101.47))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Dragon City",
+    Description = "Teleportar para Dragon City",
+    Callback = function()
+        teleportInstant(CFrame.new(-2549.56, 27.20, 5857.11))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Faceheal Twon",
+    Description = "Teleportar para Faceheal Twon",
+    Callback = function()
+        teleportInstant(CFrame.new(2629.01, 45.43, -2628.31))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Nipon City",
+    Description = "Teleportar para Nipon City",
+    Callback = function()
+        teleportInstant(CFrame.new(214.68, 32.90, -4301.60))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Xz City",
+    Description = "Teleportar para Xz City",
+    Callback = function()
+        teleportInstant(CFrame.new(3299.47, 25.39, 6342.19))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "World Arena",
+    Description = "Teleportar para World Arena",
+    Callback = function()
+        teleportInstant(CFrame.new(1650.90, 23.65, -66.51))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Lucky Kingdom",
+    Description = "Teleportar para Lucky Kingdom",
+    Callback = function()
+        teleportInstant(CFrame.new(198.34, 38.71, 4296.11))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Mori Town",
+    Description = "Teleportar para Mori Town",
+    Callback = function()
+        teleportInstant(CFrame.new(4816.31, 29.94, -120.23))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Grass Village",
+    Description = "Teleportar para Grass Village",
+    Callback = function()
+        teleportInstant(CFrame.new(3986.01, 59.15, 3247.99))
+    end
+})
+
+Tabs.tp:AddButton({
+    Title = "Jeju Event",
+    Description = "Teleportar para Jeju Event",
+    Callback = function()
+        teleportInstant(CFrame.new(3299.47, 25.39, 6342.19))
+    end
+})
 
         game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
 
