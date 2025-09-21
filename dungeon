@@ -3992,14 +3992,10 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(2401.57, 31.00, -3764.92))
     end
 })
-
 Tabs.tp:AddButton({
     Title = "tp guild",
-    Description = "Teleportar para a área da guild",
+    Description = "Teleportar para tp guild",
     Callback = function()
-        local player = game.Players.LocalPlayer
-        local character = player.Character or player.CharacterAdded:Wait()
-        local hrp = character:WaitForChild("HumanoidRootPart")
-        hrp.CFrame = CFrame.new(9557.85, -205.24, 106.22)
+        teleportInstant(CFrame.new(9557.85, -205.24, 106.22))
     end
 })
