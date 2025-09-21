@@ -3855,8 +3855,8 @@ Tabs.tp:AddButton({
 })
 
 Tabs.tp:AddButton({
-    Title = "Faceheal Twon",
-    Description = "Teleportar para Faceheal Twon",
+    Title = "Faceheal Town",
+    Description = "Teleportar para Faceheal Town",
     Callback = function()
         teleportInstant(CFrame.new(2629.01, 45.43, -2628.31))
     end
@@ -3914,9 +3914,10 @@ Tabs.tp:AddButton({
     Title = "Jeju Event",
     Description = "Teleportar para Jeju Event",
     Callback = function()
-        teleportInstant(CFrame.new(3299.47, 25.39, 6342.19))
+        teleportInstant(CFrame.new(5000.00, 40.00, 5000.00)) -- <<< substitui pela coordenada correta
     end
 })
+
 Tabs.tp:AddButton({
     Title = "tp guild",
     Description = "Desmontar e teleportar para a guilda",
