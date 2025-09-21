@@ -3478,13 +3478,14 @@ local function estaNoDeserto()
 end
 
 -- ==========================
--- TELEPORT DINÂMICO
+-- TELEPORT DINÂMICO CORRIGIDO
 -- ==========================
 local desertCenter = Vector3.new(474.10, 4383.76, -1875.94)
 local castleCenter = Vector3.new(446.69, 4384.64, -1897.36)
 
 local function getTeleportPosition()
     local emMundo, tipo = estaNoMundoInfinito()
+
     if emMundo then
         if tipo == "desert" then
             return CFrame.new(desertCenter)
@@ -3492,7 +3493,13 @@ local function getTeleportPosition()
             return CFrame.new(castleCenter)
         end
     end
-    return CFrame.new(desertCenter)
+
+    -- fallback baseado no modo configurado
+    if dungeonMode == 2 then
+        return CFrame.new(castleCenter)
+    else
+        return CFrame.new(desertCenter)
+    end
 end
 
 local function manterTeleport()
@@ -3758,6 +3765,7 @@ Tabs.desert:AddButton({
         warn("==============================")
     end
 })
+
 -- ==========================
 -- AUTO CLICK (usando atributo AutoClick) COM SALVAMENTO
 -- ==========================
