@@ -2593,7 +2593,8 @@ Tabs.dungeon:AddToggle("AutoFarmDungeon", {
 })
 
 
--- ==========================
+
+    -- ==========================
 -- Auto Castle Sistema Modificado
 -- ==========================
 
@@ -2607,11 +2608,16 @@ ConfigSystem.DefaultConfig.CastleEntryFloor = ConfigSystem.DefaultConfig.CastleE
 ConfigSystem.CurrentConfig.CastleEntryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor or ConfigSystem.DefaultConfig.CastleEntryFloor
 local entryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor
 
+-- Configuração do andar de reset (padrão 150)
+ConfigSystem.DefaultConfig.CastleResetFloor = ConfigSystem.DefaultConfig.CastleResetFloor or 150
+ConfigSystem.CurrentConfig.CastleResetFloor = ConfigSystem.CurrentConfig.CastleResetFloor or ConfigSystem.DefaultConfig.CastleResetFloor
+local resetFloor = ConfigSystem.CurrentConfig.CastleResetFloor
+
 -- Input para configurar andar de entrada
 Tabs.dungeon:AddInput("CastleEntryFloor", {
     Title = "Castle Entry Floor",
     Default = tostring(entryFloor),
-    Placeholder = "Andar de entrada",
+    Placeholder = "Andar de entrada (ex: 125)",
     Numeric = true,
     Finished = true,
     Callback = function(value)
@@ -2621,6 +2627,24 @@ Tabs.dungeon:AddInput("CastleEntryFloor", {
             ConfigSystem.CurrentConfig.CastleEntryFloor = floor
             ConfigSystem.SaveConfig()
             warn("[Castle] Andar de entrada atualizado para:", floor)
+        end
+    end
+})
+
+-- Input para configurar andar de reset
+Tabs.dungeon:AddInput("CastleResetFloor", {
+    Title = "Castle Reset Detection Floor",
+    Default = tostring(resetFloor),
+    Placeholder = "Andar para detectar e resetar (ex: 150)",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local floor = tonumber(value)
+        if floor and floor > 0 then
+            resetFloor = floor
+            ConfigSystem.CurrentConfig.CastleResetFloor = floor
+            ConfigSystem.SaveConfig()
+            warn("[Castle] Andar de reset atualizado para:", floor)
         end
     end
 })
@@ -2839,8 +2863,27 @@ local function castleInfLoop()
 end
 
 -- ==========================
--- AUTO CASTLE - DETECÇÃO E RECRIAÇÃO
+-- AUTO CASTLE - CRIAÇÃO, DETECÇÃO E RECRIAÇÃO
 -- ==========================
+
+-- Função para criar o castelo
+local function createCastle()
+    warn("[Auto Castle] Criando castelo...")
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "CastleAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
+    end)
+    task.wait(3) -- Aguardar criação
+end
+
 local function autoCastleLoop()
     task.spawn(function()
         warn("[Auto Castle] Loop iniciado!")
@@ -2848,27 +2891,30 @@ local function autoCastleLoop()
             local currentFloor = getCurrentCastleFloor()
 
             if not currentFloor then
-                -- Fora do castelo → compra ticket e entra
+                -- Fora do castelo → criar, comprar ticket e entrar
+                warn("[Auto Castle] Fora do castelo - Criando e entrando...")
+                createCastle()
+                task.wait(1)
                 buyCastleTicket()
                 task.wait(1)
                 joinCastle(entryFloor)
                 task.wait(5)
             else
                 -- Dentro do castelo - verifica se deve recriar
-                local resetFloor = entryFloor + 1 -- 1 andar acima do selecionado
-                
                 if currentFloor >= resetFloor then
-                    warn("[Auto Castle] Alcançou andar " .. currentFloor .. " → Recriando no andar " .. entryFloor)
+                    warn("[Auto Castle] Detectou andar " .. currentFloor .. " → Recriando no andar " .. entryFloor)
                     
-                    -- Comprar ticket e recriar
+                    -- Criar castelo, comprar ticket e entrar no andar configurado
+                    createCastle()
+                    task.wait(1)
                     buyCastleTicket()
                     task.wait(1)
                     joinCastle(entryFloor)
                     
                     Fluent:Notify({
                         Title = "Castle Recreated",
-                        Content = "Recriado no andar " .. tostring(entryFloor),
-                        Duration = 3
+                        Content = "Detectou andar " .. tostring(currentFloor) .. " - Recriado no andar " .. tostring(entryFloor),
+                        Duration = 4
                     })
                     
                     task.wait(5) -- Aguarda recriação
@@ -2886,10 +2932,10 @@ local function autoCastleLoop()
 end
 
 -- ==========================
--- BOTÕES E TOGGLES
+-- TOGGLES AUTOMÁTICOS
 -- ==========================
 
--- Botão Castle INF
+-- Toggle Castle INF
 Tabs.dungeon:AddToggle("CastleINF", {
     Title = "Castle INF (Farm + Portal)",
     Default = false,
@@ -2913,9 +2959,9 @@ Tabs.dungeon:AddToggle("CastleINF", {
     end
 })
 
--- Toggle Auto Castle (Detecção e Recriação)
+-- Toggle Auto Castle (Criação, Detecção e Recriação)
 Tabs.dungeon:AddToggle("AutoCastle", {
-    Title = "Auto Castle (Recreate System)",
+    Title = "Auto Castle (Create + Recreate)",
     Default = false,
     Callback = function(state)
         castleEnabled = state
@@ -2925,11 +2971,13 @@ Tabs.dungeon:AddToggle("AutoCastle", {
         if state then
             Fluent:Notify({
                 Title = "Auto Castle Ativado",
-                Content = "Detectará andar " .. tostring(entryFloor + 1) .. " e recriará no " .. tostring(entryFloor),
-                Duration = 4
+                Content = "Criará castelo, entrará no andar " .. tostring(entryFloor) .. " e detectará andar " .. tostring(resetFloor) .. " para recriar",
+                Duration = 5
             })
             
-            -- Entrar no castle inicialmente
+            -- Iniciar processo: criar castelo e entrar
+            createCastle()
+            task.wait(1)
             buyCastleTicket()
             task.wait(1)
             joinCastle(entryFloor)
@@ -2944,67 +2992,10 @@ Tabs.dungeon:AddToggle("AutoCastle", {
             
             Fluent:Notify({
                 Title = "Auto Castle Desativado",
-                Content = "Sistema de recriação parado",
+                Content = "Sistema de criação e recriação parado",
                 Duration = 3
             })
         end
-    end
-})
-
--- Botões manuais
-Tabs.dungeon:AddButton({
-    Title = "Teleport to Fire Portal",
-    Description = "Teleportar para o portal de fogo",
-    Callback = function()
-        local success, floor = teleportToFirePortal()
-        if success then
-            Fluent:Notify({
-                Title = "Teleportado",
-                Content = "Teleportado para portal do andar " .. floor,
-                Duration = 3
-            })
-        else
-            Fluent:Notify({
-                Title = "Erro",
-                Content = "Portal não encontrado",
-                Duration = 3
-            })
-        end
-    end
-})
-
-Tabs.dungeon:AddButton({
-    Title = "Activate Fire Portal",
-    Description = "Ativar portal de fogo",
-    Callback = function()
-        if activateFirePortal() then
-            Fluent:Notify({
-                Title = "Portal Ativado",
-                Content = "Portal ativado com sucesso",
-                Duration = 3
-            })
-        else
-            Fluent:Notify({
-                Title = "Erro",
-                Content = "Não foi possível ativar portal",
-                Duration = 3
-            })
-        end
-    end
-})
-
-Tabs.dungeon:AddButton({
-    Title = "Join Castle Manual",
-    Description = "Entrar no castelo manualmente",
-    Callback = function()
-        buyCastleTicket()
-        task.wait(1)
-        joinCastle(entryFloor)
-        Fluent:Notify({
-            Title = "Castle Join",
-            Content = "Entrando no andar " .. tostring(entryFloor),
-            Duration = 3
-        })
     end
 })
 
