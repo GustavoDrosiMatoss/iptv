@@ -2603,7 +2603,7 @@ local function getCurrentFloor()
     local world = main.__World
     
     for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" ... i)
+        local room = world:FindFirstChild("Room_" .. i)
         if room then
             local foundPortal = room:FindFirstChild("FirePortal")
             if foundPortal then
@@ -2630,7 +2630,7 @@ local function teleportToFirePortal()
     local currentFloor = nil
     
     for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" ... i)
+        local room = world:FindFirstChild("Room_" .. i)
         if room then
             local foundPortal = room:FindFirstChild("FirePortal")
             if foundPortal then
@@ -2663,7 +2663,7 @@ local function activateFirePortal()
     local currentFloor = nil
     
     for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" ... i)
+        local room = world:FindFirstChild("Room_" .. i)
         if room then
             local foundPortal = room:FindFirstChild("FirePortal")
             if foundPortal then
@@ -2965,7 +2965,7 @@ local function getCurrentFloor()
     local main, world = findMainWorld()
     if not world then return nil end
     for i = 1, 200 do
-        if world:FindFirstChild("Room_" ... tostring(i)) then
+        if world:FindFirstChild("Room_" .. tostring(i)) then
             return i
         end
     end
@@ -3021,7 +3021,7 @@ end
 local function waitAndActivatePortal(floor)
     local _, world = findMainWorld()
     if not world then return false end
-    local room = world:FindFirstChild("Room_" ... tostring(floor))
+    local room = world:FindFirstChild("Room_" .. tostring(floor))
     if not room then return false end
 
     local portal
@@ -3045,7 +3045,7 @@ local function waitAndActivatePortal(floor)
             pcall(function() fireproximityprompt(prompt) end)
             print(("🚪 [Castle] Tentativa %d de ativar portal do andar %d"):format(attempt, floor))
             task.wait(1.5)
-            if not world:FindFirstChild("Room_" ... tostring(floor)) then
+            if not world:FindFirstChild("Room_" .. tostring(floor)) then
                 print("✅ [Castle] Subiu para o próximo andar!")
                 return true
             end
