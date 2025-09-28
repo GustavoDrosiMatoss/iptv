@@ -1,16 +1,12 @@
-if not game or not game.GetService then
-    warn("Ambiente do jogo não está disponível.")
-    return
-end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local workspace = game:GetService("Workspace")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
-local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
+local enemiesFolder = Workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 
 local teleportEnabled = false
