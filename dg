@@ -2609,7 +2609,7 @@ ConfigSystem.CurrentConfig.CastleEntryFloor = ConfigSystem.CurrentConfig.CastleE
 local entryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor
 
 -- Configuração do andar de reset (padrão 150)
-ConfigSystem.DefaultConfig.CastleResetFloor = ConfigSystem.DefaultConfig.CastleResetFloor or 150
+ConfigSystem.DefaultConfig.CastleResetFloor = ConfigSystem.DefaultConfig.CastleResetFloor or 200
 ConfigSystem.CurrentConfig.CastleResetFloor = ConfigSystem.CurrentConfig.CastleResetFloor or ConfigSystem.DefaultConfig.CastleResetFloor
 local resetFloor = ConfigSystem.CurrentConfig.CastleResetFloor
 
