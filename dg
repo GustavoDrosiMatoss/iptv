@@ -3918,122 +3918,74 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
-
-
--- ==========================
--- Auto Castle INF (com voo até FirePortal + 2 modos)
--- ==========================
-
+-- Variáveis
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
-
--- Flags
 local castleEnabled = false
 local castleResetEnabled = false
+local entryFloor = 1
+local exitFloor = 101
 
--- ==========================
--- Config padrão
--- ==========================
-ConfigSystem.DefaultConfig.CastleEntryFloor = ConfigSystem.DefaultConfig.CastleEntryFloor or 1
-ConfigSystem.CurrentConfig.CastleEntryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor or ConfigSystem.DefaultConfig.CastleEntryFloor
-local entryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor
-
-ConfigSystem.DefaultConfig.CastleExitFloor = ConfigSystem.DefaultConfig.CastleExitFloor or 101
-ConfigSystem.CurrentConfig.CastleExitFloor = ConfigSystem.CurrentConfig.CastleExitFloor or ConfigSystem.DefaultConfig.CastleExitFloor
-local exitFloor = ConfigSystem.CurrentConfig.CastleExitFloor
-
--- ==========================
--- Funções Castle
--- ==========================
+-- Funções principais
 local function buyCastleTicket()
-    local args = {
-        [1] = {
-            [1] = {["Type"]="Gems",["Event"]="CastleAction",["Action"]="BuyTicket"},
-            [2] = "\13"
-        }
-    }
-    remote:FireServer(unpack(args))
+    remote:FireServer({
+        { { Type = "Gems", Event = "CastleAction", Action = "BuyTicket" }, "\13" }
+    })
 end
 
 local function joinCastle(floor)
-    local args = {
-        [1] = {
-            [1] = {["Check"]=true,["Floor"]=tostring(floor),["Event"]="CastleAction",["Action"]="Join"},
-            [2] = "\13"
-        }
-    }
-    remote:FireServer(unpack(args))
+    remote:FireServer({
+        { { Check = true, Floor = tostring(floor), Event = "CastleAction", Action = "Join" }, "\13" }
+    })
 end
 
 local function leaveCastle()
-    local args = {
-        [1] = {
-            [1] = {["Event"]="LeaveDungeon"},
-            [2] = "\13"
-        }
-    }
-    remote:FireServer(unpack(args))
+    remote:FireServer({
+        { { Event = "LeaveDungeon" }, "\13" }
+    })
 end
 
 local function resetCastleInside(floor)
-    local args = {
-        [1] = {
-            [1] = {["Check"]=true,["Floor"]=tostring(floor),["Event"]="CastleAction",["Action"]="Join"},
-            [2] = "\13"
-        }
-    }
-    remote:FireServer(unpack(args))
+    remote:FireServer({
+        { { Check = true, Floor = tostring(floor), Event = "CastleAction", Action = "Join" }, "\13" }
+    })
 end
 
 local function getCurrentFloor()
     local main = workspace:FindFirstChild("__Main") or workspace:FindFirstChild("_Main") or workspace:FindFirstChild("Main")
-    if not main then return nil end
-    local world = main:FindFirstChild("__World") or main:FindFirstChild("_World") or main:FindFirstChild("World")
+    local world = main and (main:FindFirstChild("__World") or main:FindFirstChild("_World") or main:FindFirstChild("World"))
     if not world then return nil end
 
-    local current = nil
-    for i=1,200 do
-        if world:FindFirstChild("Room_"..i) then
-            current = i
+    for i = 1, 200 do
+        if world:FindFirstChild("Room_" .. i) then
+            return i
         end
     end
-    return current
+    return nil
 end
 
--- ==========================
--- Farm de mobs
--- ==========================
 local function getEnemies()
     local main = workspace:FindFirstChild("__Main") or workspace:FindFirstChild("_Main") or workspace:FindFirstChild("Main")
-    if not main then return {} end
-    local enemiesFolder = main:FindFirstChild("__Enemies") or main:FindFirstChild("_Enemies") or main:FindFirstChild("Enemies")
-    if enemiesFolder and enemiesFolder:FindFirstChild("Server") then
-        return enemiesFolder.Server:GetChildren()
-    end
-    return {}
+    local enemiesFolder = main and (main:FindFirstChild("__Enemies") or main:FindFirstChild("_Enemies") or main:FindFirstChild("Enemies"))
+    return enemiesFolder and enemiesFolder:FindFirstChild("Server") and enemiesFolder.Server:GetChildren() or {}
 end
 
 local function enemiesAlive()
-    for _,enemy in ipairs(getEnemies()) do
+    for _, enemy in ipairs(getEnemies()) do
         local hp = enemy:GetAttribute("HP")
-        if hp and hp > 0 then
-            return true
-        end
+        if hp and hp > 0 then return true end
     end
     return false
 end
 
--- ==========================
--- FirePortal com voo
--- ==========================
 local function flyTo(targetPos)
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
-    local speed = 60 -- velocidade de voo
+    local speed = 60
 
-    while (castleEnabled or castleResetEnabled) do
+    while castleEnabled or castleResetEnabled do
         if not hrp.Parent then break end
         local dist = (hrp.Position - targetPos).Magnitude
         if dist < 10 then break end
@@ -4041,55 +3993,40 @@ local function flyTo(targetPos)
         hrp.Velocity = dir * speed
         task.wait(0.1)
     end
-    hrp.Velocity = Vector3.new(0,0,0)
+    hrp.Velocity = Vector3.new(0, 0, 0)
 end
 
 local function waitAndActivatePortal(floor)
     local main = workspace:FindFirstChild("__Main") or workspace:FindFirstChild("_Main") or workspace:FindFirstChild("Main")
-    if not main then return false end
-    local world = main:FindFirstChild("__World") or main:FindFirstChild("_World") or main:FindFirstChild("World")
-    if not world then return false end
-    local room = world:FindFirstChild("Room_" .. floor)
+    local world = main and (main:FindFirstChild("__World") or main:FindFirstChild("_World") or main:FindFirstChild("World"))
+    local room = world and world:FindFirstChild("Room_" .. floor)
     if not room then return false end
 
     local portal
-    -- Espera até 15s pelo FirePortal
     for i = 1, 150 do
         portal = room:FindFirstChild("FirePortal", true)
         if portal then break end
         task.wait(0.1)
     end
+    if not portal then return false end
 
-    if not portal then
-        warn("[Castle] Nenhum FirePortal encontrado no andar " .. tostring(floor))
-        return false
-    end
-
-    -- Voa até o portal
     flyTo(portal.Position + Vector3.new(0, 5, 0))
     task.wait(0.5)
 
-    -- Até 3 tentativas de ativar
     local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
     for attempt = 1, 3 do
         if prompt then
             pcall(function() fireproximityprompt(prompt) end)
-            print(("🚪 [Castle] Tentativa %d de ativar portal do andar %d"):format(attempt, floor))
             task.wait(1.5)
             if not world:FindFirstChild("Room_" .. floor) then
-                print("✅ [Castle] Subiu para o próximo andar!")
                 return true
             end
         end
     end
-
-    warn("⏹ [Castle] Não conseguiu ativar o portal no andar " .. tostring(floor))
     return false
 end
 
--- ==========================
 -- Loop SAIR
--- ==========================
 local function autoCastleLeave()
     task.spawn(function()
         while castleEnabled do
@@ -4099,27 +4036,21 @@ local function autoCastleLeave()
                 task.wait(1)
                 joinCastle(entryFloor)
                 task.wait(5)
-            else
-                if floor >= exitFloor then
-                    leaveCastle()
-                    task.wait(8)
-                    buyCastleTicket()
-                    task.wait(1)
-                    joinCastle(entryFloor)
-                else
-                    if not enemiesAlive() then
-                        waitAndActivatePortal(floor)
-                    end
-                end
+            elseif floor >= exitFloor then
+                leaveCastle()
+                task.wait(8)
+                buyCastleTicket()
+                task.wait(1)
+                joinCastle(entryFloor)
+            elseif not enemiesAlive() then
+                waitAndActivatePortal(floor)
             end
             task.wait(0.5)
         end
     end)
 end
 
--- ==========================
 -- Loop RESET
--- ==========================
 local function autoCastleReset()
     task.spawn(function()
         while castleResetEnabled do
@@ -4129,35 +4060,25 @@ local function autoCastleReset()
                 task.wait(1)
                 joinCastle(entryFloor)
                 task.wait(5)
-            else
-                if floor >= exitFloor then
-                    resetCastleInside(entryFloor)
-                    task.wait(5)
-                else
-                    if not enemiesAlive() then
-                        waitAndActivatePortal(floor)
-                    end
-                end
+            elseif floor >= exitFloor then
+                resetCastleInside(entryFloor)
+                task.wait(5)
+            elseif not enemiesAlive() then
+                waitAndActivatePortal(floor)
             end
             task.wait(0.5)
         end
     end)
 end
 
--- ==========================
--- Aba Castelo Infernal
--- ==========================
+-- Interface
 Tabs.castle:AddInput("CastleEntryFloor", {
     Title = "Castle Entry Floor",
     Default = tostring(entryFloor),
     Numeric = true,
     Callback = function(value)
         local floor = tonumber(value)
-        if floor then
-            entryFloor = floor
-            ConfigSystem.CurrentConfig.CastleEntryFloor = floor
-            ConfigSystem.SaveConfig()
-        end
+        if floor then entryFloor = floor end
     end
 })
 
@@ -4167,21 +4088,15 @@ Tabs.castle:AddInput("CastleExitFloor", {
     Numeric = true,
     Callback = function(value)
         local floor = tonumber(value)
-        if floor then
-            exitFloor = floor
-            ConfigSystem.CurrentConfig.CastleExitFloor = floor
-            ConfigSystem.SaveConfig()
-        end
+        if floor then exitFloor = floor end
     end
 })
 
 Tabs.castle:AddToggle("CastleToggle", {
     Title = "Auto Castle (Sair)",
-    Default = ConfigSystem.CurrentConfig.CastleToggle or false,
+    Default = false,
     Callback = function(state)
         castleEnabled = state
-        ConfigSystem.CurrentConfig.CastleToggle = state
-        ConfigSystem.SaveConfig()
         if state then
             buyCastleTicket()
             task.wait(1)
@@ -4207,4 +4122,3 @@ Tabs.castle:AddToggle("CastleResetToggle", {
             leaveCastle()
         end
     end
-})
