@@ -4146,12 +4146,13 @@ end
 -- ==========================
 -- Aba Castelo Infernal
 -- ==========================
-local castleTab = Window:AddTab({
-    Title = "Castelo Infernal",
-    Icon = "swords"
+Tabs.castle = Window:MakeTab({
+    Name = "Castelo Infernal",
+    Icon = "swords",
+    PremiumOnly = false
 })
 
-castleTab:AddInput("CastleEntryFloor", {
+Tabs.castle:AddInput("CastleEntryFloor", {
     Title = "Castle Entry Floor",
     Default = tostring(entryFloor),
     Numeric = true,
@@ -4165,7 +4166,7 @@ castleTab:AddInput("CastleEntryFloor", {
     end
 })
 
-castleTab:AddInput("CastleExitFloor", {
+Tabs.castle:AddInput("CastleExitFloor", {
     Title = "Castle Exit Floor",
     Default = tostring(exitFloor),
     Numeric = true,
@@ -4179,7 +4180,7 @@ castleTab:AddInput("CastleExitFloor", {
     end
 })
 
-castleTab:AddToggle("CastleToggle", {
+Tabs.castle:AddToggle("CastleToggle", {
     Title = "Auto Castle (Sair)",
     Default = ConfigSystem.CurrentConfig.CastleToggle or false,
     Callback = function(state)
@@ -4197,7 +4198,7 @@ castleTab:AddToggle("CastleToggle", {
     end
 })
 
-castleTab:AddToggle("CastleResetToggle", {
+Tabs.castle:AddToggle("CastleResetToggle", {
     Title = "Auto Castle (Reset Interno)",
     Default = false,
     Callback = function(state)
