@@ -2424,7 +2424,7 @@ local function monitorEnemiesINF()
                                   and closestEnemy:GetAttribute("HP") > 0 
                                   and attempts < 100 do
                                 task.wait(0.1)
-                                attempts = attempts + 1
+                                attempts += 1
                             end
                             print("[AUTO-FARM INF] Inimigo eliminado!")
                         end
@@ -2514,7 +2514,7 @@ local function monitorEnemiesRecreate()
                               and closestEnemy:GetAttribute("HP") > 0 
                               and attempts < 100 do
                             task.wait(0.1)
-                            attempts = attempts + 1
+                            attempts += 1
                         end
                         print("[AUTO-FARM RECREATE] Inimigo eliminado!")
                     end
@@ -2603,7 +2603,7 @@ local function getCurrentFloor()
     local world = main.__World
     
     for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" ... i)
+        local room = world:FindFirstChild("Room_" .. i)
         if room then
             local foundPortal = room:FindFirstChild("FirePortal")
             if foundPortal then
@@ -2630,7 +2630,7 @@ local function teleportToFirePortal()
     local currentFloor = nil
     
     for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" ... i)
+        local room = world:FindFirstChild("Room_" .. i)
         if room then
             local foundPortal = room:FindFirstChild("FirePortal")
             if foundPortal then
@@ -2647,7 +2647,7 @@ local function teleportToFirePortal()
     end
     
     hrp.CFrame = portal.CFrame
-    hrp.Velocity = Vector3.new(0,0,0)
+    hrp.Velocity = Vector3.zero
     
     print("Teleportado para o portal do andar " .. currentFloor)
     return true, currentFloor
@@ -2663,7 +2663,7 @@ local function activateFirePortal()
     local currentFloor = nil
     
     for i = 1, 200 do
-        local room = world:FindFirstChild("Room_" ... i)
+        local room = world:FindFirstChild("Room_" .. i)
         if room then
             local foundPortal = room:FindFirstChild("FirePortal")
             if foundPortal then
@@ -2860,8 +2860,9 @@ Tabs.dungeon:AddToggle("AutoCastle", {
 })
 
 -- ==========================
--- Auto Castle INF (corrigido)
+-- Auto Castle INF (com voo até FirePortal + 2 modos)
 -- ==========================
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 local Players = game:GetService("Players")
@@ -2953,43 +2954,32 @@ local function resetCastleInside(floor)
     remote:FireServer(unpack(args))
 end
 
--- Helper: busca caminhos robustos (__Main / _Main / Main)
-local function findMainWorld()
-    local main = workspace:FindFirstChild("__Main") or workspace:FindFirstChild("_Main") or workspace:FindFirstChild("Main")
-    if not main then return nil end
-    local world = main:FindFirstChild("__World") or main:FindFirstChild("_World") or main:FindFirstChild("World")
-    return main, world
-end
-
 local function getCurrentFloor()
-    local main, world = findMainWorld()
+    local world = workspace:FindFirstChild("_Main") and workspace.Main:FindFirstChild("_World")
     if not world then return nil end
-    for i = 1, 200 do
-        if world:FindFirstChild("Room_" ... tostring(i)) then
-            return i
+    local current = nil
+    for i=1,200 do
+        if world:FindFirstChild("Room_"..i) then
+            current = i
         end
     end
-    return nil
+    return current
 end
 
 -- ==========================
 -- Farm de mobs
 -- ==========================
 local function getEnemies()
-    local main, world = findMainWorld()
-    if not main then return {} end
-    local enemiesFolder = main:FindFirstChild("__Enemies") or main:FindFirstChild("_Enemies") or main:FindFirstChild("Enemies")
+    local enemiesFolder = workspace:FindFirstChild("_Main") and workspace.Main:FindFirstChild("_Enemies")
     if enemiesFolder and enemiesFolder:FindFirstChild("Server") then
         return enemiesFolder.Server:GetChildren()
-    elseif enemiesFolder and enemiesFolder.GetChildren then
-        return enemiesFolder:GetChildren()
     end
     return {}
 end
 
 local function enemiesAlive()
     for _,enemy in ipairs(getEnemies()) do
-        local hp = enemy:GetAttribute and enemy:GetAttribute("HP")
+        local hp = enemy:GetAttribute("HP")
         if hp and hp > 0 then
             return true
         end
@@ -3013,18 +3003,16 @@ local function flyTo(targetPos)
         hrp.Velocity = dir * speed
         task.wait(0.1)
     end
-    if hrp and hrp.Parent then
-        hrp.Velocity = Vector3.new(0, 0, 0)
-    end
+    hrp.Velocity = Vector3.zero
 end
 
 local function waitAndActivatePortal(floor)
-    local _, world = findMainWorld()
-    if not world then return false end
-    local room = world:FindFirstChild("Room_" ... tostring(floor))
+    local world = workspace._Main._World
+    local room = world:FindFirstChild("Room_" .. floor)
     if not room then return false end
 
     local portal
+    -- Espera até 15s pelo FirePortal
     for i = 1, 150 do
         portal = room:FindFirstChild("FirePortal", true)
         if portal then break end
@@ -3036,16 +3024,18 @@ local function waitAndActivatePortal(floor)
         return false
     end
 
+    -- Voa até o portal
     flyTo(portal.Position + Vector3.new(0, 5, 0))
     task.wait(0.5)
 
+    -- Até 3 tentativas de ativar
     local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
     for attempt = 1, 3 do
         if prompt then
             pcall(function() fireproximityprompt(prompt) end)
             print(("🚪 [Castle] Tentativa %d de ativar portal do andar %d"):format(attempt, floor))
             task.wait(1.5)
-            if not world:FindFirstChild("Room_" ... tostring(floor)) then
+            if not world:FindFirstChild("Room_" .. floor) then
                 print("✅ [Castle] Subiu para o próximo andar!")
                 return true
             end
@@ -3354,7 +3344,7 @@ local function monitorarSaidaDeserto()
         while desertSessionActive do
             local emMundoInfinito, _ = estaNoMundoInfinito()
             if not emMundoInfinito then
-                tentativasConsecutivas = attempts + 1
+                tentativasConsecutivas += 1
                 if tentativasConsecutivas >= maxTentativas then
                     desertSessionActive = false
                     pararAutoVelocidade()
