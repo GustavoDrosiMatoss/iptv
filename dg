@@ -485,7 +485,7 @@ local Tabs = {
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
     desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
-    castle = Window:AddTab({ Title = "Castelo Infernal", Icon = "swords" }),
+    astle = Window:AddTab({ Title = "Castelo Infernal", Icon = "swords" }),
 }
 
 
@@ -3918,7 +3918,7 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
--- Variáveis
+- Variáveis
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 local Players = game:GetService("Players")
@@ -4122,3 +4122,4 @@ Tabs.castle:AddToggle("CastleResetToggle", {
             leaveCastle()
         end
     end
+})
