@@ -3945,6 +3945,10 @@ Tabs.tp:AddButton({
     end
 })
 
+-- ==========================
+-- SISTEMA DE AUTO CRAFT DUNGEON KEYS
+-- ==========================
+
 local dungeonKeys = {
     "SoloKey",
     "BCKey",
@@ -4000,7 +4004,7 @@ task.spawn(function()
             for key, ativo in pairs(selectedKeys) do
                 if ativo then
                     criarKey(key)
-                    task.wait(1) -- delay entre crafts (ajuste se precisar)
+                    task.wait(1) -- delay entre crafts
                 end
             end
         end
@@ -4070,9 +4074,6 @@ Tabs.dungeonkeys:AddButton({
             Content = "Todas as keys foram marcadas",
             Duration = 3
         })
-        
-        -- Recarregar a UI (workaround)
-        print("[INFO] Todas as keys foram selecionadas. Reabra a aba para ver as mudanças.")
     end
 })
 
@@ -4092,8 +4093,6 @@ Tabs.dungeonkeys:AddButton({
             Content = "Todas as keys foram desmarcadas",
             Duration = 3
         })
-        
-        print("[INFO] Todas as keys foram desmarcadas. Reabra a aba para ver as mudanças.")
     end
 })
 
@@ -4102,7 +4101,3 @@ if ConfigSystem.CurrentConfig.AutoCraftKeys then
     autoCraft = true
     warn("[Auto-Boot] Auto Craft Keys reativado automaticamente")
 end
-
--- ==========================
--- FIM DO SISTEMA DE DUNGEON KEYS
--- ==========================
