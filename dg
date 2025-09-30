@@ -476,15 +476,14 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 local Tabs = {
-    Discord = Window:AddTab({ Title = "INFO", Icon = ""}),
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    dungeon = Window:AddTab({ Title = "Dungeon ", Icon = "" }),
+    desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
     tp = Window:AddTab({ Title = "Teleports", Icon = "" }),
     mount = Window:AddTab({ Title = "Mount Location/farm", Icon = "" }),
-    dungeon = Window:AddTab({ Title = "Dungeon ", Icon = "" }),
     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
-    desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
 }
 
 
