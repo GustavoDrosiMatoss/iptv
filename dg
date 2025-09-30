@@ -484,6 +484,15 @@ local Tabs = {
     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+}),
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    tp = Window:AddTab({ Title = "Teleports", Icon = "" }),
+    mount = Window:AddTab({ Title = "Mount Location/farm", Icon = "" }),
+    dungeon = Window:AddTab({ Title = "Dungeon ", Icon = "" }),
+    shop = Window:AddTab({ Title = "Shop", Icon = "" }),
+    Player = Window:AddTab({ Title = "Player", Icon = "" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+    desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
 }
 
 
@@ -1587,17 +1596,7 @@ AutoEnterDungeon:OnChanged(function(Value)
     end
 end)
 
-Tabs.Discord:AddParagraph({
-    Title = "Thông tin",
-    Content = "Script được tạo bởi Allan Hub"
-})
-
-Tabs.Discord:AddButton({
-    Title = "Copy Discord Link",
-    Description = "Join my discord",
-    Callback = function()
-        setclipboard("https://discord.gg/v94FqK3zH5")
-        Fluent:Notify({
+Fluent:Notify({
             Title = "Đã sao chép!",
             Content = "Đường dẫn Discord đã được sao chép vào clipboard.",
             Duration = 3
