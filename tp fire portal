@@ -473,10 +473,13 @@ local function bossFocusLoop()
     task.spawn(function()
         warn("[Boss Focus INF] Loop iniciado para boss: " .. selectedBoss .. " no andar " .. bossFloor)
         local lastJoinTime = 0
+        local bossNotFoundCount = 0
+        local isInCorrectFloor = false
         
         while bossFocusEnabled do
             local currentFloor = getCurrentCastleFloor()
 
+            -- Está fora do castelo
             if not currentFloor then
                 warn("[Boss Focus INF] Fora do castelo - Criando e entrando no andar " .. bossFloor)
                 createCastle()
@@ -485,41 +488,54 @@ local function bossFocusLoop()
                 task.wait(1)
                 joinCastle(bossFloor)
                 lastJoinTime = tick()
-                warn("[Boss Focus INF] Aguardando 10 segundos para carregar o andar " .. bossFloor .. "...")
-                task.wait(10) -- Tempo para o jogo carregar o andar correto
+                isInCorrectFloor = false
+                bossNotFoundCount = 0
+                warn("[Boss Focus INF] Aguardando 12 segundos para carregar o andar " .. bossFloor .. "...")
+                task.wait(12)
             else
-                -- Verifica se acabou de entrar (menos de 15 segundos)
                 local timeSinceJoin = tick() - lastJoinTime
                 
-                if timeSinceJoin < 15 then
-                    warn("[Boss Focus INF] Aguardando carregamento completo do andar... (" .. math.floor(15 - timeSinceJoin) .. "s restantes)")
-                    task.wait(2)
-                elseif currentFloor ~= bossFloor then
-                    warn("[Boss Focus INF] Andar atual (" .. currentFloor .. ") diferente do andar do boss (" .. bossFloor .. ") - Recriando...")
+                -- Acabou de entrar, aguardando carregar
+                if timeSinceJoin < 20 and not isInCorrectFloor then
+                    if currentFloor == bossFloor then
+                        isInCorrectFloor = true
+                        warn("[Boss Focus INF] ✓ Andar " .. bossFloor .. " carregado com sucesso!")
+                    else
+                        warn("[Boss Focus INF] Carregando... Andar atual: " .. currentFloor .. " → Destino: " .. bossFloor)
+                        task.wait(2)
+                    end
+                -- Passou do tempo de carregamento e ainda não está no andar correto
+                elseif timeSinceJoin >= 20 and currentFloor ~= bossFloor then
+                    warn("[Boss Focus INF] Falha ao carregar andar " .. bossFloor .. " (está no " .. currentFloor .. ") - Recriando...")
                     createCastle()
                     task.wait(1)
                     buyCastleTicket()
                     task.wait(1)
                     joinCastle(bossFloor)
                     lastJoinTime = tick()
+                    isInCorrectFloor = false
+                    bossNotFoundCount = 0
                     
                     Fluent:Notify({
                         Title = "Boss Focus INF",
-                        Content = "Andar incorreto - Entrando no andar " .. tostring(bossFloor),
+                        Content = "Andar incorreto - Recriando no andar " .. tostring(bossFloor),
                         Duration = 4
                     })
                     
-                    warn("[Boss Focus INF] Aguardando 10 segundos para carregar o andar " .. bossFloor .. "...")
-                    task.wait(10)
-                else
+                    task.wait(12)
+                -- Está no andar correto, procura o boss
+                elseif currentFloor == bossFloor and isInCorrectFloor then
                     local boss = findBoss(selectedBoss)
+                    
                     if boss then
+                        bossNotFoundCount = 0 -- Resetar contador
+                        warn("[Boss Focus INF] ✓ Boss encontrado: " .. selectedBoss)
+                        
                         local player = game.Players.LocalPlayer
                         local char = player.Character
                         if char and char:FindFirstChild("HumanoidRootPart") then
                             local hrp = char.HumanoidRootPart
                             hrp.CFrame = boss.CFrame * CFrame.new(0, 3, 0)
-                            warn("[Boss Focus INF] Teleportado para o boss: " .. selectedBoss)
                         end
 
                         pcall(function()
@@ -536,44 +552,65 @@ local function bossFocusLoop()
                         end)
 
                         warn("[Boss Focus INF] Atacando boss: " .. selectedBoss)
-                        while bossFocusEnabled and boss.Parent do
+                        local bossAlive = true
+                        while bossFocusEnabled and boss.Parent and bossAlive do
                             local currentHP = boss:GetAttribute("HP")
                             if not currentHP or currentHP <= 0 then
-                                warn("[Boss Focus INF] Boss eliminado: " .. selectedBoss .. " - Recriando castelo...")
+                                warn("[Boss Focus INF] ✓ Boss eliminado: " .. selectedBoss)
+                                bossAlive = false
                                 break
                             end
                             task.wait(0.2)
                         end
                         
-                        if bossFocusEnabled then
-                            warn("[Boss Focus INF] Recriando castelo após matar o boss...")
+                        -- Boss morreu, recriar castelo
+                        if bossFocusEnabled and not bossAlive then
+                            warn("[Boss Focus INF] Recriando castelo após eliminar o boss...")
+                            task.wait(2)
                             createCastle()
                             task.wait(1)
                             buyCastleTicket()
                             task.wait(1)
                             joinCastle(bossFloor)
-                            task.wait(5)
+                            lastJoinTime = tick()
+                            isInCorrectFloor = false
+                            bossNotFoundCount = 0
                             
                             Fluent:Notify({
                                 Title = "Boss Focus INF",
-                                Content = "Boss " .. selectedBoss .. " eliminado - Castelo recriado no andar " .. tostring(bossFloor),
+                                Content = "Boss eliminado - Recriando no andar " .. tostring(bossFloor),
                                 Duration = 4
                             })
+                            
+                            task.wait(12)
                         end
                     else
-                        warn("[Boss Focus INF] Boss não encontrado no andar " .. bossFloor .. " - Recriando castelo...")
-                        createCastle()
-                        task.wait(1)
-                        buyCastleTicket()
-                        task.wait(1)
-                        joinCastle(bossFloor)
-                        task.wait(5)
-
-                        Fluent:Notify({
-                            Title = "Boss Focus INF",
-                            Content = "Boss " .. selectedBoss .. " não encontrado - Castelo recriado no andar " .. tostring(bossFloor),
-                            Duration = 4
-                        })
+                        -- Boss não encontrado
+                        bossNotFoundCount = bossNotFoundCount + 1
+                        warn("[Boss Focus INF] Boss não encontrado (" .. bossNotFoundCount .. "/10) - Aguardando spawnar...")
+                        
+                        -- Se não encontrar depois de 10 tentativas (30 segundos), recria
+                        if bossNotFoundCount >= 10 then
+                            warn("[Boss Focus INF] Boss não spawnou após 30s - Recriando castelo...")
+                            createCastle()
+                            task.wait(1)
+                            buyCastleTicket()
+                            task.wait(1)
+                            joinCastle(bossFloor)
+                            lastJoinTime = tick()
+                            isInCorrectFloor = false
+                            bossNotFoundCount = 0
+                            
+                            Fluent:Notify({
+                                Title = "Boss Focus INF",
+                                Content = "Boss não spawnou - Recriando castelo",
+                                Duration = 4
+                            })
+                            
+                            task.wait(12)
+                        else
+                            task.wait(3)
+                        end
                     end
                 end
             end
