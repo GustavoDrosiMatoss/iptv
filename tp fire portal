@@ -472,6 +472,8 @@ end
 local function bossFocusLoop()
     task.spawn(function()
         warn("[Boss Focus INF] Loop iniciado para boss: " .. selectedBoss .. " no andar " .. bossFloor)
+        local lastJoinTime = 0
+        
         while bossFocusEnabled do
             local currentFloor = getCurrentCastleFloor()
 
@@ -482,22 +484,33 @@ local function bossFocusLoop()
                 buyCastleTicket()
                 task.wait(1)
                 joinCastle(bossFloor)
-                task.wait(5)
+                lastJoinTime = tick()
+                warn("[Boss Focus INF] Aguardando 10 segundos para carregar o andar " .. bossFloor .. "...")
+                task.wait(10) -- Tempo para o jogo carregar o andar correto
             else
-                if currentFloor ~= bossFloor then
+                -- Verifica se acabou de entrar (menos de 15 segundos)
+                local timeSinceJoin = tick() - lastJoinTime
+                
+                if timeSinceJoin < 15 then
+                    warn("[Boss Focus INF] Aguardando carregamento completo do andar... (" .. math.floor(15 - timeSinceJoin) .. "s restantes)")
+                    task.wait(2)
+                elseif currentFloor ~= bossFloor then
                     warn("[Boss Focus INF] Andar atual (" .. currentFloor .. ") diferente do andar do boss (" .. bossFloor .. ") - Recriando...")
                     createCastle()
                     task.wait(1)
                     buyCastleTicket()
                     task.wait(1)
                     joinCastle(bossFloor)
-                    task.wait(5)
+                    lastJoinTime = tick()
                     
                     Fluent:Notify({
                         Title = "Boss Focus INF",
                         Content = "Andar incorreto - Entrando no andar " .. tostring(bossFloor),
                         Duration = 4
                     })
+                    
+                    warn("[Boss Focus INF] Aguardando 10 segundos para carregar o andar " .. bossFloor .. "...")
+                    task.wait(10)
                 else
                     local boss = findBoss(selectedBoss)
                     if boss then
