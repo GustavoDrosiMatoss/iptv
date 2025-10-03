@@ -9,6 +9,35 @@ local playerHRP = playerCharacter:WaitForChild("HumanoidRootPart")
 local enemyContainer = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
 
 -- ==============================
+-- Sistema de Salvamento
+-- ==============================
+local SaveManager = {}
+SaveManager.FileName = "AllanHub_DungeonSettings.json"
+
+function SaveManager:Load()
+    local success, data = pcall(function()
+        return readfile(SaveManager.FileName)
+    end)
+    
+    if success and data then
+        local decoded = game:GetService("HttpService"):JSONDecode(data)
+        return decoded
+    end
+    
+    return {}
+end
+
+function SaveManager:Save(data)
+    pcall(function()
+        local encoded = game:GetService("HttpService"):JSONEncode(data)
+        writefile(SaveManager.FileName, encoded)
+    end)
+end
+
+-- Carregar configurações salvas
+local savedSettings = SaveManager:Load()
+
+-- ==============================
 -- Carrega o Fluent UI
 -- ==============================
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
@@ -30,15 +59,31 @@ local Window = Fluent:CreateWindow({
 local npcTab = Window:AddTab({ Title = "NPC Debug", Icon = "crosshair" })
 local dungeonTab = Window:AddTab({ Title = "Dungeon", Icon = "sword" })
 
--- Variáveis para o sistema de castle (sem salvamento para teste)
-local castleInfEnabled = false
-local castleEnabled = false
-local castleCreateOnlyEnabled = false
-local bossFocusEnabled = false
-local entryFloor = 125
-local resetFloor = 200
-local selectedBoss = "Cat God"
-local bossFloor = 175  -- Andar onde o Cat God spawna
+-- Variáveis para o sistema de castle (COM salvamento)
+local castleInfEnabled = savedSettings.castleInfEnabled or false
+local castleEnabled = savedSettings.castleEnabled or false
+local castleCreateOnlyEnabled = savedSettings.castleCreateOnlyEnabled or false
+local bossFocusEnabled = savedSettings.bossFocusEnabled or false
+local entryFloor = savedSettings.entryFloor or 125
+local resetFloor = savedSettings.resetFloor or 200
+local selectedBoss = savedSettings.selectedBoss or "Cat God"
+local bossFloor = savedSettings.bossFloor or 175
+
+-- Função para salvar configurações
+local function saveSettings()
+    local settings = {
+        castleInfEnabled = castleInfEnabled,
+        castleEnabled = castleEnabled,
+        castleCreateOnlyEnabled = castleCreateOnlyEnabled,
+        bossFocusEnabled = bossFocusEnabled,
+        entryFloor = entryFloor,
+        resetFloor = resetFloor,
+        selectedBoss = selectedBoss,
+        bossFloor = bossFloor
+    }
+    SaveManager:Save(settings)
+    warn("[Sistema] Configurações salvas!")
+end
 
 -- Função que pega o Title.Text de um NPC
 local function getNPCName(enemy)
@@ -71,7 +116,7 @@ npcTab:AddButton({
         if catGod then
             local hrp = catGod:FindFirstChild("HumanoidRootPart")
             if hrp then
-                playerHRP.CFrame = hrp.CFrame + Vector3.new(0, 5, 0) -- Teleporta um pouco acima
+                playerHRP.CFrame = hrp.CFrame + Vector3.new(0, 5, 0)
                 Fluent:Notify({
                     Title = "Allan Hub",
                     Content = "Focado no Cat God!",
@@ -98,7 +143,6 @@ npcTab:AddButton({
 -- FUNÇÕES CASTLE BÁSICAS
 -- ==========================
 
--- Detectar andar atual
 local function getCurrentCastleFloor()
     local main = workspace:FindFirstChild("__Main")
     if not main then return nil end
@@ -120,7 +164,6 @@ local function getCurrentCastleFloor()
     return current
 end
 
--- Comprar ticket com gems
 local function buyCastleTicket()
     warn("[Castle] Comprando ticket com Gems...")
     local args = {
@@ -138,7 +181,6 @@ local function buyCastleTicket()
     end)
 end
 
--- Entrar no castelo
 local function joinCastle(floor)
     floor = floor or entryFloor
     warn("[Castle] Entrando no andar " .. tostring(floor) .. "...")
@@ -158,7 +200,6 @@ local function joinCastle(floor)
     end)
 end
 
--- Função para criar o castelo
 local function createCastle()
     warn("[Auto Castle] Criando castelo...")
     local args = {
@@ -180,7 +221,6 @@ end
 -- CASTLE INF - FARM E PORTAL
 -- ==========================
 
--- Função para encontrar o FirePortal
 local function findFirePortal()
     local main = workspace:FindFirstChild("__Main")
     if not main then return nil, nil end
@@ -199,7 +239,6 @@ local function findFirePortal()
     return nil, nil
 end
 
--- Teleportar para o FirePortal
 local function teleportToFirePortal()
     local portal, currentFloor = findFirePortal()
     if not portal then 
@@ -219,7 +258,6 @@ local function teleportToFirePortal()
     return true, currentFloor
 end
 
--- Ativar FirePortal
 local function activateFirePortal()
     local portal, currentFloor = findFirePortal()
     if not portal then return false end
@@ -252,7 +290,6 @@ local function activateFirePortal()
     return false
 end
 
--- Farm mobs no castle
 local function farmCastleMobs()
     local mobsKilled = false
     local enemiesFolder = workspace:FindFirstChild("__Main")
@@ -272,10 +309,8 @@ local function farmCastleMobs()
             if hp and hp > 0 and mob.Position then
                 local player = game.Players.LocalPlayer
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    -- Teleportar para o mob
                     player.Character.HumanoidRootPart.CFrame = mob.CFrame * CFrame.new(0, 3, 0)
 
-                    -- Atacar o mob
                     pcall(function()
                         local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
                         remote:FireServer({
@@ -289,7 +324,6 @@ local function farmCastleMobs()
                         })
                     end)
 
-                    -- AGUARDAR O MOB MORRER
                     warn("[Castle INF] Atacando mob:", mob.Name)
                     while castleInfEnabled and mob.Parent do
                         local currentHP = mob:GetAttribute("HP")
@@ -309,7 +343,6 @@ local function farmCastleMobs()
     return mobsKilled
 end
 
--- Castle INF Loop
 local function castleInfLoop()
     task.spawn(function()
         warn("[Castle INF] Loop iniciado!")
@@ -442,17 +475,15 @@ local function bossFocusLoop()
         while bossFocusEnabled do
             local currentFloor = getCurrentCastleFloor()
 
-            -- Se não está no castelo, cria e entra direto no andar do boss
             if not currentFloor then
                 warn("[Boss Focus INF] Fora do castelo - Criando e entrando no andar " .. bossFloor)
                 createCastle()
                 task.wait(1)
                 buyCastleTicket()
                 task.wait(1)
-                joinCastle(bossFloor)  -- Entra direto no andar do boss
+                joinCastle(bossFloor)
                 task.wait(5)
             else
-                -- Verifica se está no andar correto do boss
                 if currentFloor ~= bossFloor then
                     warn("[Boss Focus INF] Andar atual (" .. currentFloor .. ") diferente do andar do boss (" .. bossFloor .. ") - Recriando...")
                     createCastle()
@@ -468,7 +499,6 @@ local function bossFocusLoop()
                         Duration = 4
                     })
                 else
-                    -- Está no andar correto, procura o boss
                     local boss = findBoss(selectedBoss)
                     if boss then
                         local player = game.Players.LocalPlayer
@@ -502,7 +532,6 @@ local function bossFocusLoop()
                             task.wait(0.2)
                         end
                         
-                        -- Boss morreu, recria o castelo
                         if bossFocusEnabled then
                             warn("[Boss Focus INF] Recriando castelo após matar o boss...")
                             createCastle()
@@ -546,7 +575,6 @@ end
 -- ELEMENTOS NA ABA DUNGEON
 -- ==========================
 
--- Input para andar do boss
 dungeonTab:AddInput("BossFloor", {
     Title = "Boss Floor",
     Default = tostring(bossFloor),
@@ -557,12 +585,12 @@ dungeonTab:AddInput("BossFloor", {
         local floor = tonumber(value)
         if floor and floor > 0 then
             bossFloor = floor
+            saveSettings()
             warn("[Boss Focus] Andar do boss atualizado para:", floor)
         end
     end
 })
 
--- Input para andar de entrada
 dungeonTab:AddInput("CastleEntryFloor", {
     Title = "Castle Entry Floor",
     Default = tostring(entryFloor),
@@ -573,12 +601,12 @@ dungeonTab:AddInput("CastleEntryFloor", {
         local floor = tonumber(value)
         if floor and floor > 0 then
             entryFloor = floor
+            saveSettings()
             warn("[Castle] Andar de entrada atualizado para:", floor)
         end
     end
 })
 
--- Input para andar de reset
 dungeonTab:AddInput("CastleResetFloor", {
     Title = "Castle Reset Detection Floor",
     Default = tostring(resetFloor),
@@ -589,12 +617,12 @@ dungeonTab:AddInput("CastleResetFloor", {
         local floor = tonumber(value)
         if floor and floor > 0 then
             resetFloor = floor
+            saveSettings()
             warn("[Castle] Andar de reset atualizado para:", floor)
         end
     end
 })
 
--- Dropdown para boss
 local bossOptions = {"Cat God"}
 dungeonTab:AddDropdown("SelectBoss", {
     Title = "Select Boss",
@@ -603,16 +631,17 @@ dungeonTab:AddDropdown("SelectBoss", {
     Default = selectedBoss,
     Callback = function(value)
         selectedBoss = value
+        saveSettings()
         warn("[Boss Focus] Boss selecionado:", value)
     end
 })
 
--- Toggle Castle INF
 dungeonTab:AddToggle("CastleINF", {
     Title = "Castle INF (Farm + Portal)",
-    Default = false,
+    Default = castleInfEnabled,
     Callback = function(state)
         castleInfEnabled = state
+        saveSettings()
         if state then
             Fluent:Notify({
                 Title = "Castle INF Ativado",
@@ -630,12 +659,12 @@ dungeonTab:AddToggle("CastleINF", {
     end
 })
 
--- Toggle Auto Castle
 dungeonTab:AddToggle("AutoCastle", {
     Title = "Auto Castle (Create + Recreate)",
-    Default = false,
+    Default = castleEnabled,
     Callback = function(state)
         castleEnabled = state
+        saveSettings()
         if state then
             Fluent:Notify({
                 Title = "Auto Castle Ativado",
@@ -661,13 +690,13 @@ dungeonTab:AddToggle("AutoCastle", {
     end
 })
 
--- Toggle Auto Castelo Only
 dungeonTab:AddToggle("AutoCasteloOnly", {
     Title = "Auto Castelo (Criar Apenas)",
     Description = "Cria e entra automaticamente quando fora do castelo (SEM reset)",
-    Default = false,
+    Default = castleCreateOnlyEnabled,
     Callback = function(state)
         castleCreateOnlyEnabled = state
+        saveSettings()
         if state then
             Fluent:Notify({
                 Title = "Auto Castelo Ativado",
@@ -686,13 +715,13 @@ dungeonTab:AddToggle("AutoCasteloOnly", {
     end
 })
 
--- Toggle Boss Focus INF
 dungeonTab:AddToggle("BossFocusINF", {
     Title = "Boss Focus INF",
     Description = "Entra no andar " .. tostring(bossFloor) .. " e mata o boss infinitamente",
-    Default = false,
+    Default = bossFocusEnabled,
     Callback = function(state)
         bossFocusEnabled = state
+        saveSettings()
         if state then
             Fluent:Notify({
                 Title = "Boss Focus INF Ativado",
@@ -710,6 +739,41 @@ dungeonTab:AddToggle("BossFocusINF", {
     end
 })
 
+-- ==========================
+-- AUTO-START DOS LOOPS SALVOS
+-- ==========================
+
+task.spawn(function()
+    task.wait(2) -- Aguarda carregar tudo
+    
+    if castleInfEnabled then
+        warn("[Sistema] Reiniciando Castle INF (estava ativo)...")
+        castleInfLoop()
+    end
+    
+    if castleEnabled then
+        warn("[Sistema] Reiniciando Auto Castle (estava ativo)...")
+        createCastle()
+        task.wait(1)
+        buyCastleTicket()
+        task.wait(1)
+        joinCastle(entryFloor)
+        task.wait(2)
+        autoCastleLoop()
+    end
+    
+    if castleCreateOnlyEnabled then
+        warn("[Sistema] Reiniciando Auto Castelo Only (estava ativo)...")
+        castleCreateOnlyLoop()
+    end
+    
+    if bossFocusEnabled then
+        warn("[Sistema] Reiniciando Boss Focus INF (estava ativo)...")
+        bossFocusLoop()
+    end
+end)
+
 Window:SelectTab(1)
 
-warn("[Sistema] Interface carregada com opções de ativação!")
+warn("[Sistema] Interface carregada com sistema de salvamento automático!")
+warn("[Sistema] Configurações carregadas:", savedSettings)
