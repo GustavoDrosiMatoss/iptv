@@ -1,103 +1,69 @@
--- Verificar se um andar específico existe (para Boss Focus)
-local function checkSpecificFloor(floorNumber)
-    local main = workspace:FindFirstChild("__Main")
-    if not main then return false end
-    local world = main:FindFirstChild("__World")
-    if not world then return false end
+-- ==========================
+-- Funções auxiliares compartilhadas
+-- ==========================
+local function createAndStartDungeon()
+    print("[DEBUG] Criando e iniciando dungeon...")
     
-    local roomExists = world:FindFirstChild("Room_" .. floorNumber) ~= nil
-    return roomExists
-end
-
--- Teleportar para uma room específica (adicionado acima)
--- Esta função já foi declarada antes desta-- ==============================
--- Configuração inicial
--- ==============================
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
-local playerCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-local playerHRP = playerCharacter:WaitForChild("HumanoidRootPart")
-
-local enemyContainer = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
-
--- ==============================
--- Sistema de Salvamento
--- ==============================
-local SaveManager = {}
-SaveManager.FileName = "AllanHub_DungeonSettings.json"
-
-function SaveManager:Load()
-    local success, data = pcall(function()
-        return readfile(SaveManager.FileName)
-    end)
-    
-    if success and data then
-        local decoded = game:GetService("HttpService"):JSONDecode(data)
-        return decoded
-    end
-    
-    return {}
-end
-
-function SaveManager:Save(data)
-    pcall(function()
-        local encoded = game:GetService("HttpService"):JSONEncode(data)
-        writefile(SaveManager.FileName, encoded)
-    end)
-end
-
--- Carregar configurações salvas
-local savedSettings = SaveManager:Load()
-
--- ==============================
--- Carrega o Fluent UI
--- ==============================
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-
--- Janela
-local Window = Fluent:CreateWindow({
-    Title = "Allan Hub - Debug NPC",
-    SubTitle = "By Allan",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(500, 320),
-    Acrylic = true,
-    Theme = "dark",
-    MinimizeKey = Enum.KeyCode.End
-})
-
--- ==============================
--- Abas
--- ==============================
-local npcTab = Window:AddTab({ Title = "NPC Debug", Icon = "crosshair" })
-local dungeonTab = Window:AddTab({ Title = "Dungeon", Icon = "sword" })
-
--- Variáveis para o sistema de castle (COM salvamento)
-local castleInfEnabled = savedSettings.castleInfEnabled or false
-local castleEnabled = savedSettings.castleEnabled or false
-local castleCreateOnlyEnabled = savedSettings.castleCreateOnlyEnabled or false
-local bossFocusEnabled = savedSettings.bossFocusEnabled or false
-local entryFloor = savedSettings.entryFloor or 125
-local resetFloor = savedSettings.resetFloor or 200
-local selectedBoss = savedSettings.selectedBoss or "Cat God"
-local bossFloor = savedSettings.bossFloor or 175
-
--- Função para salvar configurações
-local function saveSettings()
-    local settings = {
-        castleInfEnabled = castleInfEnabled,
-        castleEnabled = castleEnabled,
-        castleCreateOnlyEnabled = castleCreateOnlyEnabled,
-        bossFocusEnabled = bossFocusEnabled,
-        entryFloor = entryFloor,
-        resetFloor = resetFloor,
-        selectedBoss = selectedBoss,
-        bossFloor = bossFloor
+    -- Criar dungeon
+    local createArgs = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\12"
+        }
     }
-    SaveManager:Save(settings)
-    warn("[Sistema] Configurações salvas!")
+    pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(createArgs))
+    end)
+    print("✔ Dungeon criada.")
+    
+    task.wait(3)
+
+    -- Iniciar dungeon
+    local startArgs = {
+        [1] = {
+            [1] = {
+                ["Event"] = "DungeonAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\12"
+        }
+    }
+    pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
+    end)
+    print("▶ Dungeon iniciada.")
 end
 
--- Função que pega o Title.Text de um NPC
+local function leaveDungeon()
+    print("[AUTO-EXIT] Saindo da dungeon...")
+    local args = {
+        [1] = {
+            [1] = { ["Event"] = "LeaveDungeon" },
+            [2] = "\12"
+        }
+    }
+    pcall(function()
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    end)
+    task.wait(2)
+end
+
+local function getDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+-- ==========================
+-- Boss alvo configurável
+-- ==========================
+ConfigSystem.DefaultConfig.DungeonTargetBoss = ConfigSystem.DefaultConfig.DungeonTargetBoss or ""
+ConfigSystem.CurrentConfig.DungeonTargetBoss = ConfigSystem.CurrentConfig.DungeonTargetBoss or ConfigSystem.DefaultConfig.DungeonTargetBoss
+
+local targetBossName = ConfigSystem.CurrentConfig.DungeonTargetBoss
+
+-- Função para pegar nome real do NPC (com Title.Text se existir)
 local function getNPCName(enemy)
     local titleObj = enemy:FindFirstChild("Title", true)
     if titleObj and titleObj:IsA("TextLabel") then
@@ -106,870 +72,322 @@ local function getNPCName(enemy)
     return enemy.Name
 end
 
--- Função que encontra Cat God
-local function findCatGod()
-    for _, enemy in pairs(enemyContainer:GetChildren()) do
-        if enemy:IsA("Model") then
-            local npcName = getNPCName(enemy)
-            if npcName and string.lower(npcName) == "cat god" then
-                return enemy
-            end
-        end
+-- Função que retorna inimigo (boss específico ou mais próximo)
+local function getTargetEnemy()
+    if not workspace:FindFirstChild("__Main") or not workspace.__Main:FindFirstChild("__Enemies") then
+        return nil
     end
-    return nil
-end
-
--- Botão para focar no Cat God
-npcTab:AddButton({
-    Title = "Focar Cat God",
-    Description = "Teleporta até o Cat God",
-    Callback = function()
-        local catGod = findCatGod()
-        if catGod then
-            local hrp = catGod:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                playerHRP.CFrame = hrp.CFrame + Vector3.new(0, 5, 0)
-                Fluent:Notify({
-                    Title = "Allan Hub",
-                    Content = "Focado no Cat God!",
-                    Duration = 5
-                })
-            else
-                Fluent:Notify({
-                    Title = "Erro",
-                    Content = "Cat God encontrado mas sem HumanoidRootPart.",
-                    Duration = 5
-                })
-            end
-        else
-            Fluent:Notify({
-                Title = "Erro",
-                Content = "Cat God não encontrado no mapa!",
-                Duration = 5
-            })
-        end
-    end
-})
-
--- ==========================
--- FUNÇÕES CASTLE BÁSICAS
--- ==========================
-
-local function getCurrentCastleFloor()
-    local main = workspace:FindFirstChild("__Main")
-    if not main then return nil end
-    local world = main:FindFirstChild("__World")
-    if not world then return nil end
-
-    local current = nil
-    for i = 1, 300 do
-        if world:FindFirstChild("Room_" .. i) then
-            current = i
-        end
-    end
-
-    if current then
-        warn("[Castle] Andar atual detectado:", current)
-    else
-        warn("[Castle] Fora do castelo (nenhuma Room encontrada).")
-    end
-    return current
-end
-
-local function buyCastleTicket()
-    warn("[Castle] Comprando ticket com Gems...")
-    local args = {
-        [1] = {
-            [1] = {
-                ["Type"] = "Gems",
-                ["Event"] = "CastleAction",
-                ["Action"] = "BuyTicket"
-            },
-            [2] = "\13"
-        }
-    }
-    pcall(function() 
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
-    end)
-end
-
-local function joinCastle(floor)
-    floor = floor or entryFloor
-    warn("[Castle] Entrando no andar " .. tostring(floor) .. "...")
-    local joinArgs = {
-        [1] = {
-            [1] = {
-                ["Check"] = true,
-                ["Floor"] = tostring(floor),
-                ["Event"] = "CastleAction",
-                ["Action"] = "Join"
-            },
-            [2] = "\13"
-        }
-    }
-    pcall(function() 
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(joinArgs)) 
-    end)
-end
-
-local function createCastle()
-    warn("[Auto Castle] Criando castelo...")
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "CastleAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\13"
-        }
-    }
-    pcall(function() 
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
-    end)
-    task.wait(3)
-end
-
--- ==========================
--- CASTLE INF - FARM E PORTAL
--- ==========================
-
-local function findFirePortal()
-    local main = workspace:FindFirstChild("__Main")
-    if not main then return nil, nil end
-    local world = main:FindFirstChild("__World")
-    if not world then return nil, nil end
-
-    for i = 1, 300 do
-        local room = world:FindFirstChild("Room_" .. i)
-        if room then
-            local portal = room:FindFirstChild("FirePortal")
-            if portal then
-                return portal, i
-            end
-        end
-    end
-    return nil, nil
-end
-
-local function teleportToFirePortal()
-    local portal, currentFloor = findFirePortal()
-    if not portal then 
-        warn("[Castle INF] FirePortal não encontrado!")
-        return false 
-    end
-
+    
+    local enemiesFolder = workspace.__Main.__Enemies.Server
     local player = game.Players.LocalPlayer
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
-
-    local hrp = char.HumanoidRootPart
-    hrp.CFrame = portal.CFrame * CFrame.new(0, 2, -2)
-    hrp.Velocity = Vector3.new(0, 0, 0)
-
-    warn("[Castle INF] Teleportado para portal do andar " .. currentFloor)
-    return true, currentFloor
-end
-
-local function activateFirePortal()
-    local portal, currentFloor = findFirePortal()
-    if not portal then return false end
-
-    local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
-    if not prompt then
-        for _, obj in ipairs(portal:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                prompt = obj
-                break
+    local playerCharacter = player.Character
+    if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") then return nil end
+    
+    local closestEnemy = nil
+    local closestDistance = math.huge
+    local playerPosition = playerCharacter.HumanoidRootPart.Position
+    
+    for _, enemy in pairs(enemiesFolder:GetChildren()) do
+        local hp = enemy:GetAttribute("HP")
+        if hp and hp > 0 and enemy:FindFirstChild("HumanoidRootPart") then
+            local npcName = string.lower(getNPCName(enemy))
+            
+            if targetBossName ~= "" and string.lower(targetBossName) == npcName then
+                -- Boss alvo encontrado, retorna direto
+                return enemy
+            elseif targetBossName == "" then
+                -- Sem boss definido -> pega o mais próximo
+                local distance = (playerPosition - enemy.HumanoidRootPart.Position).Magnitude
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestEnemy = enemy
+                end
             end
         end
     end
-
-    if not prompt and portal.Parent then
-        prompt = portal.Parent:FindFirstChildOfClass("ProximityPrompt")
-    end
-
-    if prompt then
-        for _ = 1, 3 do
-            pcall(function()
-                fireproximityprompt(prompt)
-            end)
-            task.wait(0.1)
-        end
-        warn("[Castle INF] Portal ativado! Subindo do andar " .. currentFloor)
-        return true
-    end
-
-    return false
+    
+    return closestEnemy
 end
 
-local function farmCastleMobs()
-    local mobsKilled = false
-    local enemiesFolder = workspace:FindFirstChild("__Main")
-
-    if enemiesFolder then
-        enemiesFolder = enemiesFolder:FindFirstChild("__Enemies")
-        if enemiesFolder then
-            enemiesFolder = enemiesFolder:FindFirstChild("Server")
-        end
+local function moveToEnemy(enemy, currentTween)
+    local tweenService = game:GetService("TweenService")
+    local player = game.Players.LocalPlayer
+    local playerCharacter = player.Character
+    
+    if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") or not enemy:FindFirstChild("HumanoidRootPart") then
+        return false, currentTween
     end
 
-    if enemiesFolder then
-        for _, mob in pairs(enemiesFolder:GetChildren()) do
-            if not castleInfEnabled then break end
+    if currentTween then
+        currentTween:Cancel()
+    end
 
-            local hp = mob:GetAttribute("HP")
-            if hp and hp > 0 and mob.Position then
-                local player = game.Players.LocalPlayer
-                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    player.Character.HumanoidRootPart.CFrame = mob.CFrame * CFrame.new(0, 3, 0)
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    currentTween = tweenService:Create(
+        playerCharacter.HumanoidRootPart, 
+        tweenInfo, 
+        {CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)}
+    )
 
-                    pcall(function()
-                        local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-                        remote:FireServer({
-                            {
-                                ["PetPos"] = {},
-                                ["AttackType"] = "All", 
-                                ["Event"] = "Attack",
-                                ["Enemy"] = mob.Name
-                            },
-                            "\7"
-                        })
-                    end)
+    currentTween:Play()
 
-                    warn("[Castle INF] Atacando mob:", mob.Name)
-                    while castleInfEnabled and mob.Parent do
-                        local currentHP = mob:GetAttribute("HP")
-                        if not currentHP or currentHP <= 0 then
-                            warn("[Castle INF] Mob eliminado:", mob.Name)
-                            break
+    return true, currentTween
+end
+
+local function isInCastleTime()
+    local hora = os.date("*t")
+    local minuto = hora.min
+    return (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55)
+end
+
+-- ==========================
+-- SISTEMA 1: Dungeon INF (Sair após limpar)
+-- ==========================
+ConfigSystem.DefaultConfig.DungeonINF = ConfigSystem.DefaultConfig.DungeonINF or false
+ConfigSystem.CurrentConfig.DungeonINF = ConfigSystem.CurrentConfig.DungeonINF or ConfigSystem.DefaultConfig.DungeonINF
+
+local dungeonINFEnabled = ConfigSystem.CurrentConfig.DungeonINF
+local currentTweenINF = nil
+local lastEnemyCheckINF = tick()
+local maxTimeWithoutEnemiesINF = 5
+
+local function monitorDungeonINF()
+    print("[DUNGEON INF] 🎯 Sistema iniciado - Farma e sai quando acaba!")
+    
+    while dungeonINFEnabled do
+        pcall(function()
+            if ConfigSystem.CurrentConfig.AutoFarmDungeon then
+                print("[DUNGEON INF] ⚠️ CONFLITO: Auto Farm Dungeon está ativo! Use apenas um sistema.")
+                task.wait(5)
+                return
+            end
+
+            if isInCastleTime() then
+                if workspace:FindFirstChild("__Main") then
+                    leaveDungeon()
+                    print("[DUNGEON INF] 🏰 Saiu para o Castle Infernal!")
+                end
+                task.wait(60)
+                return
+            end
+
+            if not workspace:FindFirstChild("__Main") then
+                print("[DUNGEON INF] 🚪 Fora da dungeon. Criando nova...")
+                createAndStartDungeon()
+                task.wait(5)
+                lastEnemyCheckINF = tick()
+            else
+                local closestEnemy = getTargetEnemy()
+                local currentTime = tick()
+
+                if closestEnemy then
+                    lastEnemyCheckINF = currentTime
+                    print("[DUNGEON INF] ⚔️ Atacando:", getNPCName(closestEnemy))
+
+                    local success
+                    success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)
+                    
+                    if success then
+                        local attempts = 0
+                        while dungeonINFEnabled 
+                              and closestEnemy.Parent 
+                              and closestEnemy:GetAttribute("HP") 
+                              and closestEnemy:GetAttribute("HP") > 0 
+                              and attempts < 50 do
+                            task.wait(0.2)
+                            attempts += 1
+                        end
+                    end
+                else
+                    local timeWithoutEnemies = currentTime - lastEnemyCheckINF
+                    
+                    if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
+                        print("[DUNGEON INF] ✅ Dungeon limpa! Saindo...")
+                        leaveDungeon()
+                        task.wait(15)
+                    else
+                        local remaining = maxTimeWithoutEnemiesINF - timeWithoutEnemies
+                        print(string.format("[DUNGEON INF] 🔍 Procurando inimigos... (%.1fs restantes)", remaining))
+                        task.wait(1)
+                    end
+                end
+            end
+        end)
+
+        task.wait(0.1)
+    end
+
+    if currentTweenINF then
+        currentTweenINF:Cancel()
+        currentTweenINF = nil
+    end
+    print("[DUNGEON INF] 🛑 Sistema desativado.")
+end
+
+-- ==========================
+-- SISTEMA 2: Auto Farm Dungeon (Recriar infinito)
+-- ==========================
+ConfigSystem.DefaultConfig.AutoFarmDungeon = ConfigSystem.DefaultConfig.AutoFarmDungeon or false
+ConfigSystem.CurrentConfig.AutoFarmDungeon = ConfigSystem.CurrentConfig.AutoFarmDungeon or ConfigSystem.DefaultConfig.AutoFarmDungeon
+
+local autoFarmEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeon
+local currentTweenAuto = nil
+local lastEnemyCheckAuto = tick()
+local maxTimeWithoutEnemiesAuto = 1
+
+local function monitorAutoFarm()
+    print("[AUTO FARM] 🔄 Sistema iniciado - Farm infinito com recriação!")
+
+    while autoFarmEnabled do
+        pcall(function()
+            if ConfigSystem.CurrentConfig.DungeonINF then
+                print("[AUTO FARM] ⚠️ CONFLITO: Dungeon INF está ativo! Use apenas um sistema.")
+                task.wait(5)
+                return
+            end
+
+            if isInCastleTime() then
+                if workspace:FindFirstChild("__Main") then
+                    leaveDungeon()
+                    print("[AUTO FARM] 🏰 Saiu para o Castle Infernal!")
+                end
+                task.wait(60)
+                return
+            end
+
+            if not workspace:FindFirstChild("__Main") then
+                print("[AUTO FARM] 🚪 Fora da dungeon. Criando nova...")
+                createAndStartDungeon()
+                task.wait(5)
+                lastEnemyCheckAuto = tick()
+            else
+                local closestEnemy = getTargetEnemy()
+                local currentTime = tick()
+
+                if closestEnemy then
+                    lastEnemyCheckAuto = currentTime
+                    print("[AUTO FARM] ⚔️ Atacando:", getNPCName(closestEnemy))
+
+                    local success
+                    success, currentTweenAuto = moveToEnemy(closestEnemy, currentTweenAuto)
+                    
+                    if success then
+                        local attempts = 0
+                        while autoFarmEnabled 
+                              and closestEnemy.Parent 
+                              and closestEnemy:GetAttribute("HP") 
+                              and closestEnemy:GetAttribute("HP") > 0 
+                              and attempts < 50 do
+                            task.wait(0.2)
+                            attempts += 1
+                        end
+                    end
+                else
+                    local timeWithoutEnemies = currentTime - lastEnemyCheckAuto
+                    
+                    if timeWithoutEnemies >= maxTimeWithoutEnemiesAuto then
+                        print("[AUTO FARM] ⚡ Recriando dungeon SUPER RÁPIDO!")
+                        
+                        if currentTweenAuto then
+                            currentTweenAuto:Cancel()
+                            currentTweenAuto = nil
+                        end
+                        
+                        leaveDungeon()
+                        task.wait(2)
+                        
+                        createAndStartDungeon()
+                        task.wait(3)
+                        lastEnemyCheckAuto = tick()
+                    else
+                        local remaining = maxTimeWithoutEnemiesAuto - timeWithoutEnemies
+                        if math.floor(remaining * 10) % 5 == 0 then
+                            print(string.format("[AUTO FARM] ⚡ MODO TURBO: %.1fs sem mobs (recria em %.1fs)", timeWithoutEnemies, remaining))
                         end
                         task.wait(0.2)
                     end
-
-                    mobsKilled = true
                 end
             end
-        end
+        end)
+
+        task.wait(0.1)
     end
 
-    return mobsKilled
-end
-
-local function castleInfLoop()
-    task.spawn(function()
-        warn("[Castle INF] Loop iniciado!")
-        while castleInfEnabled do
-            local foundMobs = farmCastleMobs()
-
-            if not foundMobs then
-                local success = teleportToFirePortal()
-                if success then
-                    task.wait(1)
-                    activateFirePortal()
-                    task.wait(2)
-                end
-            end
-
-            task.wait(0.5)
-        end
-        warn("[Castle INF] Loop encerrado.")
-    end)
-end
-
--- ==========================
--- AUTO CASTLE LOOP
--- ==========================
-
-local function autoCastleLoop()
-    task.spawn(function()
-        warn("[Auto Castle] Loop iniciado!")
-        while castleEnabled do
-            local currentFloor = getCurrentCastleFloor()
-
-            if not currentFloor then
-                warn("[Auto Castle] Fora do castelo - Criando e entrando...")
-                createCastle()
-                task.wait(1)
-                buyCastleTicket()
-                task.wait(1)
-                joinCastle(entryFloor)
-                task.wait(5)
-            else
-                if currentFloor >= resetFloor then
-                    warn("[Auto Castle] Detectou andar " .. currentFloor .. " → Recriando no andar " .. entryFloor)
-                    createCastle()
-                    task.wait(1)
-                    buyCastleTicket()
-                    task.wait(1)
-                    joinCastle(entryFloor)
-
-                    Fluent:Notify({
-                        Title = "Castle Recreated",
-                        Content = "Detectou andar " .. tostring(currentFloor) .. " - Recriado no andar " .. tostring(entryFloor),
-                        Duration = 4
-                    })
-
-                    task.wait(5)
-                else
-                    farmCastleMobs()
-                    task.wait(1)
-                end
-            end
-
-            task.wait(0.5)
-        end
-        warn("[Auto Castle] Loop encerrado.")
-    end)
-end
-
--- ==========================
--- AUTO CASTLE ONLY LOOP
--- ==========================
-
-local function castleCreateOnlyLoop()
-    task.spawn(function()
-        warn("[Auto Castelo] Loop iniciado (sem reset)!")
-        while castleCreateOnlyEnabled do
-            local currentFloor = getCurrentCastleFloor()
-
-            if not currentFloor then
-                warn("[Auto Castelo] Fora do castelo - Criando e entrando...")
-                createCastle()
-                task.wait(1)
-                buyCastleTicket()
-                task.wait(1)
-                joinCastle(entryFloor)
-                task.wait(5)
-
-                Fluent:Notify({
-                    Title = "Auto Castelo",
-                    Content = "Castelo criado e entrou no andar " .. tostring(entryFloor),
-                    Duration = 3
-                })
-            else
-                warn("[Auto Castelo] Dentro do castelo (andar " .. currentFloor .. ") - Aguardando...")
-                task.wait(2)
-            end
-
-            task.wait(0.5)
-        end
-        warn("[Auto Castelo] Loop encerrado.")
-    end)
-end
-
--- ==========================
--- BOSS FOCUS INF
--- ==========================
-
-local function findBoss(bossName)
-    warn("[Boss Focus] 🔍 Procurando boss: " .. bossName)
-    
-    -- Primeiro tenta em Client (onde está o Cat God visível)
-    local main = workspace:FindFirstChild("__Main")
-    if not main then
-        warn("[Boss Focus] ❌ __Main não encontrado")
-        return nil
+    if currentTweenAuto then
+        currentTweenAuto:Cancel()
+        currentTweenAuto = nil
     end
-    
-    local enemiesFolder = main:FindFirstChild("__Enemies")
-    if not enemiesFolder then
-        warn("[Boss Focus] ❌ __Enemies não encontrado")
-        return nil
-    end
-    
-    -- Procurar em Client
-    local clientFolder = enemiesFolder:FindFirstChild("Client")
-    if clientFolder then
-        warn("[Boss Focus] 📂 Procurando em Client... (" .. #clientFolder:GetChildren() .. " modelos)")
-        for _, enemy in pairs(clientFolder:GetChildren()) do
-            if enemy:IsA("Model") then
-                local npcName = getNPCName(enemy)
-                warn("[Boss Focus]   - Modelo: " .. enemy.Name .. " | Nome detectado: " .. tostring(npcName))
-                if npcName and string.lower(npcName) == string.lower(bossName) then
-                    warn("[Boss Focus] ✅ Boss encontrado em Client:", enemy.Name)
-                    return enemy
-                end
-            end
-        end
-        warn("[Boss Focus] ⚠ Boss não encontrado em Client")
-    else
-        warn("[Boss Focus] ❌ Client folder não encontrado")
-    end
-    
-    -- Se não encontrar em Client, tenta em Server
-    local serverFolder = enemiesFolder:FindFirstChild("Server")
-    if serverFolder then
-        warn("[Boss Focus] 📂 Procurando em Server... (" .. #serverFolder:GetChildren() .. " modelos)")
-        for _, enemy in pairs(serverFolder:GetChildren()) do
-            if enemy:IsA("Model") then
-                local npcName = getNPCName(enemy)
-                warn("[Boss Focus]   - Modelo: " .. enemy.Name .. " | Nome detectado: " .. tostring(npcName))
-                if npcName and string.lower(npcName) == string.lower(bossName) then
-                    warn("[Boss Focus] ✅ Boss encontrado em Server:", enemy.Name)
-                    return enemy
-                end
-            end
-        end
-        warn("[Boss Focus] ⚠ Boss não encontrado em Server")
-    else
-        warn("[Boss Focus] ❌ Server folder não encontrado")
-    end
-    
-    warn("[Boss Focus] ❌ Boss '" .. bossName .. "' não encontrado em nenhuma pasta")
-    return nil
-end
-
-local function bossFocusLoop()
-    task.spawn(function()
-        warn("[Boss Focus INF] Loop iniciado para boss: " .. selectedBoss .. " no andar " .. bossFloor)
-        local lastJoinTime = 0
-        local bossNotFoundCount = 0
-        local isInCorrectFloor = false
-        
-        while bossFocusEnabled do
-            local currentFloor = getCurrentCastleFloor()
-
-            -- Está fora do castelo
-            if not currentFloor then
-                warn("[Boss Focus INF] Fora do castelo - Criando e entrando no andar " .. bossFloor)
-                createCastle()
-                task.wait(1)
-                buyCastleTicket()
-                task.wait(1)
-                joinCastle(bossFloor)
-                lastJoinTime = tick()
-                isInCorrectFloor = false
-                bossNotFoundCount = 0
-                warn("[Boss Focus INF] Aguardando 12 segundos para carregar o andar " .. bossFloor .. "...")
-                task.wait(12)
-            else
-                local timeSinceJoin = tick() - lastJoinTime
-                
-                -- Verifica se o andar específico do boss existe
-                local targetFloorExists = checkSpecificFloor(bossFloor)
-                
-                -- Acabou de entrar, aguardando carregar o andar específico
-                if timeSinceJoin < 20 and not isInCorrectFloor then
-                    if targetFloorExists then
-                        isInCorrectFloor = true
-                        warn("[Boss Focus INF] ✓ Room_" .. bossFloor .. " encontrada e carregada!")
-                    else
-                        warn("[Boss Focus INF] Carregando... Room_" .. bossFloor .. " ainda não existe (andar detectado: " .. currentFloor .. ")")
-                        task.wait(2)
-                    end
-                -- Passou do tempo de carregamento e o andar específico não existe
-                elseif timeSinceJoin >= 20 and not targetFloorExists then
-                    warn("[Boss Focus INF] Falha ao carregar Room_" .. bossFloor .. " após 20s - Recriando...")
-                    createCastle()
-                    task.wait(1)
-                    buyCastleTicket()
-                    task.wait(1)
-                    joinCastle(bossFloor)
-                    lastJoinTime = tick()
-                    isInCorrectFloor = false
-                    bossNotFoundCount = 0
-                    
-                    Fluent:Notify({
-                        Title = "Boss Focus INF",
-                        Content = "Room_" .. tostring(bossFloor) .. " não carregou - Recriando",
-                        Duration = 4
-                    })
-                    
-                    task.wait(12)
-                -- O andar específico existe, procura o boss
-                elseif targetFloorExists and isInCorrectFloor then
-                    -- Primeiro teleporta para o CENTRO da room do boss para garantir que carrega
-                    warn("[Boss Focus INF] 📍 Teleportando para o CENTRO da Room_" .. bossFloor .. "...")
-                    teleportToRoomCenter(bossFloor)
-                    warn("[Boss Focus INF] ⏳ Aguardando 4 segundos para carregar inimigos na área...")
-                    task.wait(4) -- Aguarda mais tempo para garantir que o boss carregue
-                    
-                    warn("[Boss Focus INF] 🔍 Procurando boss após teleporte para o centro...")
-                    local boss = findBoss(selectedBoss)
-                    
-                    if boss then
-                        bossNotFoundCount = 0 -- Resetar contador
-                        warn("[Boss Focus INF] ✅ BOSS ENCONTRADO: " .. selectedBoss .. " (Model: " .. boss.Name .. ")")
-                        
-                        -- Listar partes do boss
-                        warn("[Boss Focus INF] 📦 Partes do boss:")
-                        for _, part in pairs(boss:GetChildren()) do
-                            warn("     - " .. part.Name .. " (" .. part.ClassName .. ")")
-                        end
-                        
-                        local player = game.Players.LocalPlayer
-                        local char = player.Character
-                        if char and char:FindFirstChild("HumanoidRootPart") then
-                            local hrp = char.HumanoidRootPart
-                            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
-                            
-                            if bossHRP then
-                                hrp.CFrame = bossHRP.CFrame * CFrame.new(0, 5, 0)
-                                warn("[Boss Focus INF] ✅ Teleportado para HumanoidRootPart do boss")
-                            elseif boss.PrimaryPart then
-                                hrp.CFrame = boss.PrimaryPart.CFrame * CFrame.new(0, 5, 0)
-                                warn("[Boss Focus INF] ✅ Teleportado para PrimaryPart do boss")
-                            elseif boss:FindFirstChild("Torso") then
-                                hrp.CFrame = boss.Torso.CFrame * CFrame.new(0, 5, 0)
-                                warn("[Boss Focus INF] ✅ Teleportado para Torso do boss")
-                            elseif boss:FindFirstChild("UpperTorso") then
-                                hrp.CFrame = boss.UpperTorso.CFrame * CFrame.new(0, 5, 0)
-                                warn("[Boss Focus INF] ✅ Teleportado para UpperTorso do boss")
-                            else
-                                -- Pegar qualquer BasePart que tiver
-                                for _, part in pairs(boss:GetDescendants()) do
-                                    if part:IsA("BasePart") then
-                                        hrp.CFrame = part.CFrame * CFrame.new(0, 10, 0)
-                                        warn("[Boss Focus INF] ✅ Teleportado para " .. part.Name .. " do boss")
-                                        break
-                                    end
-                                end
-                            end
-                        end
-
-                        -- Atacar o boss
-                        warn("[Boss Focus INF] ⚔️ Iniciando ataque ao boss...")
-                        pcall(function()
-                            local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-                            remote:FireServer({
-                                {
-                                    ["PetPos"] = {},
-                                    ["AttackType"] = "All", 
-                                    ["Event"] = "Attack",
-                                    ["Enemy"] = boss.Name
-                                },
-                                "\7"
-                            })
-                            warn("[Boss Focus INF] ✅ Comando de ataque enviado")
-                        end)
-
-                        warn("[Boss Focus INF] 💓 Monitorando HP do boss...")
-                        local bossAlive = true
-                        local noHPCount = 0
-                        local attackCount = 0
-                        
-                        while bossFocusEnabled and boss.Parent and bossAlive do
-                            attackCount = attackCount + 1
-                            local currentHP = boss:GetAttribute("HP")
-                            
-                            if currentHP then
-                                if currentHP <= 0 then
-                                    warn("[Boss Focus INF] ✅ BOSS ELIMINADO: " .. selectedBoss .. " (HP = 0)")
-                                    bossAlive = false
-                                    break
-                                else
-                                    if attackCount % 4 == 0 then -- Log a cada 2 segundos
-                                        warn("[Boss Focus INF] 💓 HP do boss: " .. currentHP)
-                                    end
-                                end
-                                noHPCount = 0
-                            else
-                                noHPCount = noHPCount + 1
-                                if noHPCount % 5 == 0 then
-                                    warn("[Boss Focus INF] ⚠️ Sem atributo HP (" .. noHPCount .. "/10)")
-                                end
-                                
-                                if noHPCount >= 10 then
-                                    warn("[Boss Focus INF] ❌ Boss sumiu ou morreu (sem HP por 10 verificações)")
-                                    bossAlive = false
-                                    break
-                                end
-                            end
-                            
-                            -- Continuar teleportando para o boss
-                            if char and char:FindFirstChild("HumanoidRootPart") then
-                                local bossHRP = boss:FindFirstChild("HumanoidRootPart") 
-                                    or boss.PrimaryPart 
-                                    or boss:FindFirstChild("Torso") 
-                                    or boss:FindFirstChild("UpperTorso")
-                                
-                                if bossHRP then
-                                    char.HumanoidRootPart.CFrame = bossHRP.CFrame * CFrame.new(0, 5, 0)
-                                end
-                            end
-                            
-                            -- Reenviar ataque
-                            pcall(function()
-                                local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-                                remote:FireServer({
-                                    {
-                                        ["PetPos"] = {},
-                                        ["AttackType"] = "All", 
-                                        ["Event"] = "Attack",
-                                        ["Enemy"] = boss.Name
-                                    },
-                                    "\7"
-                                })
-                            end)
-                            
-                            task.wait(0.5)
-                        end
-                        
-                        -- Boss morreu, recriar castelo
-                        if bossFocusEnabled and not bossAlive then
-                            warn("[Boss Focus INF] Recriando castelo após eliminar o boss...")
-                            task.wait(2)
-                            createCastle()
-                            task.wait(1)
-                            buyCastleTicket()
-                            task.wait(1)
-                            joinCastle(bossFloor)
-                            lastJoinTime = tick()
-                            isInCorrectFloor = false
-                            bossNotFoundCount = 0
-                            
-                            Fluent:Notify({
-                                Title = "Boss Focus INF",
-                                Content = "Boss eliminado - Recriando no andar " .. tostring(bossFloor),
-                                Duration = 4
-                            })
-                            
-                            task.wait(12)
-                        end
-                    else
-                        -- Boss não encontrado
-                        bossNotFoundCount = bossNotFoundCount + 1
-                        warn("[Boss Focus INF] Boss não encontrado na Room_" .. bossFloor .. " (" .. bossNotFoundCount .. "/10)")
-                        
-                        -- Se não encontrar depois de 10 tentativas (30 segundos), recria
-                        if bossNotFoundCount >= 10 then
-                            warn("[Boss Focus INF] Boss não spawnou após 30s - Recriando castelo...")
-                            createCastle()
-                            task.wait(1)
-                            buyCastleTicket()
-                            task.wait(1)
-                            joinCastle(bossFloor)
-                            lastJoinTime = tick()
-                            isInCorrectFloor = false
-                            bossNotFoundCount = 0
-                            
-                            Fluent:Notify({
-                                Title = "Boss Focus INF",
-                                Content = "Boss não spawnou - Recriando castelo",
-                                Duration = 4
-                            })
-                            
-                            task.wait(12)
-                        else
-                            task.wait(3)
-                        end
-                    end
-                elseif not isInCorrectFloor and targetFloorExists then
-                    -- Room existe mas flag não foi setada, setar agora
-                    isInCorrectFloor = true
-                    warn("[Boss Focus INF] ✓ Room_" .. bossFloor .. " confirmada!")
-                end
-            end
-
-            task.wait(0.5)
-        end
-        warn("[Boss Focus INF] Loop encerrado.")
-    end)
+    print("[AUTO FARM] 🛑 Sistema desativado.")
 end
 
 -- ==========================
--- ELEMENTOS NA ABA DUNGEON
+-- TOGGLES + INPUT
 -- ==========================
-
-dungeonTab:AddInput("BossFloor", {
-    Title = "Boss Floor",
-    Default = tostring(bossFloor),
-    Placeholder = "Andar onde o boss spawna (ex: 175)",
-    Numeric = true,
-    Finished = true,
+Tabs.dungeon:AddInput("DungeonTargetBoss", {
+    Title = "🎯 Boss Alvo",
+    Description = "Digite o nome do boss (ex: Cat God)",
+    Default = ConfigSystem.CurrentConfig.DungeonTargetBoss,
+    Placeholder = "Exemplo: Cat God",
     Callback = function(value)
-        local floor = tonumber(value)
-        if floor and floor > 0 then
-            bossFloor = floor
-            saveSettings()
-            warn("[Boss Focus] Andar do boss atualizado para:", floor)
-        end
+        targetBossName = value
+        ConfigSystem.CurrentConfig.DungeonTargetBoss = value
+        ConfigSystem.SaveConfig()
+        print("[DUNGEON] Boss alvo definido para:", value)
     end
 })
 
-dungeonTab:AddInput("CastleEntryFloor", {
-    Title = "Castle Entry Floor",
-    Default = tostring(entryFloor),
-    Placeholder = "Andar de entrada (ex: 125)",
-    Numeric = true,
-    Finished = true,
-    Callback = function(value)
-        local floor = tonumber(value)
-        if floor and floor > 0 then
-            entryFloor = floor
-            saveSettings()
-            warn("[Castle] Andar de entrada atualizado para:", floor)
-        end
-    end
-})
-
-dungeonTab:AddInput("CastleResetFloor", {
-    Title = "Castle Reset Detection Floor",
-    Default = tostring(resetFloor),
-    Placeholder = "Andar para detectar e resetar (ex: 200)",
-    Numeric = true,
-    Finished = true,
-    Callback = function(value)
-        local floor = tonumber(value)
-        if floor and floor > 0 then
-            resetFloor = floor
-            saveSettings()
-            warn("[Castle] Andar de reset atualizado para:", floor)
-        end
-    end
-})
-
-local bossOptions = {"Cat God"}
-dungeonTab:AddDropdown("SelectBoss", {
-    Title = "Select Boss",
-    Values = bossOptions,
-    Multi = false,
-    Default = selectedBoss,
-    Callback = function(value)
-        selectedBoss = value
-        saveSettings()
-        warn("[Boss Focus] Boss selecionado:", value)
-    end
-})
-
-dungeonTab:AddToggle("CastleINF", {
-    Title = "Castle INF (Farm + Portal)",
-    Default = castleInfEnabled,
+Tabs.dungeon:AddToggle("DungeonINF", {
+    Title = "🎯 Dungeon INF",
+    Description = "Farma e sai quando limpa a dungeon",
+    Default = ConfigSystem.CurrentConfig.DungeonINF,
+    Flag = "DungeonINF",
     Callback = function(state)
-        castleInfEnabled = state
-        saveSettings()
+        dungeonINFEnabled = state
+        ConfigSystem.CurrentConfig.DungeonINF = state
+        ConfigSystem.SaveConfig()
+
         if state then
-            Fluent:Notify({
-                Title = "Castle INF Ativado",
-                Content = "Farmando mobs e subindo andares automaticamente",
-                Duration = 3
-            })
-            castleInfLoop()
+            if ConfigSystem.CurrentConfig.AutoFarmDungeon then
+                print("⚠️ Desativando Auto Farm para evitar conflitos...")
+                autoFarmEnabled = false
+                ConfigSystem.CurrentConfig.AutoFarmDungeon = false
+                ConfigSystem.SaveConfig()
+            end
+            
+            task.spawn(monitorDungeonINF)
         else
-            Fluent:Notify({
-                Title = "Castle INF Desativado",
-                Content = "Parou de farmar e subir andares",
-                Duration = 3
-            })
+            if currentTweenINF then
+                currentTweenINF:Cancel()
+                currentTweenINF = nil
+            end
         end
     end
 })
 
-dungeonTab:AddToggle("AutoCastle", {
-    Title = "Auto Castle (Create + Recreate)",
-    Default = castleEnabled,
+Tabs.dungeon:AddToggle("AutoFarmDungeon", {
+    Title = "⚡ Auto Farm Dungeon TURBO",
+    Description = "Farm SUPER RÁPIDO - recria em 1s sem inimigos!",
+    Default = ConfigSystem.CurrentConfig.AutoFarmDungeon,
+    Flag = "AutoFarmDungeon",
     Callback = function(state)
-        castleEnabled = state
-        saveSettings()
+        autoFarmEnabled = state
+        ConfigSystem.CurrentConfig.AutoFarmDungeon = state
+        ConfigSystem.SaveConfig()
+
         if state then
-            Fluent:Notify({
-                Title = "Auto Castle Ativado",
-                Content = "Criará castelo, entrará no andar " .. tostring(entryFloor) .. " e detectará andar " .. tostring(resetFloor) .. " para recriar",
-                Duration = 5
-            })
-
-            createCastle()
-            task.wait(1)
-            buyCastleTicket()
-            task.wait(1)
-            joinCastle(entryFloor)
-            task.wait(2)
-
-            autoCastleLoop()
+            if ConfigSystem.CurrentConfig.DungeonINF then
+                print("⚠️ Desativando Dungeon INF para evitar conflitos...")
+                dungeonINFEnabled = false
+                ConfigSystem.CurrentConfig.DungeonINF = false
+                ConfigSystem.SaveConfig()
+            end
+            
+            task.spawn(monitorAutoFarm)
         else
-            Fluent:Notify({
-                Title = "Auto Castle Desativado",
-                Content = "Sistema de criação e recriação parado",
-                Duration = 3
-            })
+            if currentTweenAuto then
+                currentTweenAuto:Cancel()
+                currentTweenAuto = nil
+            end
         end
     end
 })
-
-dungeonTab:AddToggle("AutoCasteloOnly", {
-    Title = "Auto Castelo (Criar Apenas)",
-    Description = "Cria e entra automaticamente quando fora do castelo (SEM reset)",
-    Default = castleCreateOnlyEnabled,
-    Callback = function(state)
-        castleCreateOnlyEnabled = state
-        saveSettings()
-        if state then
-            Fluent:Notify({
-                Title = "Auto Castelo Ativado",
-                Content = "Criará castelo e entrará automaticamente no andar " .. tostring(entryFloor) .. " (sem reset)",
-                Duration = 4
-            })
-
-            castleCreateOnlyLoop()
-        else
-            Fluent:Notify({
-                Title = "Auto Castelo Desativado",
-                Content = "Sistema de criação automática parado",
-                Duration = 3
-            })
-        end
-    end
-})
-
-dungeonTab:AddToggle("BossFocusINF", {
-    Title = "Boss Focus INF",
-    Description = "Entra no andar " .. tostring(bossFloor) .. " e mata o boss infinitamente",
-    Default = bossFocusEnabled,
-    Callback = function(state)
-        bossFocusEnabled = state
-        saveSettings()
-        if state then
-            Fluent:Notify({
-                Title = "Boss Focus INF Ativado",
-                Content = "Focando no boss " .. selectedBoss .. " no andar " .. tostring(bossFloor),
-                Duration = 4
-            })
-            bossFocusLoop()
-        else
-            Fluent:Notify({
-                Title = "Boss Focus INF Desativado",
-                Content = "Parou de focar no boss " .. selectedBoss,
-                Duration = 3
-            })
-        end
-    end
-})
-
--- ==========================
--- AUTO-START DOS LOOPS SALVOS
--- ==========================
-
-task.spawn(function()
-    task.wait(2) -- Aguarda carregar tudo
-    
-    if castleInfEnabled then
-        warn("[Sistema] Reiniciando Castle INF (estava ativo)...")
-        castleInfLoop()
-    end
-    
-    if castleEnabled then
-        warn("[Sistema] Reiniciando Auto Castle (estava ativo)...")
-        createCastle()
-        task.wait(1)
-        buyCastleTicket()
-        task.wait(1)
-        joinCastle(entryFloor)
-        task.wait(2)
-        autoCastleLoop()
-    end
-    
-    if castleCreateOnlyEnabled then
-        warn("[Sistema] Reiniciando Auto Castelo Only (estava ativo)...")
-        castleCreateOnlyLoop()
-    end
-    
-    if bossFocusEnabled then
-        warn("[Sistema] Reiniciando Boss Focus INF (estava ativo)...")
-        bossFocusLoop()
-    end
-end)
-
-Window:SelectTab(1)
-
-warn("[Sistema] Interface carregada com sistema de salvamento automático!")
-warn("[Sistema] Configurações carregadas:", savedSettings)
