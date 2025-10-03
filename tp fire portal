@@ -1,4 +1,16 @@
--- ==============================
+-- Verificar se um andar específico existe (para Boss Focus)
+local function checkSpecificFloor(floorNumber)
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return false end
+    local world = main:FindFirstChild("__World")
+    if not world then return false end
+    
+    local roomExists = world:FindFirstChild("Room_" .. floorNumber) ~= nil
+    return roomExists
+end
+
+-- Teleportar para uma room específica (adicionado acima)
+-- Esta função já foi declarada antes desta-- ==============================
 -- Configuração inicial
 -- ==============================
 local Players = game:GetService("Players")
@@ -566,7 +578,13 @@ local function bossFocusLoop()
                     task.wait(12)
                 -- O andar específico existe, procura o boss
                 elseif targetFloorExists and isInCorrectFloor then
-                    warn("[Boss Focus INF] 🔍 Andar confirmado - Procurando boss...")
+                    -- Primeiro teleporta para o CENTRO da room do boss para garantir que carrega
+                    warn("[Boss Focus INF] 📍 Teleportando para o CENTRO da Room_" .. bossFloor .. "...")
+                    teleportToRoomCenter(bossFloor)
+                    warn("[Boss Focus INF] ⏳ Aguardando 4 segundos para carregar inimigos na área...")
+                    task.wait(4) -- Aguarda mais tempo para garantir que o boss carregue
+                    
+                    warn("[Boss Focus INF] 🔍 Procurando boss após teleporte para o centro...")
                     local boss = findBoss(selectedBoss)
                     
                     if boss then
@@ -647,7 +665,9 @@ local function bossFocusLoop()
                                 noHPCount = 0
                             else
                                 noHPCount = noHPCount + 1
-                                warn("[Boss Focus INF] ⚠️ Sem atributo HP (" .. noHPCount .. "/10)")
+                                if noHPCount % 5 == 0 then
+                                    warn("[Boss Focus INF] ⚠️ Sem atributo HP (" .. noHPCount .. "/10)")
+                                end
                                 
                                 if noHPCount >= 10 then
                                     warn("[Boss Focus INF] ❌ Boss sumiu ou morreu (sem HP por 10 verificações)")
