@@ -38,6 +38,7 @@ local bossFocusEnabled = false
 local entryFloor = 125
 local resetFloor = 200
 local selectedBoss = "Cat God"
+local bossFloor = 175  -- Andar onde o Cat God spawna
 
 -- Função que pega o Title.Text de um NPC
 local function getNPCName(enemy)
@@ -437,65 +438,101 @@ end
 
 local function bossFocusLoop()
     task.spawn(function()
-        warn("[Boss Focus INF] Loop iniciado para boss: " .. selectedBoss)
+        warn("[Boss Focus INF] Loop iniciado para boss: " .. selectedBoss .. " no andar " .. bossFloor)
         while bossFocusEnabled do
             local currentFloor = getCurrentCastleFloor()
 
+            -- Se não está no castelo, cria e entra direto no andar do boss
             if not currentFloor then
-                warn("[Boss Focus INF] Fora do castelo - Criando e entrando...")
+                warn("[Boss Focus INF] Fora do castelo - Criando e entrando no andar " .. bossFloor)
                 createCastle()
                 task.wait(1)
                 buyCastleTicket()
                 task.wait(1)
-                joinCastle(entryFloor)
+                joinCastle(bossFloor)  -- Entra direto no andar do boss
                 task.wait(5)
             else
-                local boss = findBoss(selectedBoss)
-                if boss then
-                    local player = game.Players.LocalPlayer
-                    local char = player.Character
-                    if char and char:FindFirstChild("HumanoidRootPart") then
-                        local hrp = char.HumanoidRootPart
-                        hrp.CFrame = boss.CFrame * CFrame.new(0, 3, 0)
-                        warn("[Boss Focus INF] Teleportado para o boss: " .. selectedBoss)
-                    end
-
-                    pcall(function()
-                        local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-                        remote:FireServer({
-                            {
-                                ["PetPos"] = {},
-                                ["AttackType"] = "All", 
-                                ["Event"] = "Attack",
-                                ["Enemy"] = boss.Name
-                            },
-                            "\7"
-                        })
-                    end)
-
-                    warn("[Boss Focus INF] Atacando boss: " .. selectedBoss)
-                    while bossFocusEnabled and boss.Parent do
-                        local currentHP = boss:GetAttribute("HP")
-                        if not currentHP or currentHP <= 0 then
-                            warn("[Boss Focus INF] Boss eliminado: " .. selectedBoss)
-                            break
-                        end
-                        task.wait(0.2)
-                    end
-                else
-                    warn("[Boss Focus INF] Boss não encontrado - Recriando castelo no andar " .. entryFloor)
+                -- Verifica se está no andar correto do boss
+                if currentFloor ~= bossFloor then
+                    warn("[Boss Focus INF] Andar atual (" .. currentFloor .. ") diferente do andar do boss (" .. bossFloor .. ") - Recriando...")
                     createCastle()
                     task.wait(1)
                     buyCastleTicket()
                     task.wait(1)
-                    joinCastle(entryFloor)
+                    joinCastle(bossFloor)
                     task.wait(5)
-
+                    
                     Fluent:Notify({
                         Title = "Boss Focus INF",
-                        Content = "Boss " .. selectedBoss .. " não encontrado - Castelo recriado no andar " .. tostring(entryFloor),
+                        Content = "Andar incorreto - Entrando no andar " .. tostring(bossFloor),
                         Duration = 4
                     })
+                else
+                    -- Está no andar correto, procura o boss
+                    local boss = findBoss(selectedBoss)
+                    if boss then
+                        local player = game.Players.LocalPlayer
+                        local char = player.Character
+                        if char and char:FindFirstChild("HumanoidRootPart") then
+                            local hrp = char.HumanoidRootPart
+                            hrp.CFrame = boss.CFrame * CFrame.new(0, 3, 0)
+                            warn("[Boss Focus INF] Teleportado para o boss: " .. selectedBoss)
+                        end
+
+                        pcall(function()
+                            local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+                            remote:FireServer({
+                                {
+                                    ["PetPos"] = {},
+                                    ["AttackType"] = "All", 
+                                    ["Event"] = "Attack",
+                                    ["Enemy"] = boss.Name
+                                },
+                                "\7"
+                            })
+                        end)
+
+                        warn("[Boss Focus INF] Atacando boss: " .. selectedBoss)
+                        while bossFocusEnabled and boss.Parent do
+                            local currentHP = boss:GetAttribute("HP")
+                            if not currentHP or currentHP <= 0 then
+                                warn("[Boss Focus INF] Boss eliminado: " .. selectedBoss .. " - Recriando castelo...")
+                                break
+                            end
+                            task.wait(0.2)
+                        end
+                        
+                        -- Boss morreu, recria o castelo
+                        if bossFocusEnabled then
+                            warn("[Boss Focus INF] Recriando castelo após matar o boss...")
+                            createCastle()
+                            task.wait(1)
+                            buyCastleTicket()
+                            task.wait(1)
+                            joinCastle(bossFloor)
+                            task.wait(5)
+                            
+                            Fluent:Notify({
+                                Title = "Boss Focus INF",
+                                Content = "Boss " .. selectedBoss .. " eliminado - Castelo recriado no andar " .. tostring(bossFloor),
+                                Duration = 4
+                            })
+                        end
+                    else
+                        warn("[Boss Focus INF] Boss não encontrado no andar " .. bossFloor .. " - Recriando castelo...")
+                        createCastle()
+                        task.wait(1)
+                        buyCastleTicket()
+                        task.wait(1)
+                        joinCastle(bossFloor)
+                        task.wait(5)
+
+                        Fluent:Notify({
+                            Title = "Boss Focus INF",
+                            Content = "Boss " .. selectedBoss .. " não encontrado - Castelo recriado no andar " .. tostring(bossFloor),
+                            Duration = 4
+                        })
+                    end
                 end
             end
 
@@ -508,6 +545,22 @@ end
 -- ==========================
 -- ELEMENTOS NA ABA DUNGEON
 -- ==========================
+
+-- Input para andar do boss
+dungeonTab:AddInput("BossFloor", {
+    Title = "Boss Floor",
+    Default = tostring(bossFloor),
+    Placeholder = "Andar onde o boss spawna (ex: 175)",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local floor = tonumber(value)
+        if floor and floor > 0 then
+            bossFloor = floor
+            warn("[Boss Focus] Andar do boss atualizado para:", floor)
+        end
+    end
+})
 
 -- Input para andar de entrada
 dungeonTab:AddInput("CastleEntryFloor", {
@@ -636,13 +689,14 @@ dungeonTab:AddToggle("AutoCasteloOnly", {
 -- Toggle Boss Focus INF
 dungeonTab:AddToggle("BossFocusINF", {
     Title = "Boss Focus INF",
+    Description = "Entra no andar " .. tostring(bossFloor) .. " e mata o boss infinitamente",
     Default = false,
     Callback = function(state)
         bossFocusEnabled = state
         if state then
             Fluent:Notify({
                 Title = "Boss Focus INF Ativado",
-                Content = "Focando no boss " .. selectedBoss .. " e recriando ao matar/não encontrar",
+                Content = "Focando no boss " .. selectedBoss .. " no andar " .. tostring(bossFloor),
                 Duration = 4
             })
             bossFocusLoop()
