@@ -450,45 +450,60 @@ end
 -- ==========================
 
 local function findBoss(bossName)
+    warn("[Boss Focus] 🔍 Procurando boss: " .. bossName)
+    
     -- Primeiro tenta em Client (onde está o Cat God visível)
-    local enemiesFolder = workspace:FindFirstChild("__Main")
-    if enemiesFolder then
-        local clientFolder = enemiesFolder:FindFirstChild("__Enemies")
-        if clientFolder then
-            clientFolder = clientFolder:FindFirstChild("Client")
-            if clientFolder then
-                for _, enemy in pairs(clientFolder:GetChildren()) do
-                    if enemy:IsA("Model") then
-                        local npcName = getNPCName(enemy)
-                        if npcName and string.lower(npcName) == string.lower(bossName) then
-                            warn("[Boss Focus] ✓ Boss encontrado em Client:", enemy.Name)
-                            return enemy
-                        end
-                    end
+    local main = workspace:FindFirstChild("__Main")
+    if not main then
+        warn("[Boss Focus] ❌ __Main não encontrado")
+        return nil
+    end
+    
+    local enemiesFolder = main:FindFirstChild("__Enemies")
+    if not enemiesFolder then
+        warn("[Boss Focus] ❌ __Enemies não encontrado")
+        return nil
+    end
+    
+    -- Procurar em Client
+    local clientFolder = enemiesFolder:FindFirstChild("Client")
+    if clientFolder then
+        warn("[Boss Focus] 📂 Procurando em Client... (" .. #clientFolder:GetChildren() .. " modelos)")
+        for _, enemy in pairs(clientFolder:GetChildren()) do
+            if enemy:IsA("Model") then
+                local npcName = getNPCName(enemy)
+                warn("[Boss Focus]   - Modelo: " .. enemy.Name .. " | Nome detectado: " .. tostring(npcName))
+                if npcName and string.lower(npcName) == string.lower(bossName) then
+                    warn("[Boss Focus] ✅ Boss encontrado em Client:", enemy.Name)
+                    return enemy
                 end
             end
         end
+        warn("[Boss Focus] ⚠ Boss não encontrado em Client")
+    else
+        warn("[Boss Focus] ❌ Client folder não encontrado")
     end
     
     -- Se não encontrar em Client, tenta em Server
-    if enemiesFolder then
-        local serverFolder = enemiesFolder:FindFirstChild("__Enemies")
-        if serverFolder then
-            serverFolder = serverFolder:FindFirstChild("Server")
-            if serverFolder then
-                for _, enemy in pairs(serverFolder:GetChildren()) do
-                    if enemy:IsA("Model") then
-                        local npcName = getNPCName(enemy)
-                        if npcName and string.lower(npcName) == string.lower(bossName) then
-                            warn("[Boss Focus] ✓ Boss encontrado em Server:", enemy.Name)
-                            return enemy
-                        end
-                    end
+    local serverFolder = enemiesFolder:FindFirstChild("Server")
+    if serverFolder then
+        warn("[Boss Focus] 📂 Procurando em Server... (" .. #serverFolder:GetChildren() .. " modelos)")
+        for _, enemy in pairs(serverFolder:GetChildren()) do
+            if enemy:IsA("Model") then
+                local npcName = getNPCName(enemy)
+                warn("[Boss Focus]   - Modelo: " .. enemy.Name .. " | Nome detectado: " .. tostring(npcName))
+                if npcName and string.lower(npcName) == string.lower(bossName) then
+                    warn("[Boss Focus] ✅ Boss encontrado em Server:", enemy.Name)
+                    return enemy
                 end
             end
         end
+        warn("[Boss Focus] ⚠ Boss não encontrado em Server")
+    else
+        warn("[Boss Focus] ❌ Server folder não encontrado")
     end
     
+    warn("[Boss Focus] ❌ Boss '" .. bossName .. "' não encontrado em nenhuma pasta")
     return nil
 end
 
@@ -551,19 +566,51 @@ local function bossFocusLoop()
                     task.wait(12)
                 -- O andar específico existe, procura o boss
                 elseif targetFloorExists and isInCorrectFloor then
+                    warn("[Boss Focus INF] 🔍 Andar confirmado - Procurando boss...")
                     local boss = findBoss(selectedBoss)
                     
                     if boss then
                         bossNotFoundCount = 0 -- Resetar contador
-                        warn("[Boss Focus INF] ✓ Boss encontrado: " .. selectedBoss)
+                        warn("[Boss Focus INF] ✅ BOSS ENCONTRADO: " .. selectedBoss .. " (Model: " .. boss.Name .. ")")
+                        
+                        -- Listar partes do boss
+                        warn("[Boss Focus INF] 📦 Partes do boss:")
+                        for _, part in pairs(boss:GetChildren()) do
+                            warn("     - " .. part.Name .. " (" .. part.ClassName .. ")")
+                        end
                         
                         local player = game.Players.LocalPlayer
                         local char = player.Character
                         if char and char:FindFirstChild("HumanoidRootPart") then
                             local hrp = char.HumanoidRootPart
-                            hrp.CFrame = boss.CFrame * CFrame.new(0, 3, 0)
+                            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+                            
+                            if bossHRP then
+                                hrp.CFrame = bossHRP.CFrame * CFrame.new(0, 5, 0)
+                                warn("[Boss Focus INF] ✅ Teleportado para HumanoidRootPart do boss")
+                            elseif boss.PrimaryPart then
+                                hrp.CFrame = boss.PrimaryPart.CFrame * CFrame.new(0, 5, 0)
+                                warn("[Boss Focus INF] ✅ Teleportado para PrimaryPart do boss")
+                            elseif boss:FindFirstChild("Torso") then
+                                hrp.CFrame = boss.Torso.CFrame * CFrame.new(0, 5, 0)
+                                warn("[Boss Focus INF] ✅ Teleportado para Torso do boss")
+                            elseif boss:FindFirstChild("UpperTorso") then
+                                hrp.CFrame = boss.UpperTorso.CFrame * CFrame.new(0, 5, 0)
+                                warn("[Boss Focus INF] ✅ Teleportado para UpperTorso do boss")
+                            else
+                                -- Pegar qualquer BasePart que tiver
+                                for _, part in pairs(boss:GetDescendants()) do
+                                    if part:IsA("BasePart") then
+                                        hrp.CFrame = part.CFrame * CFrame.new(0, 10, 0)
+                                        warn("[Boss Focus INF] ✅ Teleportado para " .. part.Name .. " do boss")
+                                        break
+                                    end
+                                end
+                            end
                         end
 
+                        -- Atacar o boss
+                        warn("[Boss Focus INF] ⚔️ Iniciando ataque ao boss...")
                         pcall(function()
                             local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
                             remote:FireServer({
@@ -575,18 +622,67 @@ local function bossFocusLoop()
                                 },
                                 "\7"
                             })
+                            warn("[Boss Focus INF] ✅ Comando de ataque enviado")
                         end)
 
-                        warn("[Boss Focus INF] Atacando boss: " .. selectedBoss)
+                        warn("[Boss Focus INF] 💓 Monitorando HP do boss...")
                         local bossAlive = true
+                        local noHPCount = 0
+                        local attackCount = 0
+                        
                         while bossFocusEnabled and boss.Parent and bossAlive do
+                            attackCount = attackCount + 1
                             local currentHP = boss:GetAttribute("HP")
-                            if not currentHP or currentHP <= 0 then
-                                warn("[Boss Focus INF] ✓ Boss eliminado: " .. selectedBoss)
-                                bossAlive = false
-                                break
+                            
+                            if currentHP then
+                                if currentHP <= 0 then
+                                    warn("[Boss Focus INF] ✅ BOSS ELIMINADO: " .. selectedBoss .. " (HP = 0)")
+                                    bossAlive = false
+                                    break
+                                else
+                                    if attackCount % 4 == 0 then -- Log a cada 2 segundos
+                                        warn("[Boss Focus INF] 💓 HP do boss: " .. currentHP)
+                                    end
+                                end
+                                noHPCount = 0
+                            else
+                                noHPCount = noHPCount + 1
+                                warn("[Boss Focus INF] ⚠️ Sem atributo HP (" .. noHPCount .. "/10)")
+                                
+                                if noHPCount >= 10 then
+                                    warn("[Boss Focus INF] ❌ Boss sumiu ou morreu (sem HP por 10 verificações)")
+                                    bossAlive = false
+                                    break
+                                end
                             end
-                            task.wait(0.2)
+                            
+                            -- Continuar teleportando para o boss
+                            if char and char:FindFirstChild("HumanoidRootPart") then
+                                local bossHRP = boss:FindFirstChild("HumanoidRootPart") 
+                                    or boss.PrimaryPart 
+                                    or boss:FindFirstChild("Torso") 
+                                    or boss:FindFirstChild("UpperTorso")
+                                
+                                if bossHRP then
+                                    char.HumanoidRootPart.CFrame = bossHRP.CFrame * CFrame.new(0, 5, 0)
+                                end
+                            end
+                            
+                            -- Reenviar ataque
+                            pcall(function()
+                                local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+                                remote:FireServer({
+                                    {
+                                        ["PetPos"] = {},
+                                        ["AttackType"] = "All", 
+                                        ["Event"] = "Attack",
+                                        ["Enemy"] = boss.Name
+                                    },
+                                    "\7"
+                                })
+                            end)
+                            
+                            task.wait(0.5)
                         end
                         
                         -- Boss morreu, recriar castelo
