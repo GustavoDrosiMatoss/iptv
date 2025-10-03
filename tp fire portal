@@ -450,22 +450,45 @@ end
 -- ==========================
 
 local function findBoss(bossName)
+    -- Primeiro tenta em Client (onde está o Cat God visível)
     local enemiesFolder = workspace:FindFirstChild("__Main")
     if enemiesFolder then
-        enemiesFolder = enemiesFolder:FindFirstChild("__Enemies")
-        if enemiesFolder then
-            enemiesFolder = enemiesFolder:FindFirstChild("Server")
-        end
-    end
-
-    if enemiesFolder then
-        for _, enemy in pairs(enemiesFolder:GetChildren()) do
-            local npcName = getNPCName(enemy)
-            if npcName and string.lower(npcName) == string.lower(bossName) then
-                return enemy
+        local clientFolder = enemiesFolder:FindFirstChild("__Enemies")
+        if clientFolder then
+            clientFolder = clientFolder:FindFirstChild("Client")
+            if clientFolder then
+                for _, enemy in pairs(clientFolder:GetChildren()) do
+                    if enemy:IsA("Model") then
+                        local npcName = getNPCName(enemy)
+                        if npcName and string.lower(npcName) == string.lower(bossName) then
+                            warn("[Boss Focus] ✓ Boss encontrado em Client:", enemy.Name)
+                            return enemy
+                        end
+                    end
+                end
             end
         end
     end
+    
+    -- Se não encontrar em Client, tenta em Server
+    if enemiesFolder then
+        local serverFolder = enemiesFolder:FindFirstChild("__Enemies")
+        if serverFolder then
+            serverFolder = serverFolder:FindFirstChild("Server")
+            if serverFolder then
+                for _, enemy in pairs(serverFolder:GetChildren()) do
+                    if enemy:IsA("Model") then
+                        local npcName = getNPCName(enemy)
+                        if npcName and string.lower(npcName) == string.lower(bossName) then
+                            warn("[Boss Focus] ✓ Boss encontrado em Server:", enemy.Name)
+                            return enemy
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
     return nil
 end
 
@@ -495,18 +518,21 @@ local function bossFocusLoop()
             else
                 local timeSinceJoin = tick() - lastJoinTime
                 
-                -- Acabou de entrar, aguardando carregar
+                -- Verifica se o andar específico do boss existe
+                local targetFloorExists = checkSpecificFloor(bossFloor)
+                
+                -- Acabou de entrar, aguardando carregar o andar específico
                 if timeSinceJoin < 20 and not isInCorrectFloor then
-                    if currentFloor == bossFloor then
+                    if targetFloorExists then
                         isInCorrectFloor = true
-                        warn("[Boss Focus INF] ✓ Andar " .. bossFloor .. " carregado com sucesso!")
+                        warn("[Boss Focus INF] ✓ Room_" .. bossFloor .. " encontrada e carregada!")
                     else
-                        warn("[Boss Focus INF] Carregando... Andar atual: " .. currentFloor .. " → Destino: " .. bossFloor)
+                        warn("[Boss Focus INF] Carregando... Room_" .. bossFloor .. " ainda não existe (andar detectado: " .. currentFloor .. ")")
                         task.wait(2)
                     end
-                -- Passou do tempo de carregamento e ainda não está no andar correto
-                elseif timeSinceJoin >= 20 and currentFloor ~= bossFloor then
-                    warn("[Boss Focus INF] Falha ao carregar andar " .. bossFloor .. " (está no " .. currentFloor .. ") - Recriando...")
+                -- Passou do tempo de carregamento e o andar específico não existe
+                elseif timeSinceJoin >= 20 and not targetFloorExists then
+                    warn("[Boss Focus INF] Falha ao carregar Room_" .. bossFloor .. " após 20s - Recriando...")
                     createCastle()
                     task.wait(1)
                     buyCastleTicket()
@@ -518,13 +544,13 @@ local function bossFocusLoop()
                     
                     Fluent:Notify({
                         Title = "Boss Focus INF",
-                        Content = "Andar incorreto - Recriando no andar " .. tostring(bossFloor),
+                        Content = "Room_" .. tostring(bossFloor) .. " não carregou - Recriando",
                         Duration = 4
                     })
                     
                     task.wait(12)
-                -- Está no andar correto, procura o boss
-                elseif currentFloor == bossFloor and isInCorrectFloor then
+                -- O andar específico existe, procura o boss
+                elseif targetFloorExists and isInCorrectFloor then
                     local boss = findBoss(selectedBoss)
                     
                     if boss then
@@ -587,7 +613,7 @@ local function bossFocusLoop()
                     else
                         -- Boss não encontrado
                         bossNotFoundCount = bossNotFoundCount + 1
-                        warn("[Boss Focus INF] Boss não encontrado (" .. bossNotFoundCount .. "/10) - Aguardando spawnar...")
+                        warn("[Boss Focus INF] Boss não encontrado na Room_" .. bossFloor .. " (" .. bossNotFoundCount .. "/10)")
                         
                         -- Se não encontrar depois de 10 tentativas (30 segundos), recria
                         if bossNotFoundCount >= 10 then
@@ -612,6 +638,10 @@ local function bossFocusLoop()
                             task.wait(3)
                         end
                     end
+                elseif not isInCorrectFloor and targetFloorExists then
+                    -- Room existe mas flag não foi setada, setar agora
+                    isInCorrectFloor = true
+                    warn("[Boss Focus INF] ✓ Room_" .. bossFloor .. " confirmada!")
                 end
             end
 
