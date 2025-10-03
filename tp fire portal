@@ -1,110 +1,661 @@
--- Teleporte automático para FirePortal (LocalScript)
+-- ==============================
+-- Configuração inicial
+-- ==============================
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-if not player then
-    warn("[TP] Player local não encontrado.")
-    return
+local localPlayer = Players.LocalPlayer
+local playerCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+local playerHRP = playerCharacter:WaitForChild("HumanoidRootPart")
+
+local enemyContainer = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
+
+-- ==============================
+-- Carrega o Fluent UI
+-- ==============================
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+-- Janela
+local Window = Fluent:CreateWindow({
+    Title = "Allan Hub - Debug NPC",
+    SubTitle = "By Allan",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(500, 320),
+    Acrylic = true,
+    Theme = "dark",
+    MinimizeKey = Enum.KeyCode.End
+})
+
+-- ==============================
+-- Abas
+-- ==============================
+local npcTab = Window:AddTab({ Title = "NPC Debug", Icon = "crosshair" })
+local dungeonTab = Window:AddTab({ Title = "Dungeon", Icon = "sword" })
+
+-- Variáveis para o sistema de castle (sem salvamento para teste)
+local castleInfEnabled = false
+local castleEnabled = false
+local castleCreateOnlyEnabled = false
+local bossFocusEnabled = false
+local entryFloor = 125
+local resetFloor = 200
+local selectedBoss = "Cat God"
+
+-- Função que pega o Title.Text de um NPC
+local function getNPCName(enemy)
+    local titleObj = enemy:FindFirstChild("Title", true)
+    if titleObj and titleObj:IsA("TextLabel") then
+        return titleObj.Text
+    end
+    return enemy.Name
 end
 
--- Busca dinâmica do FirePortal em Room_1 até Room_200
-local destino = nil
-local main = workspace:FindFirstChild("__Main")
-if not main then
-    warn("[TP] __Main não encontrado.")
-    return
-end
-
-local world = main:FindFirstChild("__World")
-if not world then
-    warn("[TP] __World não encontrado.")
-    return
-end
-
-for i = 1, 200 do
-    local room = world:FindFirstChild("Room_" .. i)
-    if room then
-        local portal = room:FindFirstChild("FirePortal")
-        if portal and portal:IsA("BasePart") then
-            destino = portal.CFrame
-            print("[TP] FirePortal encontrado em Room_" .. i)
-            break
+-- Função que encontra Cat God
+local function findCatGod()
+    for _, enemy in pairs(enemyContainer:GetChildren()) do
+        if enemy:IsA("Model") then
+            local npcName = getNPCName(enemy)
+            if npcName and string.lower(npcName) == "cat god" then
+                return enemy
+            end
         end
     end
+    return nil
 end
 
-if not destino then
-    warn("[TP] Nenhum FirePortal encontrado em Rooms 1–200.")
-    return
-end
-
--- Funções auxiliares
-local function getChar(timeout)
-    timeout = timeout or 5
-    return player.Character or player.CharacterAdded:Wait(timeout)
-end
-
-local function findRootPart(char)
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-        or char:FindFirstChild("LowerTorso")
-        or char:FindFirstChild("Torso")
-        or (function()
-            for _, v in ipairs(char:GetChildren()) do
-                if v:IsA("BasePart") then return v end
+-- Botão para focar no Cat God
+npcTab:AddButton({
+    Title = "Focar Cat God",
+    Description = "Teleporta até o Cat God",
+    Callback = function()
+        local catGod = findCatGod()
+        if catGod then
+            local hrp = catGod:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                playerHRP.CFrame = hrp.CFrame + Vector3.new(0, 5, 0) -- Teleporta um pouco acima
+                Fluent:Notify({
+                    Title = "Allan Hub",
+                    Content = "Focado no Cat God!",
+                    Duration = 5
+                })
+            else
+                Fluent:Notify({
+                    Title = "Erro",
+                    Content = "Cat God encontrado mas sem HumanoidRootPart.",
+                    Duration = 5
+                })
             end
-        end)()
+        else
+            Fluent:Notify({
+                Title = "Erro",
+                Content = "Cat God não encontrado no mapa!",
+                Duration = 5
+            })
+        end
+    end
+})
+
+-- ==========================
+-- FUNÇÕES CASTLE BÁSICAS
+-- ==========================
+
+-- Detectar andar atual
+local function getCurrentCastleFloor()
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return nil end
+    local world = main:FindFirstChild("__World")
+    if not world then return nil end
+
+    local current = nil
+    for i = 1, 300 do
+        if world:FindFirstChild("Room_" .. i) then
+            current = i
+        end
+    end
+
+    if current then
+        warn("[Castle] Andar atual detectado:", current)
+    else
+        warn("[Castle] Fora do castelo (nenhuma Room encontrada).")
+    end
+    return current
 end
 
--- Obtenção do personagem
-local char = getChar(5)
-if not char then
-    warn("[TP] Character não encontrado.")
-    return
+-- Comprar ticket com gems
+local function buyCastleTicket()
+    warn("[Castle] Comprando ticket com Gems...")
+    local args = {
+        [1] = {
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "CastleAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
+    end)
 end
 
-local hrp = findRootPart(char)
-if not hrp then
-    warn("[TP] Nenhuma basepart encontrada no character.")
-    return
+-- Entrar no castelo
+local function joinCastle(floor)
+    floor = floor or entryFloor
+    warn("[Castle] Entrando no andar " .. tostring(floor) .. "...")
+    local joinArgs = {
+        [1] = {
+            [1] = {
+                ["Check"] = true,
+                ["Floor"] = tostring(floor),
+                ["Event"] = "CastleAction",
+                ["Action"] = "Join"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(joinArgs)) 
+    end)
 end
 
--- Função de teleporte robusto
-local function attemptTeleport()
-    pcall(function() hrp.CFrame = destino end)
-    pcall(function() if char.PivotTo then char:PivotTo(destino) end end)
-    pcall(function() if char.PrimaryPart then char:SetPrimaryPartCFrame(destino) end end)
-    pcall(function()
-        local inv = hrp.CFrame:Inverse()
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local localC = inv * part.CFrame
-                part.CFrame = destino * localC
+-- Função para criar o castelo
+local function createCastle()
+    warn("[Auto Castle] Criando castelo...")
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "CastleAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
+    end)
+    task.wait(3)
+end
+
+-- ==========================
+-- CASTLE INF - FARM E PORTAL
+-- ==========================
+
+-- Função para encontrar o FirePortal
+local function findFirePortal()
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return nil, nil end
+    local world = main:FindFirstChild("__World")
+    if not world then return nil, nil end
+
+    for i = 1, 300 do
+        local room = world:FindFirstChild("Room_" .. i)
+        if room then
+            local portal = room:FindFirstChild("FirePortal")
+            if portal then
+                return portal, i
             end
         end
-    end)
-    pcall(function()
-        hrp.Velocity = Vector3.zero
-        if hrp.AssemblyLinearVelocity then
-            hrp.AssemblyLinearVelocity = Vector3.zero
+    end
+    return nil, nil
+end
+
+-- Teleportar para o FirePortal
+local function teleportToFirePortal()
+    local portal, currentFloor = findFirePortal()
+    if not portal then 
+        warn("[Castle INF] FirePortal não encontrado!")
+        return false 
+    end
+
+    local player = game.Players.LocalPlayer
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+
+    local hrp = char.HumanoidRootPart
+    hrp.CFrame = portal.CFrame * CFrame.new(0, 2, -2)
+    hrp.Velocity = Vector3.new(0, 0, 0)
+
+    warn("[Castle INF] Teleportado para portal do andar " .. currentFloor)
+    return true, currentFloor
+end
+
+-- Ativar FirePortal
+local function activateFirePortal()
+    local portal, currentFloor = findFirePortal()
+    if not portal then return false end
+
+    local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt then
+        for _, obj in ipairs(portal:GetDescendants()) do
+            if obj:IsA("ProximityPrompt") then
+                prompt = obj
+                break
+            end
         end
+    end
+
+    if not prompt and portal.Parent then
+        prompt = portal.Parent:FindFirstChildOfClass("ProximityPrompt")
+    end
+
+    if prompt then
+        for _ = 1, 3 do
+            pcall(function()
+                fireproximityprompt(prompt)
+            end)
+            task.wait(0.1)
+        end
+        warn("[Castle INF] Portal ativado! Subindo do andar " .. currentFloor)
+        return true
+    end
+
+    return false
+end
+
+-- Farm mobs no castle
+local function farmCastleMobs()
+    local mobsKilled = false
+    local enemiesFolder = workspace:FindFirstChild("__Main")
+
+    if enemiesFolder then
+        enemiesFolder = enemiesFolder:FindFirstChild("__Enemies")
+        if enemiesFolder then
+            enemiesFolder = enemiesFolder:FindFirstChild("Server")
+        end
+    end
+
+    if enemiesFolder then
+        for _, mob in pairs(enemiesFolder:GetChildren()) do
+            if not castleInfEnabled then break end
+
+            local hp = mob:GetAttribute("HP")
+            if hp and hp > 0 and mob.Position then
+                local player = game.Players.LocalPlayer
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    -- Teleportar para o mob
+                    player.Character.HumanoidRootPart.CFrame = mob.CFrame * CFrame.new(0, 3, 0)
+
+                    -- Atacar o mob
+                    pcall(function()
+                        local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+                        remote:FireServer({
+                            {
+                                ["PetPos"] = {},
+                                ["AttackType"] = "All", 
+                                ["Event"] = "Attack",
+                                ["Enemy"] = mob.Name
+                            },
+                            "\7"
+                        })
+                    end)
+
+                    -- AGUARDAR O MOB MORRER
+                    warn("[Castle INF] Atacando mob:", mob.Name)
+                    while castleInfEnabled and mob.Parent do
+                        local currentHP = mob:GetAttribute("HP")
+                        if not currentHP or currentHP <= 0 then
+                            warn("[Castle INF] Mob eliminado:", mob.Name)
+                            break
+                        end
+                        task.wait(0.2)
+                    end
+
+                    mobsKilled = true
+                end
+            end
+        end
+    end
+
+    return mobsKilled
+end
+
+-- Castle INF Loop
+local function castleInfLoop()
+    task.spawn(function()
+        warn("[Castle INF] Loop iniciado!")
+        while castleInfEnabled do
+            local foundMobs = farmCastleMobs()
+
+            if not foundMobs then
+                local success = teleportToFirePortal()
+                if success then
+                    task.wait(1)
+                    activateFirePortal()
+                    task.wait(2)
+                end
+            end
+
+            task.wait(0.5)
+        end
+        warn("[Castle INF] Loop encerrado.")
     end)
 end
 
--- Reforço de teleporte para vencer correções do servidor
-for i = 1, 12 do
-    attemptTeleport()
-    task.wait(0.06)
+-- ==========================
+-- AUTO CASTLE LOOP
+-- ==========================
+
+local function autoCastleLoop()
+    task.spawn(function()
+        warn("[Auto Castle] Loop iniciado!")
+        while castleEnabled do
+            local currentFloor = getCurrentCastleFloor()
+
+            if not currentFloor then
+                warn("[Auto Castle] Fora do castelo - Criando e entrando...")
+                createCastle()
+                task.wait(1)
+                buyCastleTicket()
+                task.wait(1)
+                joinCastle(entryFloor)
+                task.wait(5)
+            else
+                if currentFloor >= resetFloor then
+                    warn("[Auto Castle] Detectou andar " .. currentFloor .. " → Recriando no andar " .. entryFloor)
+                    createCastle()
+                    task.wait(1)
+                    buyCastleTicket()
+                    task.wait(1)
+                    joinCastle(entryFloor)
+
+                    Fluent:Notify({
+                        Title = "Castle Recreated",
+                        Content = "Detectou andar " .. tostring(currentFloor) .. " - Recriado no andar " .. tostring(entryFloor),
+                        Duration = 4
+                    })
+
+                    task.wait(5)
+                else
+                    farmCastleMobs()
+                    task.wait(1)
+                end
+            end
+
+            task.wait(0.5)
+        end
+        warn("[Auto Castle] Loop encerrado.")
+    end)
 end
 
--- Verificação final
-task.wait(0.12)
-local finalPos = hrp.Position
-local diff = (finalPos - destino.Position).Magnitude
-print(string.format("[TP] Posição final: (%.3f, %.3f, %.3f) | Distância do destino: %.3f",
-    finalPos.X, finalPos.Y, finalPos.Z, diff))
+-- ==========================
+-- AUTO CASTLE ONLY LOOP
+-- ==========================
 
-if diff <= 3 then
-    print("[TP] SUCESSO: parece que você foi teleportado.")
-else
-    warn("[TP] Falhou: servidor pode estar re-sincronizando. Distância:", diff)
+local function castleCreateOnlyLoop()
+    task.spawn(function()
+        warn("[Auto Castelo] Loop iniciado (sem reset)!")
+        while castleCreateOnlyEnabled do
+            local currentFloor = getCurrentCastleFloor()
+
+            if not currentFloor then
+                warn("[Auto Castelo] Fora do castelo - Criando e entrando...")
+                createCastle()
+                task.wait(1)
+                buyCastleTicket()
+                task.wait(1)
+                joinCastle(entryFloor)
+                task.wait(5)
+
+                Fluent:Notify({
+                    Title = "Auto Castelo",
+                    Content = "Castelo criado e entrou no andar " .. tostring(entryFloor),
+                    Duration = 3
+                })
+            else
+                warn("[Auto Castelo] Dentro do castelo (andar " .. currentFloor .. ") - Aguardando...")
+                task.wait(2)
+            end
+
+            task.wait(0.5)
+        end
+        warn("[Auto Castelo] Loop encerrado.")
+    end)
 end
+
+-- ==========================
+-- BOSS FOCUS INF
+-- ==========================
+
+local function findBoss(bossName)
+    local enemiesFolder = workspace:FindFirstChild("__Main")
+    if enemiesFolder then
+        enemiesFolder = enemiesFolder:FindFirstChild("__Enemies")
+        if enemiesFolder then
+            enemiesFolder = enemiesFolder:FindFirstChild("Server")
+        end
+    end
+
+    if enemiesFolder then
+        for _, enemy in pairs(enemiesFolder:GetChildren()) do
+            local npcName = getNPCName(enemy)
+            if npcName and string.lower(npcName) == string.lower(bossName) then
+                return enemy
+            end
+        end
+    end
+    return nil
+end
+
+local function bossFocusLoop()
+    task.spawn(function()
+        warn("[Boss Focus INF] Loop iniciado para boss: " .. selectedBoss)
+        while bossFocusEnabled do
+            local currentFloor = getCurrentCastleFloor()
+
+            if not currentFloor then
+                warn("[Boss Focus INF] Fora do castelo - Criando e entrando...")
+                createCastle()
+                task.wait(1)
+                buyCastleTicket()
+                task.wait(1)
+                joinCastle(entryFloor)
+                task.wait(5)
+            else
+                local boss = findBoss(selectedBoss)
+                if boss then
+                    local player = game.Players.LocalPlayer
+                    local char = player.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        local hrp = char.HumanoidRootPart
+                        hrp.CFrame = boss.CFrame * CFrame.new(0, 3, 0)
+                        warn("[Boss Focus INF] Teleportado para o boss: " .. selectedBoss)
+                    end
+
+                    pcall(function()
+                        local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+                        remote:FireServer({
+                            {
+                                ["PetPos"] = {},
+                                ["AttackType"] = "All", 
+                                ["Event"] = "Attack",
+                                ["Enemy"] = boss.Name
+                            },
+                            "\7"
+                        })
+                    end)
+
+                    warn("[Boss Focus INF] Atacando boss: " .. selectedBoss)
+                    while bossFocusEnabled and boss.Parent do
+                        local currentHP = boss:GetAttribute("HP")
+                        if not currentHP or currentHP <= 0 then
+                            warn("[Boss Focus INF] Boss eliminado: " .. selectedBoss)
+                            break
+                        end
+                        task.wait(0.2)
+                    end
+                else
+                    warn("[Boss Focus INF] Boss não encontrado - Recriando castelo no andar " .. entryFloor)
+                    createCastle()
+                    task.wait(1)
+                    buyCastleTicket()
+                    task.wait(1)
+                    joinCastle(entryFloor)
+                    task.wait(5)
+
+                    Fluent:Notify({
+                        Title = "Boss Focus INF",
+                        Content = "Boss " .. selectedBoss .. " não encontrado - Castelo recriado no andar " .. tostring(entryFloor),
+                        Duration = 4
+                    })
+                end
+            end
+
+            task.wait(0.5)
+        end
+        warn("[Boss Focus INF] Loop encerrado.")
+    end)
+end
+
+-- ==========================
+-- ELEMENTOS NA ABA DUNGEON
+-- ==========================
+
+-- Input para andar de entrada
+dungeonTab:AddInput("CastleEntryFloor", {
+    Title = "Castle Entry Floor",
+    Default = tostring(entryFloor),
+    Placeholder = "Andar de entrada (ex: 125)",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local floor = tonumber(value)
+        if floor and floor > 0 then
+            entryFloor = floor
+            warn("[Castle] Andar de entrada atualizado para:", floor)
+        end
+    end
+})
+
+-- Input para andar de reset
+dungeonTab:AddInput("CastleResetFloor", {
+    Title = "Castle Reset Detection Floor",
+    Default = tostring(resetFloor),
+    Placeholder = "Andar para detectar e resetar (ex: 200)",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local floor = tonumber(value)
+        if floor and floor > 0 then
+            resetFloor = floor
+            warn("[Castle] Andar de reset atualizado para:", floor)
+        end
+    end
+})
+
+-- Dropdown para boss
+local bossOptions = {"Cat God"}
+dungeonTab:AddDropdown("SelectBoss", {
+    Title = "Select Boss",
+    Values = bossOptions,
+    Multi = false,
+    Default = selectedBoss,
+    Callback = function(value)
+        selectedBoss = value
+        warn("[Boss Focus] Boss selecionado:", value)
+    end
+})
+
+-- Toggle Castle INF
+dungeonTab:AddToggle("CastleINF", {
+    Title = "Castle INF (Farm + Portal)",
+    Default = false,
+    Callback = function(state)
+        castleInfEnabled = state
+        if state then
+            Fluent:Notify({
+                Title = "Castle INF Ativado",
+                Content = "Farmando mobs e subindo andares automaticamente",
+                Duration = 3
+            })
+            castleInfLoop()
+        else
+            Fluent:Notify({
+                Title = "Castle INF Desativado",
+                Content = "Parou de farmar e subir andares",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Toggle Auto Castle
+dungeonTab:AddToggle("AutoCastle", {
+    Title = "Auto Castle (Create + Recreate)",
+    Default = false,
+    Callback = function(state)
+        castleEnabled = state
+        if state then
+            Fluent:Notify({
+                Title = "Auto Castle Ativado",
+                Content = "Criará castelo, entrará no andar " .. tostring(entryFloor) .. " e detectará andar " .. tostring(resetFloor) .. " para recriar",
+                Duration = 5
+            })
+
+            createCastle()
+            task.wait(1)
+            buyCastleTicket()
+            task.wait(1)
+            joinCastle(entryFloor)
+            task.wait(2)
+
+            autoCastleLoop()
+        else
+            Fluent:Notify({
+                Title = "Auto Castle Desativado",
+                Content = "Sistema de criação e recriação parado",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Toggle Auto Castelo Only
+dungeonTab:AddToggle("AutoCasteloOnly", {
+    Title = "Auto Castelo (Criar Apenas)",
+    Description = "Cria e entra automaticamente quando fora do castelo (SEM reset)",
+    Default = false,
+    Callback = function(state)
+        castleCreateOnlyEnabled = state
+        if state then
+            Fluent:Notify({
+                Title = "Auto Castelo Ativado",
+                Content = "Criará castelo e entrará automaticamente no andar " .. tostring(entryFloor) .. " (sem reset)",
+                Duration = 4
+            })
+
+            castleCreateOnlyLoop()
+        else
+            Fluent:Notify({
+                Title = "Auto Castelo Desativado",
+                Content = "Sistema de criação automática parado",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Toggle Boss Focus INF
+dungeonTab:AddToggle("BossFocusINF", {
+    Title = "Boss Focus INF",
+    Default = false,
+    Callback = function(state)
+        bossFocusEnabled = state
+        if state then
+            Fluent:Notify({
+                Title = "Boss Focus INF Ativado",
+                Content = "Focando no boss " .. selectedBoss .. " e recriando ao matar/não encontrar",
+                Duration = 4
+            })
+            bossFocusLoop()
+        else
+            Fluent:Notify({
+                Title = "Boss Focus INF Desativado",
+                Content = "Parou de focar no boss " .. selectedBoss,
+                Duration = 3
+            })
+        end
+    end
+})
+
+Window:SelectTab(1)
+
+warn("[Sistema] Interface carregada com opções de ativação!")
