@@ -3806,4 +3806,3 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
-
