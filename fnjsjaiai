@@ -1,13 +1,7 @@
--- Inicio verificacao segura de ambiente (otimizado)
-local _ok, _players_service = pcall(function()
-    if game and game.GetService then
-        return game:GetService("Players")
-    end
-end)
-if not _ok or not _players_service then
+if not game or not game.GetService then
+    warn("Ambiente do jogo não está disponível.")
     return
 end
-local Players = _players_service
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -3533,7 +3527,7 @@ Tabs.tp:AddButton({
 
 Tabs.tp:AddButton({
     Title = "World Arena",
-    Description = "Teleportar para World Arena",
+    Description = "Teleportar para World Arena"
     Callback = function()
         teleportInstant(CFrame.new(1650.90, 23.65, -66.51))
     end
