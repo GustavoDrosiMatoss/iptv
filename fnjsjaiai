@@ -1,10 +1,3 @@
-local notificationsEnabled = true
-local function safeNotify(args)
-    if notificationsEnabled and Fluent then
-        Fluent:Notify(args)
-    end
-end
-
 if not game or not game.GetService then
     -- warn("Ambiente do jogo não está disponível.")
     return
@@ -3806,3 +3799,4 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
+
