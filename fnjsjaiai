@@ -863,248 +863,729 @@ local hrp = character:WaitForChild("HumanoidRootPart")
 
 local dungeonFolder = workspace:WaitForChild("__Main"):WaitForChild("__Dungeon")
 
--- ==========================
--- AUTO FARM DUNGEON + RUNAS/RELÍQUIAS
--- ==========================
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-local player = game.Players.LocalPlayer
-local TweenService = game:GetService("TweenService")
-
--- ======================================================
--- Lista de Runas: [NomeInterno] = "Nome para Exibir"
--- ➕ Adicione mais manualmente aqui
--- ======================================================
-local RUNE_LIST = {
-    ["DgJojoRune"] = "Jojo Rune",
-    -- ["DgOutraRune"] = "Outra Rune",
-    -- ["DgSuperRune"] = "Super Runa"
-}
-
--- Runas selecionadas (nomes internos)
-local selectedRunes = {}
--- Toggle de uso de relíquia
-local useRelicEnabled = false
-
--- ==========================
--- Funções Auxiliares
--- ==========================
-local function getDistance(a, b)
-    return (a - b).Magnitude
-end
-
-local function getClosestEnemy()
-    local enemiesFolder = workspace:FindFirstChild("_Main") and workspace._Main:FindFirstChild("_Enemies") and workspace._Main._Enemies:FindFirstChild("Server")
-    if not enemiesFolder then return nil end
-
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
-
-    local pos = character.HumanoidRootPart.Position
-    local closest, minDist = nil, math.huge
-
-    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-        local hp = enemy:GetAttribute("HP")
-        if hp and hp > 0 and enemy.Position then
-            local d = getDistance(pos, enemy.Position)
-            if d < minDist then
-                minDist = d
-                closest = enemy
-            end
-        end
-    end
-    return closest
-end
-
-local function moveToEnemy(enemy, currentTween)
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") or not enemy or not enemy.Position then
-        return false, currentTween
-    end
-
-    if currentTween then currentTween:Cancel() end
-
-    character.PrimaryPart = character.HumanoidRootPart
-    character.HumanoidRootPart.Anchored = false
-
-    local info = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-    currentTween = TweenService:Create(character.PrimaryPart, info, {CFrame = enemy.CFrame})
-    currentTween:Play()
-
-    task.spawn(function()
-        currentTween.Completed:Wait()
-        currentTween = nil
-    end)
-
-    return true, currentTween
-end
-
--- ==========================
--- Criar + Iniciar Dungeon (com runas se ativado)
--- ==========================
-local function createAndStartDungeon()
-    -- Criar dungeon
-    local createArgs = {
+-- Variable to control teleporting
+local teleportingEnabled = false
+-- Função para criar a dungeon
+local function createDungeon()
+    print("[DEBUG] Tentando criar dungeon...")
+    local args = {
         [1] = {
             [1] = {
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Create"
             },
-            [2] = "\13"
+            [2] = "\12"
         }
     }
-    Remote:FireServer(unpack(createArgs))
-    task.wait(0.5)
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    print("✔ Dungeon criada.")
+    task.wait(3)
 
-    -- Se “Usar Relíquia” estiver ativo, adiciona as runas selecionadas
-    if useRelicEnabled and #selectedRunes > 0 then
-        for slot, runeInternalName in ipairs(selectedRunes) do
-            local addRuneArgs = {
-                [1] = {
-                    [1] = {
-                        ["Dungeon"] = 7368292297,
-                        ["Action"] = "AddItems",
-                        ["Slot"] = slot,
-                        ["Event"] = "DungeonAction",
-                        ["Item"] = runeInternalName
-                    },
-                    [2] = "\13"
-                }
-            }
-            Remote:FireServer(unpack(addRuneArgs))
-            print(string.format("[RUNA] Adicionada: %s (Slot %d)", runeInternalName, slot))
-            task.wait(0.2)
-        end
-    end
-
-    -- Iniciar dungeon
-    local startArgs = {
+    -- Iniciar a dungeon
+    local iniciarArgs = {
         [1] = {
             [1] = {
-                ["Dungeon"] = 7368292297,
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Start"
             },
-            [2] = "\13"
+            [2] = "\12"
         }
     }
-    Remote:FireServer(unpack(startArgs))
-    print("▶ Dungeon criada e iniciada.")
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
+    print("▶ Dungeon iniciada.")
 end
 
--- ==========================
--- 🌀 Sistema de Auto Farm com Recriação
--- ==========================
-ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate = ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate or false
-ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate or ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate
-
-local autoFarmEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate
-local currentTween = nil
-local lastEnemyCheck = tick()
-local maxTimeWithoutEnemies = 5
-
-local function monitorDungeon()
-    print("[AUTO-FARM] Iniciado.")
-    while autoFarmEnabled do
-        pcall(function()
-            if not workspace:FindFirstChild("_Main") then
-                createAndStartDungeon()
-                task.wait(5)
-            end
-
-            local enemy = getClosestEnemy()
-            local now = tick()
-
-            if enemy then
-                lastEnemyCheck = now
-                local ok
-                ok, currentTween = moveToEnemy(enemy, currentTween)
-                if ok then
-                    local attempts = 0
-                    while autoFarmEnabled and enemy.Parent and enemy:GetAttribute("HP") and enemy:GetAttribute("HP") > 0 and attempts < 100 do
-                        task.wait(0.1)
-                        attempts += 1
-                    end
-                end
-            else
-                local idleTime = now - lastEnemyCheck
-                if idleTime >= maxTimeWithoutEnemies then
-                    print("[AUTO-FARM] Dungeon limpa, recriando...")
-                    createAndStartDungeon()
-                    lastEnemyCheck = tick()
-                    task.wait(5)
-                else
-                    task.wait(1)
-                end
-            end
-        end)
-        task.wait(0.1)
+-- Function to start the dungeon (mantida como backup)
+local function startDungeon()
+    local dungeonInstance = dungeonFolder:FindFirstChild("Dungeon")
+    if dungeonInstance then
+        local dungeonID = dungeonInstance:GetAttribute("ID")
+        if dungeonID then
+            print("[DEBUG] Iniciando dungeon com ID:", dungeonID)
+            local args = {
+                [1] = {
+                    [1] = {
+                        ["Dungeon"] = dungeonID,
+                        ["Event"] = "DungeonAction",
+                        ["Action"] = "Start"
+                    },
+                    [2] = "\n"
+                }
+            }
+            ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+            print("[DEBUG] Evento de início da Dungeon ativado!")
+        else
+            print("[LỖI] Não foi encontrado ID da Dungeon!")
+        end
+    else
+        print("[LỖI] Não foi encontrada instância da Dungeon!")
     end
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
+end
+
+-- Function to teleport directly to an object and bypass anti-cheat
+local function teleportToObject(object)
+    if object and object:IsA("Part") then
+        print("[DEBUG] Teleportando para:", object.Name)
+
+        -- Bypass anti-cheat
+        local f = player.Character and player.Character:FindFirstChild("CharacterScripts") and player.Character.CharacterScripts:FindFirstChild("FlyingFixer")
+        if f then f:Destroy() else print("blablabla bleble") end
+
+        local cha = player.Character and player.Character:FindFirstChild("CharacterScripts") and player.Character.CharacterScripts:FindFirstChild("CharacterUpdater")
+        if cha then cha:Destroy() print("discord") else print("Cid") end
+
+        -- Dịch chuyển trực tiếp
+        hrp.CFrame = object.CFrame
+        print("[DEBUG] Teleport concluído para:", object.Name)
+
+        task.wait(2) -- Pequeno atraso após teleporte
+        createDungeon() -- Kích hoạt remote tạo dungeon usando a função corrigida
+    else
+        print("[LỖI] Alvo de teleporte inválido!")
     end
-    print("[AUTO-FARM] Parado.")
 end
 
--- ==========================
--- 🌟 UI: Dropdown de Relíquias + Toggles
--- ==========================
-local dungeonTab = Tabs.dungeon
-
--- Converte lista interna → nomes bonitos
-local runeDisplayNames = {}
-for internal, display in pairs(RUNE_LIST) do
-    table.insert(runeDisplayNames, display)
-end
-
--- Dropdown multi-seleção de runas
-dungeonTab:AddDropdown("SelectRelics", {
-    Title = "Selecionar Relíquias",
-    Values = runeDisplayNames,
-    Multi = true,
-    Default = {"Jojo Rune"},
-    Callback = function(selectedDisplayNames)
-        selectedRunes = {}
-        for _, displayName in ipairs(selectedDisplayNames) do
-            for internal, display in pairs(RUNE_LIST) do
-                if display == displayName then
-                    table.insert(selectedRunes, internal)
-                end
+-- Function to continuously teleport to objects when enabled
+local function teleportLoop()
+    while teleportingEnabled do
+        print("[DEBUG] Procurando objetos de dungeon...")
+        local foundObject = false
+        for _, object in ipairs(dungeonFolder:GetChildren()) do
+            if object:IsA("Part") then
+                foundObject = true
+                teleportToObject(object)
+                task.wait(1) -- Evitar execução excessiva
             end
         end
-        print("[RELIC] Selecionadas:", table.concat(selectedRunes, ", "))
+        if not foundObject then
+            print("[CẢNH BÁO] Nenhum objeto de dungeon válido encontrado!")
+        end
+        task.wait(0.5) -- Atraso antes de verificar novamente
     end
-})
+end
 
--- Toggle de uso de relíquia
-dungeonTab:AddToggle("UseRelicToggle", {
-    Title = "Usar Relíquia",
+
+
+-- Add the toggle button to start/stop teleporting
+Tabs.dungeon:AddToggle("TeleportToDungeon", {
+    Title = "Teleport to Dungeon",
     Default = false,
     Callback = function(state)
-        useRelicEnabled = state
-        print("[RELIC] Uso automático:", state and "ATIVADO" or "DESATIVADO")
-    end
-})
-
--- Toggle de Auto Farm
-dungeonTab:AddToggle("AutoFarmDungeon", {
-    Title = "Auto Farm Dungeon (Recriação)",
-    Default = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate,
-    Flag = "AutoFarmDungeonRecreate",
-    Callback = function(state)
-        autoFarmEnabled = state
-        ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = state
-        ConfigSystem.SaveConfig()
-
+        teleportingEnabled = state
+        print("[DEBUG] Teleporte ativado/desativado:", state)
         if state then
-            task.spawn(monitorDungeon)
-        else
-            if currentTween then currentTween:Cancel() end
-            print("[AUTO-FARM] Desativado.")
+            task.spawn(teleportLoop) -- Bắt đầu vòng lặp dịch chuyển khi bật
         end
     end
 })
+
+
+local AutoDetectToggle = Tabs.dungeon:AddToggle("AutoDetectDungeon", {Title = "Auto Detect Dungeon", Default = true})
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+local villageSpawns = {
+    ["Grass Village"] = "NarutoWorld",
+    ["BRUM ISLAND"] = "OPWorld",
+    ["Leveling City"] = "SoloWorld",
+    ["FACEHEAL TOWN"] = "BleachWorld",
+    ["Lucky"] = "BCWorld",
+    ["Nipon City"] = "ChainsawWorld",
+    ["Mori Town"] = "JojoWorld",
+    ["Dragon City"] = "DBWorld",
+    ["XZ City"] = "OPMWorld",
+}
+
+local function SetSpawnAndReset(spawnName)
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "ChangeSpawn",
+                ["Spawn"] = spawnName
+            },
+            [2] = "\n"
+        }
+    }
+
+    local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+    remote:FireServer(unpack(args))
+
+    -- Esperar um pouco antes de renascer (tùy chọn, để đảm bảo điểm hồi sinh được thiết lập)
+    task.wait(0.5)
+
+    -- Hồi sinh nhân vật
+    if player.Character then
+        player.Character:BreakJoints() -- Buộc nhân vật phải hồi sinh
+    end
+end
+
+local function detectDungeon()
+    player.PlayerGui.Warn.ChildAdded:Connect(function(dungeon)
+        if dungeon:IsA("Frame") and AutoDetectToggle.Value then
+            print("Dungeon detectada!")
+            for _, child in ipairs(dungeon:GetChildren()) do
+                if child:IsA("TextLabel") then
+                    for village, spawnName in pairs(villageSpawns) do
+                        if string.find(string.lower(child.Text), string.lower(village)) then
+                            teleportEnabled = false
+                            print("Vila detectada:", village)
+                            SetSpawnAndReset(spawnName)
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Đảm bảo hàm hoạt động
+AutoDetectToggle:OnChanged(function(value)
+    if value then
+        detectDungeon()
+    end
+end)
+
+detectDungeon()
+
+local function resetAutoFarm()
+    -- Đặt lại tất cả trạng thái và hàm
+    killedNPCs = {} -- Đặt lại số lượng NPC đã tiêu diệt
+
+    print("AutoFarm foi reiniciado!") -- In thông báo xác nhận
+
+    -- Khởi động lại tất cả các hàm nếu cần
+end
+
+task.spawn(function()
+    while true do
+        task.wait(120) -- Đợi 120 giây
+        resetAutoFarm() -- Gọi hàm đặt lại
+    end
+end)
+
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = game:GetService("Players").LocalPlayer
+
+local antiAfkConnection
+
+local AntiAfkToggle = Tabs.Player:AddToggle("AntiAfk", {
+    Title = "Anti AFK",
+    Default = false,
+    Callback = function(enabled)
+        if enabled then
+            print("Anti AFK ativado")
+            -- Đảm bảo không tạo nhiều kết nối
+            if not antiAfkConnection then
+                antiAfkConnection = LocalPlayer.Idled:Connect(function()
+                    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                    task.wait(1) -- Thời gian chờ có thể điều chỉnh
+                    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                end)
+            end
+        else
+            print("Anti AFK desativado")
+            -- Ngắt kết nối sự kiện khi tắt
+            if antiAfkConnection then
+                antiAfkConnection:Disconnect()
+                antiAfkConnection = nil -- Đặt lại biến kết nối
+            end
+        end
+    end
+})
+
+Tabs.Player:AddButton({
+    Title = "Boost FPS",
+    Description = "Lowers graphics",
+    Callback = function()
+        local Optimizer = {Enabled = false}
+
+        local function DisableEffects()
+            for _, v in pairs(game:GetDescendants()) do
+                if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                    v.Enabled = not Optimizer.Enabled
+                end
+                if v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
+                    v.Enabled = not Optimizer.Enabled
+                end
+            end
+        end
+
+        local function MaximizePerformance()
+            local lighting = game:GetService("Lighting")
+            if Optimizer.Enabled then
+                lighting.GlobalShadows = false
+                lighting.FogEnd = 9e9
+                lighting.Brightness = 2
+                settings().Rendering.QualityLevel = 1
+                settings().Physics.PhysicsEnvironmentalThrottle = 1
+                settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+                settings().Physics.AllowSleep = true
+                settings().Physics.ForceCSGv2 = false
+                settings().Physics.DisableCSGv2 = true
+                settings().Rendering.EagerBulkExecution = true
+
+                game:GetService("StarterGui"):SetCore("TopbarEnabled", false)
+
+                settings().Network.IncomingReplicationLag = 0
+                settings().Rendering.MaxPartCount = 100000
+            else
+                lighting.GlobalShadows = true
+                lighting.FogEnd = 100000
+                lighting.Brightness = 3
+                settings().Rendering.QualityLevel = 7
+                settings().Physics.PhysicsEnvironmentalThrottle = 0
+                settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04
+                settings().Physics.AllowSleep = false
+                settings().Physics.ForceCSGv2 = true
+                settings().Physics.DisableCSGv2 = false
+                settings().Rendering.EagerBulkExecution = false
+
+                game:GetService("StarterGui"):SetCore("TopbarEnabled", true)
+
+                settings().Network.IncomingReplicationLag = 1
+                settings().Rendering.MaxPartCount = 500000
+            end
+        end
+
+        local function OptimizeInstances()
+            for _, v in pairs(game:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CastShadow = not Optimizer.Enabled
+                    v.Reflectance = Optimizer.Enabled and 0 or v.Reflectance
+                    v.Material = Optimizer.Enabled and Enum.Material.SmoothPlastic or v.Material
+                end
+                if v:IsA("Decal") or v:IsA("Texture") then
+                    v.Transparency = Optimizer.Enabled and 1 or 0
+                end
+                if v:IsA("MeshPart") then
+                    v.RenderFidelity = Optimizer.Enabled and Enum.RenderFidelity.Performance or Enum.RenderFidelity.Precise
+                end
+            end
+
+            game:GetService("Debris"):SetAutoCleanupEnabled(true)
+        end
+
+        local function CleanMemory()
+            if Optimizer.Enabled then
+                game:GetService("Debris"):AddItem(Instance.new("Model"), 0)
+                settings().Physics.ThrottleAdjustTime = 2
+                game:GetService("RunService"):Set3dRenderingEnabled(false)
+            else
+                game:GetService("RunService"):Set3dRenderingEnabled(true)
+            end
+        end
+
+        local function ToggleOptimizer()
+            Optimizer.Enabled = not Optimizer.Enabled
+            DisableEffects()
+            MaximizePerformance()
+            OptimizeInstances()
+            CleanMemory()
+            print("FPS Booster: " .. (Optimizer.Enabled and "ON" or "OFF"))
+        end
+
+        game:GetService("UserInputService").InputBegan:Connect(function(input)
+            if input.KeyCode == Enum.KeyCode.RightControl then
+                ToggleOptimizer()
+            end
+        end)
+
+        ToggleOptimizer()
+
+        game:GetService("RunService").Heartbeat:Connect(function()
+            if Optimizer.Enabled then
+                CleanMemory()
+            end
+        end)
+    end
+})
+
+
+
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local targetCFrame = CFrame.new(
+    3648.76318, 223.552261, 2637.36719, 
+    0.846323907, 7.72367986e-18, -0.532668591, 
+    -1.10462046e-17, 1, -3.05065368e-18, 
+    0.532668591, 8.46580728e-18, 0.846323907
+)
+
+local function tweenToPivot()
+    hrp.CFrame = targetCFrame
+end
+
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local speedValue = 16 -- Tốc độ di chuyển mặc định
+local jumpValue = 50  -- Lực nhảy mặc định
+local speedEnabled = false
+local jumpEnabled = false
+
+local function updateCharacter()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        local humanoid = LocalPlayer.Character.Humanoid
+        humanoid.WalkSpeed = speedEnabled and speedValue or 16
+        humanoid.JumpPower = jumpEnabled and jumpValue or 50
+    end
+end
+
+-- Nhập tốc độ
+local SpeedInput = Tabs.Player:AddInput("SpeedInput", {
+    Title = "Speed",
+    Default = tostring(speedValue),
+    Placeholder = "Enter speed",
+    Numeric = true,
+    Finished = true, 
+    Callback = function(Value)
+        speedValue = tonumber(Value) or 16
+        updateCharacter() -- Cập nhật nhân vật ngay lập tức khi tốc độ thay đổi
+    end
+})
+
+-- Nhập lực nhảy
+local JumpInput = Tabs.Player:AddInput("JumpInput", {
+    Title = "Jump Power",
+    Default = tostring(jumpValue),
+    Placeholder = "Enter jump power",
+    Numeric = true,
+    Finished = true, 
+    Callback = function(Value)
+        jumpValue = tonumber(Value) or 50
+        updateCharacter() -- Cập nhật nhân vật ngay lập tức khi lực nhảy thay đổi
+    end
+})
+
+-- Bật/tắt tốc độ
+local SpeedToggle = Tabs.Player:AddToggle("SpeedToggle", {
+    Title = "Enable Speed",
+    Default = false
+})
+
+SpeedToggle:OnChanged(function(Value)
+    speedEnabled = Value
+    updateCharacter() -- Cập nhật nhân vật ngay lập tức khi toggle thay đổi
+end)
+
+-- Bật/tắt lực nhảy
+local JumpToggle = Tabs.Player:AddToggle("JumpToggle", {
+    Title = "Enable Jump Power",
+    Default = false
+})
+
+JumpToggle:OnChanged(function(Value)
+    jumpEnabled = Value
+    updateCharacter() -- Cập nhật nhân vật ngay lập tức khi toggle thay đổi
+end)
+
+-- Cập nhật nhân vật khi hồi sinh
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1) -- Đợi nhân vật tải xong
+    updateCharacter()
+end)
+
+-- Cập nhật ban đầu
+updateCharacter()
+
+local player = game.Players.LocalPlayer
+
+local function tweenCharacter(targetCFrame)
+    if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = player.Character.HumanoidRootPart
+        local tweenService = game:GetService("TweenService")
+        local tweenInfo = TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local tween = tweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+        tween:Play()
+    end
+end
+
+-- Thêm nút
+Tabs.tp:AddButton({
+    Title = "Tween to Dedu island",
+    Description = "Smoothly moves your character",
+    Callback = function()
+        tweenCharacter(CFrame.new(3859.06299, 60.1228409, 3081.9458, -0.987112403, 6.46206388e-07, -0.160028473, 5.63319077e-07, 1, 5.63319418e-07, 0.160028473, 4.65912507e-07, -0.987112403)) -- Alterar a posição conforme necessário
+    end
+})
+
+
+
+local NoClipToggle = Tabs.Player:AddToggle("NoClipToggle", {
+    Title = "Enable NoClip",
+    Default = false
+})
+
+-- Hàm NoClip
+local noclipEnabled = false
+NoClipToggle:OnChanged(function(Value)
+    noclipEnabled = Value
+    if noclipEnabled then
+        task.spawn(function()
+            while noclipEnabled do
+                for _, part in ipairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+                task.wait()
+            end
+        end)
+    else
+        for _, part in ipairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end)
+
+
+
+Tabs.Player:AddButton({
+    Title = "Server Hop",
+    Description = "Switches to a different server",
+    Callback = function()
+        local PlaceID = game.PlaceId
+        local AllIDs = {}
+        local foundAnything = ""
+        local actualHour = os.date("!*t").hour
+        local File = pcall(function()
+            AllIDs = game:GetService('HttpService'):JSONDecode(readfile("NotSameServers.json"))
+        end)
+        if not File then
+            table.insert(AllIDs, actualHour)
+            writefile("NotSameServers.json", game:GetService('HttpService'):JSONEncode(AllIDs))
+        end
+        local function TPReturner()
+            local Site
+            if foundAnything == "" then
+                Site = game.HttpService:JSONDecode(game:HttpGet('https://games.roblox.com/v1/games/' .. PlaceID .. '/servers/Public?sortOrder=Asc&limit=100'))
+            else
+                Site = game.HttpService:JSONDecode(game:HttpGet('https://games.roblox.com/v1/games/' .. PlaceID .. '/servers/Public?sortOrder=Asc&limit=100&cursor=' .. foundAnything))
+            end
+            for _, v in pairs(Site.data) do
+                if tonumber(v.maxPlayers) > tonumber(v.playing) then
+                    local ID = tostring(v.id)
+                    local isNewServer = true
+                    for _, existing in pairs(AllIDs) do
+                        if ID == tostring(existing) then
+                            isNewServer = false
+                            break
+                        end
+                    end
+                    if isNewServer then
+                        table.insert(AllIDs, ID)
+                        writefile("NotSameServers.json", game:GetService('HttpService'):JSONEncode(AllIDs))
+                        game:GetService("TeleportService"):TeleportToPlaceInstance(PlaceID, ID, game.Players.LocalPlayer)
+                        return
+                    end
+                end
+            end
+        end
+        TPReturner()
+    end
+})
+
+
+
+    
+
+        
+Tabs.dungeon:AddToggle("AutoBuyDungeonTicket", {
+    Title = "Auto Buy Dungeon Ticket",
+    Default = false,
+    Callback = function(state)
+        buyTicketEnabled = state
+        print("[DEBUG] Auto Buy Dungeon Ticket toggled:", state)
+        
+        if state then
+            task.spawn(function()
+                while buyTicketEnabled do
+                    local args = {
+                        [1] = {
+                            [1] = {
+                                ["Type"] = "Gems",
+                                ["Event"] = "DungeonAction",
+                                ["Action"] = "BuyTicket"
+                            },
+                            [2] = "\n"
+                        }
+                    }
+
+                    game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+                    task.wait(5) -- Đợi 5 giây trước khi gửi lại
+                end
+            end)
+        end
+    end
+})
+
+
+
+    local localPlayer = game:GetService("Players").LocalPlayer
+local playerCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+local playerHRP = playerCharacter:WaitForChild("HumanoidRootPart")
+local enemyContainer = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
+local networkEvent = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+
+local autoFarmActive = false
+local defeatedEnemies = {}
+
+local function isTargetDefeated(target)
+    local healthUI = target:FindFirstChild("HealthBar")
+    if healthUI and healthUI:FindFirstChild("Main") and healthUI.Main:FindFirstChild("Bar") then
+        local healthText = healthUI.Main.Bar:FindFirstChild("Amount")
+        if healthText and healthText:IsA("TextLabel") and healthText.ContentText == "0 HP" then
+            return true
+        end
+    end
+    return false
+end
+
+local function findClosestTarget()
+    local closestJJ2, closestJJ3, closestJJ4 = nil, nil, nil
+    local distJJ2, distJJ3, distJJ4 = math.huge, math.huge, math.huge
+    local playerPos = localPlayer.Character and localPlayer.Character:GetPivot().Position
+
+    if not playerPos then return nil end
+
+    for _, enemy in ipairs(enemyContainer:GetChildren()) do
+        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+            local enemyType = enemy:GetAttribute("ID")
+            
+            -- Đảm bảo script bỏ qua các kẻ địch đã chết
+            if not defeatedEnemies[enemy.Name] then
+                local distance = (playerPos - enemy:GetPivot().Position).Magnitude
+                
+                if enemyType == "JJ2" and distance < distJJ2 then
+                    distJJ2 = distance
+                    closestJJ2 = enemy
+                elseif enemyType == "JJ3" and distance < distJJ3 then
+                    distJJ3 = distance
+                    closestJJ3 = enemy
+                elseif enemyType == "JJ4" and distance < distJJ4 then
+                    distJJ4 = distance
+                    closestJJ4 = enemy
+                end
+            end
+        end
+    end
+
+    -- Ưu tiên: JJ2 > JJ3 > JJ4
+    return closestJJ2 or closestJJ3 or closestJJ4
+end
+
+local function triggerPetVisibility()
+    local arguments = {
+        [1] = {
+            [1] = {
+                ["Event"] = "ShowPets"
+            },
+            [2] = "\t"
+        }
+    }
+    game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(arguments))
+end
+
+local function startAutoFarm()
+    while autoFarmActive do
+        local targetEnemy = findClosestTarget()
+        
+        while autoFarmActive and targetEnemy do
+            if not targetEnemy.Parent then break end
+
+            local targetHRP = targetEnemy:FindFirstChild("HumanoidRootPart")
+            local playerHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+            if targetHRP and playerHRP then
+                -- Move to target enemy
+                playerHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 6)
+
+                task.wait(0.5)
+                triggerPetVisibility()
+
+                networkEvent:FireServer({
+                    {
+                        ["PetPos"] = {},
+                        ["AttackType"] = "All",
+                        ["Event"] = "Attack",
+                        ["Enemy"] = targetEnemy.Name
+                    },
+                    "\7"
+                })
+
+                -- Wait until enemy is defeated or a higher-priority one appears
+                while autoFarmActive and targetEnemy.Parent do
+                    if isTargetDefeated(targetEnemy) then
+                        defeatedEnemies[targetEnemy.Name] = true -- Mark it as dead immediately
+                        break
+                    end
+                    
+                    task.wait(0.1)
+                    
+                    -- Switch if a higher-priority target appears
+                    local newTarget = findClosestTarget()
+                    if newTarget and newTarget:GetAttribute("ID") == "JJ2" and newTarget ~= targetEnemy then
+                        break
+                    elseif newTarget and newTarget:GetAttribute("ID") == "JJ3" and targetEnemy:GetAttribute("ID") == "JJ4" then
+                        break
+                    end
+                end
+            end
+
+            targetEnemy = findClosestTarget() -- Move to next enemy
+        end
+
+        task.wait(0.20)
+    end
+end
+
+Tabs.Main:AddToggle("AutoFarmToggle", {
+    Title = "auto Jeju farm",
+    Default = false,
+    Callback = function(state)
+        autoFarmActive = state
+        if state then
+            task.spawn(startAutoFarm)
+        end
+    end
+})
+
+
+local AutoEnterDungeon = Tabs.dungeon:AddToggle("AutoEnterDungeon", { Title = "Auto Enter Guild Dungeon", Default = false })
+
+local function EnterDungeon()
+    while AutoEnterDungeon.Value do
+        local args = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "DungeonAction",
+                    ["Action"] = "TestEnter"
+                },
+                [2] = "\n"
+            }
+        }
+
+        game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+        task.wait(0.5) -- Ajustar o atraso se necessário
+    end
+end
+
+AutoEnterDungeon:OnChanged(function(Value)
+    if Value then
+        task.spawn(EnterDungeon) -- Start loop when enabled
+    end
+end)
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -3292,3 +3773,4 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
+
