@@ -1,4 +1,4 @@
- -- Início verificação segura de ambiente (otimizado)
+-- Início verificação segura de ambiente (otimizado)\n-- Início verificação segura de ambiente (otimizado)
 local _ok, _players_service = pcall(function()
     if game and game.GetService then
         return game:GetService("Players")
@@ -121,49 +121,47 @@ end
 
 -- Função para carregar configuração (thử nhiều phương thức)
 ConfigSystem.LoadConfig = function()
-    -- Thử các phương thức đọc khác nhau
+    -- Tentativas de diferentes métodos de leitura
     local success, content = pcall(function()
         -- Método 1: readfile padrão (Synapse X, KRNL, Script-Ware)
         if readfile and isfile and isfile(ConfigSystem.FilePath) then
             return readfile(ConfigSystem.FilePath)
         end
-        
+
         -- Método 2: Fluxus
         if fluxus and fluxus.read_file and fluxus.file_exists and fluxus.file_exists(ConfigSystem.FilePath) then
             return fluxus.read_file(ConfigSystem.FilePath)
         end
-        
+
         -- Método 3: Delta
         if delta_config and delta_config.load and delta_config.exists and delta_config.exists(ConfigSystem.FilePath) then
             return delta_config.load(ConfigSystem.FilePath)
         end
-        
-        -- Método 4: Codex
-        if readfile and getrenv().readfile and isfile and getrenv().isfile and getrenv().isfile(ConfigSystem.FilePath) then
+
+        -- Método 4: Codex / getrenv
+        if readfile and getrenv and getrenv().readfile and isfile and getrenv().isfile and getrenv().isfile(ConfigSystem.FilePath) then
             return getrenv().readfile(ConfigSystem.FilePath)
         end
-        
+
         return nil
     end)
-    
+
     if success and content then
-        local data
-        success, data = pcall(function()
+        local ok, data = pcall(function()
             return HttpService:JSONDecode(content)
         end)
-        
-        if success and data then
-        ConfigSystem.CurrentConfig = data
-        return true
-    else
+
+        if ok and data then
+            ConfigSystem.CurrentConfig = data
+            return true
         end
     end
-    
+
     -- Se não conseguir ler ou ocorrer erro, criar configuração padrão
-        ConfigSystem.CurrentConfig = table.clone(ConfigSystem.DefaultConfig)
-        ConfigSystem.SaveConfig()
-        return false
-    end
+    ConfigSystem.CurrentConfig = table.clone(ConfigSystem.DefaultConfig)
+    ConfigSystem.SaveConfig()
+    return false
+end
 
 -- Criar um sistema de auto save separado
 local function setupAutoSave()
