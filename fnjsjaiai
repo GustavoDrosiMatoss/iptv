@@ -137,7 +137,7 @@ ConfigSystem.LoadConfig = function()
 -- Criar um sistema de auto save separado
 local function setupAutoSave()
     spawn(function()
-        while task.wait(10) do -- Salvar a cada 5 segundos
+        while wait(5) do -- Salvar a cada 5 segundos
             pcall(function()
                 ConfigSystem.SaveConfig()
             end)
@@ -283,7 +283,7 @@ local function teleportAndTrackDeath()
         if target and target.Parent then
             anticheat()
             moveToTarget(target)
-            task.task.wait(0.5)
+            task.wait(0.5)
             fireShowPetsRemote()
             remote:FireServer({
                 {
@@ -295,11 +295,11 @@ local function teleportAndTrackDeath()
                 "\7"
             })
             while teleportEnabled and target.Parent and not isEnemyDead(target) do
-                task.task.wait(0.5)
+                task.wait(0.1)
             end
             killedNPCs[target.Name] = true
         end
-        task.task.wait(0.5)
+        task.wait(0.2)
     end
 end
 local function teleportDungeon()
@@ -337,10 +337,10 @@ local function teleportDungeon()
         if enemy then
             moveToEnemy(enemy)
             while teleportEnabled and enemy:GetAttribute("HP") and enemy:GetAttribute("HP") > 0 do
-                task.task.wait(0.6)
+                task.wait(0.3)
             end
         else
-            task.task.wait(1)
+            task.wait(1)
         end
     end
 end
@@ -356,7 +356,7 @@ local function teleportToSelectedEnemy()
         if target and target.Parent then
             anticheat()
             moveToTarget(target)
-            task.task.wait(0.5)
+            task.wait(0.5)
             fireShowPetsRemote()
             remote:FireServer({
                 {
@@ -368,11 +368,11 @@ local function teleportToSelectedEnemy()
                 "\7"
             })
             while teleportEnabled and target.Parent and not isEnemyDead(target) do
-                task.task.wait(0.5)
+                task.wait(0.1)
             end
             killedNPCs[target.Name] = true
         end
-        task.task.wait(0.5)
+        task.wait(0.20)
     end
 end
 -- Farm Method Selection Dropdown
@@ -560,7 +560,7 @@ Tabs.Main:AddToggle("AutoAttackToggle", {
                         }
                         remote:FireServer(unpack(args))
                     end
-                    task.task.wait(attackCooldown) -- Chờ giữa các lần tấn công
+                    task.wait(attackCooldown) -- Chờ giữa các lần tấn công
                 end
             end)
         else
@@ -585,7 +585,7 @@ local function SetSpawnAndReset(spawnName)
     local remote = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
     remote:FireServer(unpack(args))
     -- Esperar um pouco antes de renascer (tùy chọn, để đảm bảo điểm hồi sinh được thiết lập)
-    task.task.wait(0.5)
+    task.wait(0.5)
     -- Hồi sinh nhân vật
     local player = game.Players.LocalPlayer
 if player.Character and player.Character.Parent then
@@ -647,7 +647,7 @@ local autoArise = false
 local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
 local function fireDestroy()
     while autoDestroy do
-        task.task.wait(0.6)  -- Delay to prevent overloading
+        task.wait(0.3)  -- Delay to prevent overloading
         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
             if enemy:IsA("Model") then
                 local rootPart = enemy:FindFirstChild("HumanoidRootPart")
@@ -664,7 +664,7 @@ end
 local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
 local function fireArise()
     while autoArise do
-        task.task.wait(0.6)  -- Delay to prevent overloading
+        task.wait(0.3)  -- Delay to prevent overloading
         for _, enemy in ipairs(enemiesFolder:GetChildren()) do
             if enemy:IsA("Model") then
                 local rootPart = enemy:FindFirstChild("HumanoidRootPart")
@@ -746,7 +746,7 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    task.task.wait(3)
+    task.wait(3)
     -- Iniciar a dungeon
     local iniciarArgs = {
         [1] = {
@@ -791,7 +791,7 @@ local function teleportToObject(object)
         if cha then cha:Destroy() print("discord") else print("Cid") end
         -- Dịch chuyển trực tiếp
         hrp.CFrame = object.CFrame
-        task.task.wait(2) -- Pequeno atraso após teleporte
+        task.wait(2) -- Pequeno atraso após teleporte
         createDungeon() -- Kích hoạt remote tạo dungeon usando a função corrigida
     else
     end
@@ -804,12 +804,12 @@ local function teleportLoop()
             if object:IsA("Part") then
                 foundObject = true
                 teleportToObject(object)
-                task.task.wait(1) -- Evitar execução excessiva
+                task.wait(1) -- Evitar execução excessiva
             end
         end
         if not foundObject then
         end
-        task.task.wait(0.5) -- Atraso antes de verificar novamente
+        task.wait(0.5) -- Atraso antes de verificar novamente
     end
 end
 -- Add the toggle button to start/stop teleporting
@@ -851,7 +851,7 @@ local function SetSpawnAndReset(spawnName)
     local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
     remote:FireServer(unpack(args))
     -- Esperar um pouco antes de renascer (tùy chọn, để đảm bảo điểm hồi sinh được thiết lập)
-    task.task.wait(0.5)
+    task.wait(0.5)
     -- Hồi sinh nhân vật
     if player.Character then
         player.Character:BreakJoints() -- Buộc nhân vật phải hồi sinh
@@ -889,7 +889,7 @@ local function resetAutoFarm()
 end
 task.spawn(function()
     while true do
-        task.task.wait(120) -- Đợi 120 giây
+        task.wait(120) -- Đợi 120 giây
         resetAutoFarm() -- Gọi hàm đặt lại
     end
 end)
@@ -905,7 +905,7 @@ local AntiAfkToggle = Tabs.Player:AddToggle("AntiAfk", {
             if not antiAfkConnection then
                 antiAfkConnection = LocalPlayer.Idled:Connect(function()
                     VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-                    task.task.wait(1) -- Thời gian chờ có thể điều chỉnh
+                    task.wait(1) -- Thời gian chờ có thể điều chỉnh
                     VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
                 end)
             end
@@ -1081,7 +1081,7 @@ JumpToggle:OnChanged(function(Value)
 end)
 -- Cập nhật nhân vật khi hồi sinh
 LocalPlayer.CharacterAdded:Connect(function()
-    task.task.wait(1) -- Đợi nhân vật tải xong
+    task.wait(1) -- Đợi nhân vật tải xong
     updateCharacter()
 end)
 -- Cập nhật ban đầu
@@ -1120,7 +1120,7 @@ NoClipToggle:OnChanged(function(Value)
                         part.CanCollide = false
                     end
                 end
-                task.task.wait()
+                task.wait()
             end
         end)
     else
@@ -1194,7 +1194,7 @@ Tabs.dungeon:AddToggle("", {
                         }
                     }
                     game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
-                    task.task.wait(10) -- Đợi 5 giây trước khi gửi lại
+                    task.wait(5) -- Đợi 5 giây trước khi gửi lại
                 end
             end)
         end
@@ -1265,7 +1265,7 @@ local function startAutoFarm()
             if targetHRP and playerHRP then
                 -- Move to target enemy
                 playerHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 6)
-                task.task.wait(0.5)
+                task.wait(0.5)
                 triggerPetVisibility()
                 networkEvent:FireServer({
                     {
@@ -1282,7 +1282,7 @@ local function startAutoFarm()
                         defeatedEnemies[targetEnemy.Name] = true -- Mark it as dead immediately
                         break
                     end
-                    task.task.wait(0.5)
+                    task.wait(0.1)
                     -- Switch if a higher-priority target appears
                     local newTarget = findClosestTarget()
                     if newTarget and newTarget:GetAttribute("ID") == "JJ2" and newTarget ~= targetEnemy then
@@ -1294,7 +1294,7 @@ local function startAutoFarm()
             end
             targetEnemy = findClosestTarget() -- Move to next enemy
         end
-        task.task.wait(0.5)
+        task.wait(0.20)
     end
 end
 Tabs.Main:AddToggle("AutoFarmToggle", {
@@ -1320,7 +1320,7 @@ local function EnterDungeon()
             }
         }
         game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
-        task.task.wait(0.5) -- Ajustar o atraso se necessário
+        task.wait(0.5) -- Ajustar o atraso se necessário
     end
 end
 AutoEnterDungeon:OnChanged(function(Value)
@@ -1370,7 +1370,7 @@ local function AutoSaveConfig()
     local configName = "AutoSave_" .. playerName
     -- Tự động lưu cấu hình hiện tại
     task.spawn(function()
-        while task.task.wait(10) do -- Salvar a cada 5 segundos
+        while task.wait(5) do -- Salvar a cada 5 segundos
             pcall(function()
                 SaveManager:Save(configName)
             end)
@@ -1384,7 +1384,7 @@ end
 -- Thực thi tự động lưu/tải cấu hình
 AutoSaveConfig()
 -- Thêm hỗ trợ Mobile UI
-repeat task.task.wait(0.6) until game:IsLoaded()
+repeat task.wait(0.25) until game:IsLoaded()
 getgenv().Image = "rbxassetid://13099788281" -- ID tài nguyên hình ảnh đã sửa
 getgenv().ToggleUI = "LeftControl" -- Phím để bật/tắt giao diện
 -- Tạo giao diện mobile cho người dùng điện thoại
@@ -1575,7 +1575,7 @@ Tabs.shop:AddToggle("AutoBuyToggle", {
             task.spawn(function()
                 while autoBuyEnabled do
                     buyWeapon()
-                    task.task.wait(1) -- Chờ 1 giây giữa mỗi lần mua
+                    task.wait(1) -- Chờ 1 giây giữa mỗi lần mua
                 end
             end)
         end
@@ -1695,7 +1695,7 @@ local function upgradeWeaponsByLevel(weaponType)
                 Duration = 3
             })
             anyUpgraded = true
-            task.task.wait(1) -- Đợi 1 giây để tránh spam server
+            task.wait(1) -- Đợi 1 giây để tránh spam server
         end
     end
     if not anyUpgraded then
@@ -1751,9 +1751,9 @@ Tabs.shop:AddToggle("AutoSelectToggle", {
                 while autoSelectedEnabled do
                     local upgraded = upgradeWeaponsByLevel(selectedWeaponType)
                     if not upgraded then
-                        task.task.wait(10) -- Đợi lâu hơn nếu không có vũ khí nào được nâng cấp
+                        task.wait(5) -- Đợi lâu hơn nếu không có vũ khí nào được nâng cấp
                     else
-                        task.task.wait(1) -- Đợi ngắn hơn nếu có vũ khí được nâng cấp
+                        task.wait(1) -- Đợi ngắn hơn nếu có vũ khí được nâng cấp
                     end
                 end
             end)
@@ -1834,7 +1834,7 @@ local function sellPetsByRank()
                 }
                 remote:FireServer(unpack(args))
                 -- Đợi một khoảng thời gian ngắn để tránh spam
-                task.task.wait(0.6)
+                task.wait(0.3)
                 -- Đặt lại danh sách
                 petsToSell = {}
             end
@@ -1888,7 +1888,7 @@ Tabs.shop:AddToggle("AutoSellToggle", {
                 task.spawn(function()
                     while autoSellEnabled do
                         sellPetsByRank()
-                        task.task.wait(10) -- Đợi 5 giây giữa mỗi lần kiểm tra và bán
+                        task.wait(5) -- Đợi 5 giây giữa mỗi lần kiểm tra và bán
                     end
                 end)
             else
@@ -1915,7 +1915,7 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    task.task.wait(3)
+    task.wait(3)
     -- Iniciar a dungeon
     local iniciarArgs = {
         [1] = {
@@ -2003,12 +2003,12 @@ local function monitorEnemiesINF()
             local minuto = hora.min
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                task.task.wait(60) -- espera 1 min antes de verificar de novo
+                task.wait(60) -- espera 1 min antes de verificar de novo
             else
                 if not workspace:FindFirstChild("__Main") then
                     -- não está dentro da dungeon -> cria e inicia
                     createDungeon()
-                    task.task.wait(10)
+                    task.wait(5)
                 else
                     local closestEnemy = getClosestEnemy()
                     local currentTime = tick()
@@ -2023,7 +2023,7 @@ local function monitorEnemiesINF()
                                   and closestEnemy:GetAttribute("HP") 
                                   and closestEnemy:GetAttribute("HP") > 0 
                                   and attempts < 100 do
-                                task.task.wait(0.5)
+                                task.wait(0.1)
                                 attempts += 1
                             end
                         end
@@ -2031,15 +2031,15 @@ local function monitorEnemiesINF()
                         local timeWithoutEnemies = currentTime - lastEnemyCheckINF
                         if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
                             leaveDungeon()
-                            task.task.wait(10) -- espera 10s fora antes de tentar recriar
+                            task.wait(10) -- espera 10s fora antes de tentar recriar
                         else
-                            task.task.wait(1)
+                            task.wait(1)
                         end
                     end
                 end
             end
         end)
-        task.task.wait(0.5)
+        task.wait(0.1)
     end
     if currentTweenINF then
         currentTweenINF:Cancel()
@@ -2063,7 +2063,7 @@ local function recreateDungeon()
     end
     createDungeon()
     lastEnemyCheckRecreate = tick()
-    task.task.wait(10)
+    task.wait(5)
 end
 local function monitorEnemiesRecreate()
     while teleportRecreateEnabled do
@@ -2073,11 +2073,11 @@ local function monitorEnemiesRecreate()
             local minuto = hora.min
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                task.task.wait(60)
+                task.wait(60)
             else
                 if not workspace:FindFirstChild("__Main") then
                     createDungeon()
-                    task.task.wait(10)
+                    task.wait(5)
                 end
                 local closestEnemy = getClosestEnemy()
                 local currentTime = tick()
@@ -2092,7 +2092,7 @@ local function monitorEnemiesRecreate()
                               and closestEnemy:GetAttribute("HP") 
                               and closestEnemy:GetAttribute("HP") > 0 
                               and attempts < 100 do
-                            task.task.wait(0.5)
+                            task.wait(0.1)
                             attempts += 1
                         end
                     end
@@ -2107,11 +2107,11 @@ local function monitorEnemiesRecreate()
                                 timeWithoutEnemies, remainingTime))
                         end
                     end
-                    task.task.wait(1)
+                    task.wait(1)
                 end
             end
         end)
-        task.task.wait(0.5)
+        task.wait(0.1)
     end
     if currentTweenRecreate then
         currentTweenRecreate:Cancel()
@@ -2318,7 +2318,7 @@ local function createCastle()
     pcall(function() 
         game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
     end)
-    task.task.wait(3)
+    task.wait(3)
 end
 -- ==========================
 -- VELOCIDADE DO CASTLE (NOVO)
@@ -2343,7 +2343,7 @@ local function castleSpeedLoop()
     task.spawn(function()
         while castleSpeedEnabled do
             applyCastleSpeed(castleSpeedLevel)
-            task.task.wait(10)
+            task.wait(10)
         end
     end)
 end
@@ -2397,7 +2397,7 @@ local function activateFirePortal()
     if prompt then
         for _ = 1, 3 do
             pcall(function() fireproximityprompt(prompt) end)
-            task.task.wait(0.5)
+            task.wait(0.1)
         end
         return true
     end
@@ -2436,7 +2436,7 @@ local function farmCastleMobs()
                         if not currentHP or currentHP <= 0 then
                             break
                         end
-                        task.task.wait(0.5)
+                        task.wait(0.2)
                     end
                     mobsKilled = true
                 end
@@ -2452,12 +2452,12 @@ local function castleInfLoop()
             if not foundMobs then
                 local success = teleportToFirePortal()
                 if success then
-                    task.task.wait(1)
+                    task.wait(1)
                     activateFirePortal()
-                    task.task.wait(2)
+                    task.wait(2)
                 end
             end
-            task.task.wait(0.5)
+            task.wait(0.5)
         end
     end)
 end
@@ -2470,30 +2470,30 @@ local function autoCastleLoop()
             local currentFloor = getCurrentCastleFloor()
             if not currentFloor then
                 createCastle()
-                task.task.wait(1)
+                task.wait(1)
                 buyCastleTicket()
-                task.task.wait(1)
+                task.wait(1)
                 joinCastle(entryFloor)
-                task.task.wait(10)
+                task.wait(5)
             else
                 if currentFloor >= resetFloor then
                     createCastle()
-                    task.task.wait(1)
+                    task.wait(1)
                     buyCastleTicket()
-                    task.task.wait(1)
+                    task.wait(1)
                     joinCastle(entryFloor)
                     Fluent:Notify({
                         Title = "Castle Recreated",
                         Content = "",
                         Duration = 4
                     })
-                    task.task.wait(10)
+                    task.wait(5)
                 else
                     farmCastleMobs()
-                    task.task.wait(1)
+                    task.wait(1)
                 end
             end
-            task.task.wait(0.5)
+            task.wait(0.5)
         end
     end)
 end
@@ -2503,20 +2503,20 @@ local function castleCreateOnlyLoop()
             local currentFloor = getCurrentCastleFloor()
             if not currentFloor then
                 createCastle()
-                task.task.wait(1)
+                task.wait(1)
                 buyCastleTicket()
-                task.task.wait(1)
+                task.wait(1)
                 joinCastle(entryFloor)
-                task.task.wait(10)
+                task.wait(5)
                 Fluent:Notify({
                     Title = "Auto Castelo",
                     Content = "" .. tostring(entryFloor),
                     Duration = 3
                 })
             else
-                task.task.wait(2)
+                task.wait(2)
             end
-            task.task.wait(0.5)
+            task.wait(0.5)
         end
     end)
 end
@@ -2595,11 +2595,11 @@ Tabs.dungeon:AddToggle("AutoCastle", {
                 Duration = 5
             })
             createCastle()
-            task.task.wait(1)
+            task.wait(1)
             buyCastleTicket()
-            task.task.wait(1)
+            task.wait(1)
             joinCastle(entryFloor)
-            task.task.wait(2)
+            task.wait(2)
             castleSessionActive = true
             autoCastleLoop()
         else
@@ -2646,11 +2646,11 @@ end
 if ConfigSystem.CurrentConfig.CastleToggle then
     castleEnabled = true
     createCastle()
-    task.task.wait(1)
+    task.wait(1)
     buyCastleTicket()
-    task.task.wait(1)
+    task.wait(1)
     joinCastle(entryFloor)
-    task.task.wait(2)
+    task.wait(2)
     castleSessionActive = true
     autoCastleLoop()
 end
@@ -2781,7 +2781,7 @@ local function manterTeleport()
                     player.Character.HumanoidRootPart.RotVelocity = Vector3.new(0,0,0)
                 end
             end
-            task.task.wait(0.5)
+            task.wait(0.1)
         end
         if player.Character and player.Character:FindFirstChild("Humanoid") then
             local humanoid = player.Character.Humanoid
@@ -2825,7 +2825,7 @@ local function iniciarAutoVelocidade()
             if estaNoDeserto() then
                 aplicarVelocidade(speedValue)
             end
-            task.task.wait(10)
+            task.wait(10)
         end
         autoSpeedLoop = false
     end)
@@ -2853,7 +2853,7 @@ local function monitorarSaidaDeserto()
             else
                 tentativasConsecutivas = 0
             end
-            task.task.wait(3)
+            task.wait(3)
         end
     end)
 end
@@ -2884,7 +2884,7 @@ local function iniciarDesertoInfinito()
             }
         }
         if remote then remote:FireServer(unpack(argsCreate)) end
-        task.task.wait(3)
+        task.wait(3)
         local startSuccess = false
         for tentativa = 1, 3 do
             local argsStart = {
@@ -2898,7 +2898,7 @@ local function iniciarDesertoInfinito()
                 }
             }
             if remote then remote:FireServer(unpack(argsStart)) end
-            task.task.wait(4)
+            task.wait(4)
             local aindaNoMundo, _ = estaNoMundoInfinito()
             if aindaNoMundo then
                 startSuccess = true
@@ -2909,7 +2909,7 @@ local function iniciarDesertoInfinito()
             resetarEstadoSessao()
             return
         end
-        task.task.wait(2)
+        task.wait(2)
         aplicarVelocidade(speedValue)
         if autoSpeedEnabled then iniciarAutoVelocidade() end
         monitorarSaidaDeserto()
