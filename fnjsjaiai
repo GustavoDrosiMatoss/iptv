@@ -864,14 +864,15 @@ local hrp = character:WaitForChild("HumanoidRootPart")
 local dungeonFolder = workspace:WaitForChild("__Main"):WaitForChild("__Dungeon")
 
 -- ==========================
--- AUTO FARM DUNGEON COM RELÍQUIA AUTOMÁTICA
+-- AUTO FARM DUNGEON + RUNAS/RELÍQUIAS
 -- ==========================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 local player = game.Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
 
 -- ======================================================
--- 📝 Lista de Runas: [NomeInterno] = "Nome para Exibir"
+-- Lista de Runas: [NomeInterno] = "Nome para Exibir"
 -- ➕ Adicione mais manualmente aqui
 -- ======================================================
 local RUNE_LIST = {
@@ -880,7 +881,7 @@ local RUNE_LIST = {
     -- ["DgSuperRune"] = "Super Runa"
 }
 
--- Lista de runas selecionadas (nomes internos)
+-- Runas selecionadas (nomes internos)
 local selectedRunes = {}
 -- Toggle de uso de relíquia
 local useRelicEnabled = false
@@ -893,7 +894,7 @@ local function getDistance(a, b)
 end
 
 local function getClosestEnemy()
-    local enemiesFolder = workspace:FindFirstChild("_Main") and workspace.Main._Enemies.Server
+    local enemiesFolder = workspace:FindFirstChild("_Main") and workspace._Main:FindFirstChild("_Enemies") and workspace._Main._Enemies:FindFirstChild("Server")
     if not enemiesFolder then return nil end
 
     local character = player.Character
@@ -916,9 +917,8 @@ local function getClosestEnemy()
 end
 
 local function moveToEnemy(enemy, currentTween)
-    local TweenService = game:GetService("TweenService")
     local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") or not enemy.Position then
+    if not character or not character:FindFirstChild("HumanoidRootPart") or not enemy or not enemy.Position then
         return false, currentTween
     end
 
@@ -940,7 +940,7 @@ local function moveToEnemy(enemy, currentTween)
 end
 
 -- ==========================
--- ⚔ Função para criar e iniciar dungeon (com runas se ativado)
+-- Criar + Iniciar Dungeon (com runas se ativado)
 -- ==========================
 local function createAndStartDungeon()
     -- Criar dungeon
@@ -1007,7 +1007,7 @@ local function monitorDungeon()
     print("[AUTO-FARM] Iniciado.")
     while autoFarmEnabled do
         pcall(function()
-            if not workspace:FindFirstChild("__Main") then
+            if not workspace:FindFirstChild("_Main") then
                 createAndStartDungeon()
                 task.wait(5)
             end
@@ -1048,7 +1048,7 @@ local function monitorDungeon()
 end
 
 -- ==========================
--- 🌟 UI: Dropdown de Relíquias + Toggle de “Usar Relíquia”
+-- 🌟 UI: Dropdown de Relíquias + Toggles
 -- ==========================
 local dungeonTab = Tabs.dungeon
 
@@ -1058,12 +1058,12 @@ for internal, display in pairs(RUNE_LIST) do
     table.insert(runeDisplayNames, display)
 end
 
--- Dropdown para selecionar quais relíquias usar (multi)
+-- Dropdown multi-seleção de runas
 dungeonTab:AddDropdown("SelectRelics", {
     Title = "Selecionar Relíquias",
     Values = runeDisplayNames,
     Multi = true,
-    Default = {"Jojo Rune"}, -- seleciona Jojo por padrão
+    Default = {"Jojo Rune"},
     Callback = function(selectedDisplayNames)
         selectedRunes = {}
         for _, displayName in ipairs(selectedDisplayNames) do
@@ -1077,7 +1077,7 @@ dungeonTab:AddDropdown("SelectRelics", {
     end
 })
 
--- Toggle para ativar o uso automático da relíquia
+-- Toggle de uso de relíquia
 dungeonTab:AddToggle("UseRelicToggle", {
     Title = "Usar Relíquia",
     Default = false,
