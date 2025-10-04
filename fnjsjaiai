@@ -1,9 +1,5 @@
 if not game or not game.GetService then
-    -- warn("Ambiente do jogo não está disponível.")
-    return
-end
-if not game or not game.GetService then
-    -- warn("Ambiente do jogo não está disponível.")
+
     return
 end
 local Players = game:GetService("Players")
@@ -49,7 +45,9 @@ ConfigSystem.DefaultConfig = {
 }
 ConfigSystem.CurrentConfig = {}
 
+-- Função para criar pastas se não existirem
 ConfigSystem.CreateFolders = function()
+    -- Testar diferentes métodos para criar pasta em vários executores
     local success = pcall(function()
         if makefolder then
             if not isfolder(ConfigSystem.Folder) then
@@ -65,75 +63,111 @@ ConfigSystem.CreateFolders = function()
     return success
 end
 
+-- Função para salvar configuração (thử nhiều phương thức)
 ConfigSystem.SaveConfig = function()
+    -- Garantir que a pasta existe
     ConfigSystem.CreateFolders()
+    
+    -- Mã hóa cấu hình thành chuỗi JSON
     local jsonData = HttpService:JSONEncode(ConfigSystem.CurrentConfig)
+    
+    -- Testar diferentes métodos de salvar
     local success, err = pcall(function()
+        -- Método 1: writefile trực tiếp (Synapse X, KRNL, Script-Ware)
         if writefile then
             writefile(ConfigSystem.FilePath, jsonData)
             return true
         end
+        
+        -- Método 2: Usar SaveInstance (alguns outros executores)
         if saveinstance then
             saveinstance(ConfigSystem.FilePath, jsonData)
             return true
         end
+        
+        -- Método 3: Fluxus và alguns outros executores
         if fluxus and fluxus.save_file then
             fluxus.save_file(ConfigSystem.FilePath, jsonData)
             return true
         end
+        
+        -- Método 4: Delta và alguns outros executores
         if delta_config and delta_config.save then
             delta_config.save(ConfigSystem.FilePath, jsonData)
             return true
         end
+        
+        -- Método 5: Codex
         if writefile and getrenv().writefile then
             getrenv().writefile(ConfigSystem.FilePath, jsonData)
             return true
         end
+        
         return false
     end)
-    -- print("Configuração salva com sucesso em: " .. ConfigSystem.FilePath)
-    -- warn("Falha ao salvar configuração:", err)
-    return success
+    
+    if success then
+
+        return true
+    else
+
+        return false
+    end
 end
 
+-- Função para carregar configuração (thử nhiều phương thức)
 ConfigSystem.LoadConfig = function()
+    -- Thử các phương thức đọc khác nhau
     local success, content = pcall(function()
+        -- Método 1: readfile padrão (Synapse X, KRNL, Script-Ware)
         if readfile and isfile and isfile(ConfigSystem.FilePath) then
             return readfile(ConfigSystem.FilePath)
         end
+        
+        -- Método 2: Fluxus
         if fluxus and fluxus.read_file and fluxus.file_exists and fluxus.file_exists(ConfigSystem.FilePath) then
             return fluxus.read_file(ConfigSystem.FilePath)
         end
+        
+        -- Método 3: Delta
         if delta_config and delta_config.load and delta_config.exists and delta_config.exists(ConfigSystem.FilePath) then
             return delta_config.load(ConfigSystem.FilePath)
         end
+        
+        -- Método 4: Codex
         if readfile and getrenv().readfile and isfile and getrenv().isfile and getrenv().isfile(ConfigSystem.FilePath) then
             return getrenv().readfile(ConfigSystem.FilePath)
         end
+        
         return nil
     end)
+    
     if success and content then
         local data
         success, data = pcall(function()
             return HttpService:JSONDecode(content)
         end)
+        
         if success and data then
-            ConfigSystem.CurrentConfig = data
-            -- print("Configuração carregada de: " .. ConfigSystem.FilePath)
-            return true
-        else
-            -- warn("Erro ao analisar configuração, criando nova.")
+        ConfigSystem.CurrentConfig = data
+
+        return true
+    else
+
         end
     end
-    ConfigSystem.CurrentConfig = table.clone(ConfigSystem.DefaultConfig)
-    ConfigSystem.SaveConfig()
-    -- print("Inicializando nova configuração")
-    return false
-end
+    
+    -- Se não conseguir ler ou ocorrer erro, criar configuração padrão
+        ConfigSystem.CurrentConfig = table.clone(ConfigSystem.DefaultConfig)
+        ConfigSystem.SaveConfig()
 
+        return false
+    end
+
+-- Criar um sistema de auto save separado
 local function setupAutoSave()
     spawn(function()
-        while wait(5) do
+        while wait(5) do -- Salvar a cada 5 segundos
             pcall(function()
                 ConfigSystem.SaveConfig()
             end)
@@ -141,9 +175,11 @@ local function setupAutoSave()
     end)
 end
 
+-- Carregar configuração ao iniciar
 ConfigSystem.LoadConfig()
-setupAutoSave()
+setupAutoSave() -- Iniciando salvamento automático
 
+-- Atualizar função para salvar imediatamente ao alterar valor
 local function setupSaveEvents()
     for _, tab in pairs(Tabs) do
         if tab and tab._components then
@@ -160,6 +196,7 @@ local function setupSaveEvents()
     end
 end
 
+-- Configurar SaveManager do Fluent para compatibilidade
 local playerName = game:GetService("Players").LocalPlayer.Name
 if InterfaceManager then
     InterfaceManager:SetFolder("Allan Hub")
@@ -168,6 +205,7 @@ if SaveManager then
     SaveManager:SetFolder("Allan Hub/AriseCrossover/" .. playerName)
 end
 
+-- Detectar automaticamente novo HumanoidRootPart quando o jogador renascer
 player.CharacterAdded:Connect(function(newCharacter)
     character = newCharacter
     hrp = newCharacter:WaitForChild("HumanoidRootPart")
@@ -177,11 +215,13 @@ local function anticheat()
     local player = game.Players.LocalPlayer
     if player and player.Character then
         local characterScripts = player.Character:FindFirstChild("CharacterScripts")
+        
         if characterScripts then
             local flyingFixer = characterScripts:FindFirstChild("FlyingFixer")
             if flyingFixer then
                 flyingFixer:Destroy()
             end
+
             local characterUpdater = characterScripts:FindFirstChild("CharacterUpdater")
             if characterUpdater then
                 characterUpdater:Destroy()
@@ -202,12 +242,15 @@ local function isEnemyDead(enemy)
 end
 
 local function getNearestSelectedEnemy()
+    -- Se nenhum inimigo for encontrado em 5 segundos, atualizar lista
     if not selectedEnemyFoundTime or os.time() - selectedEnemyFoundTime > 5 then
-        killedNPCs = {}
+        killedNPCs = {} -- Redefinir lista de inimigos mortos
     end
+
     local nearestEnemy = nil
     local shortestDistance = math.huge
     local playerPosition = hrp.Position
+
     for _, enemy in ipairs(enemiesFolder:GetChildren()) do
         if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
             local healthBar = enemy:FindFirstChild("HealthBar")
@@ -224,9 +267,11 @@ local function getNearestSelectedEnemy()
             end
         end
     end
+
     if nearestEnemy then
-        selectedEnemyFoundTime = os.time()
+        selectedEnemyFoundTime = os.time() -- Atualizar hora em que o inimigo foi encontrado
     end
+    
     return nearestEnemy
 end
 
@@ -254,6 +299,7 @@ end
 local function getNearestEnemy()
     local nearestEnemy, shortestDistance = nil, math.huge
     local playerPosition = hrp.Position
+
     for _, enemy in ipairs(enemiesFolder:GetChildren()) do
         if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") and not killedNPCs[enemy.Name] then
             local distance = (playerPosition - enemy:GetPivot().Position).Magnitude
@@ -269,6 +315,7 @@ end
 local function moveToTarget(target)
     if not target or not target:FindFirstChild("HumanoidRootPart") then return end
     local enemyHrp = target.HumanoidRootPart
+
     if movementMethod == "Teleport" then
         hrp.CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 6)
     elseif movementMethod == "Tween" then
@@ -297,87 +344,14 @@ local function teleportAndTrackDeath()
                 },
                 "\7"
             })
+
             while teleportEnabled and target.Parent and not isEnemyDead(target) do
                 task.wait(0.1)
             end
+
             killedNPCs[target.Name] = true
         end
         task.wait(0.2)
-    end
-end
-
-local function teleportDungeon()
-    while teleportEnabled do
-        local function getDistance(pos1, pos2)
-            return (pos1 - pos2).Magnitude
-        end
-        local function getClosestEnemy()
-            local closestEnemy = nil
-            local closestDistance = math.huge
-            local playerPosition = hrp.Position
-            for _, enemy in pairs(enemiesFolder:GetChildren()) do
-                local hp = enemy:GetAttribute("HP")
-                if hp and hp > 0 and enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
-                    local distance = getDistance(playerPosition, enemy.HumanoidRootPart.Position)
-                    if distance < closestDistance then
-                        closestDistance = distance
-                        closestEnemy = enemy
-                    end
-                end
-            end
-            return closestEnemy
-        end
-        local function moveToEnemy(enemy)
-            if enemy and enemy:FindFirstChild("HumanoidRootPart") then
-                local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Linear)
-                local tween = TweenService:Create(hrp, tweenInfo, {
-                    CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 0, 6)
-                })
-                tween:Play()
-                tween.Completed:Wait()
-            end
-        end
-        local enemy = getClosestEnemy()
-        if enemy then
-            moveToEnemy(enemy)
-            while teleportEnabled and enemy:GetAttribute("HP") and enemy:GetAttribute("HP") > 0 do
-                task.wait(0.3)
-            end
-        else
-            task.wait(1)
-        end
-    end
-end
-
-local function teleportToSelectedEnemy()
-    local lastResetTime = os.time()
-    while teleportEnabled do
-        local target = getNearestSelectedEnemy()
-        if not target and os.time() - lastResetTime > 3 then
-            killedNPCs = {}
-            lastResetTime = os.time()
-            -- print("Lista de inimigos mortos foi atualizada")
-        end
-        if target and target.Parent then
-            anticheat()
-            moveToTarget(target)
-            task.wait(0.5)
-            fireShowPetsRemote()
-            remote:FireServer({
-                {
-                    ["PetPos"] = {},
-                    ["AttackType"] = "All",
-                    ["Event"] = "Attack",
-                    ["Enemy"] = target.Name
-                },
-                "\7"
-            })
-            while teleportEnabled and target.Parent and not isEnemyDead(target) do
-                task.wait(0.1)
-            end
-            killedNPCs[target.Name] = true
-        end
-        task.wait(0.20)
     end
 end
 
@@ -437,7 +411,7 @@ local function teleportToSelectedEnemy()
         if not target and os.time() - lastResetTime > 3 then
             killedNPCs = {}
             lastResetTime = os.time()
-            print("Lista de inimigos mortos foi atualizada")
+
         end
         
         if target and target.Parent then
@@ -478,7 +452,7 @@ local success, err = pcall(function()
 end)
 
 if not success then
-    warn("Erro ao carregar biblioteca Fluent: " .. tostring(err))
+
     -- Thử tải từ URL dự phòng
     pcall(function()
         Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Fluent.lua"))()
@@ -511,7 +485,6 @@ local Tabs = {
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
 }
-
 
 -- Tạo mapping giữa các map và danh sách mob tương ứng
 local mobsByWorld = {
@@ -624,11 +597,11 @@ Tabs.Main:AddToggle("GamepassShadowFarm", {
             if atri == false then
                 attackatri:SetAttribute("AutoAttack", true)
             end
-            print("Shadow farm ativado")
+
         else
             -- Tắt tính năng
             attackatri:SetAttribute("AutoAttack", false)
-            print("Shadow farm desativado")
+
         end
     end
 })
@@ -749,7 +722,6 @@ local function teleportWithTween(targetCFrame)
     end
 end
 
-
 -- Locations List
 local locations = {
     {Name = "Location 1", CFrame = CFrame.new(-6161.25781, 140.639832, 5512.9668, -0.41691944, -8.07482721e-08, 0.908943415, -2.94452178e-07, 1, -4.62235228e-08, -0.908943415, -2.86911842e-07, -0.41691944)},
@@ -773,15 +745,12 @@ for _, loc in ipairs(locations) do
     })
 end
 
-
 local autoDestroy = false
 local autoArise = false
 
 -- Function to Fire DestroyPrompt
 
-
 local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
-
 
 local function fireDestroy()
     while autoDestroy do
@@ -801,12 +770,9 @@ local function fireDestroy()
     end
 end
 
-
-
 -- Function to Fire ArisePrompt
 
 local enemiesFolder = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
-
 
 local function fireArise()
     while autoArise do
@@ -825,7 +791,6 @@ local function fireArise()
         end
     end
 end
-
 
 -- Auto Destroy Toggle
 Tabs.Main:AddToggle("AutoDestroy", {
@@ -880,7 +845,6 @@ Tabs.dungeon:AddToggle("AutoArise", {
     end
 })
 
-
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -893,7 +857,7 @@ local dungeonFolder = workspace:WaitForChild("__Main"):WaitForChild("__Dungeon")
 local teleportingEnabled = false
 -- Função para criar a dungeon
 local function createDungeon()
-    print("[DEBUG] Tentando criar dungeon...")
+
     local args = {
         [1] = {
             [1] = {
@@ -904,7 +868,7 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("✔ Dungeon criada.")
+
     task.wait(3)
 
     -- Iniciar a dungeon
@@ -918,7 +882,7 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
-    print("▶ Dungeon iniciada.")
+
 end
 
 -- Function to start the dungeon (mantida como backup)
@@ -927,7 +891,7 @@ local function startDungeon()
     if dungeonInstance then
         local dungeonID = dungeonInstance:GetAttribute("ID")
         if dungeonID then
-            print("[DEBUG] Iniciando dungeon com ID:", dungeonID)
+
             local args = {
                 [1] = {
                     [1] = {
@@ -939,19 +903,18 @@ local function startDungeon()
                 }
             }
             ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
-            print("[DEBUG] Evento de início da Dungeon ativado!")
+
         else
-            print("[LỖI] Não foi encontrado ID da Dungeon!")
+
         end
     else
-        print("[LỖI] Não foi encontrada instância da Dungeon!")
+
     end
 end
 
 -- Function to teleport directly to an object and bypass anti-cheat
 local function teleportToObject(object)
     if object and object:IsA("Part") then
-        print("[DEBUG] Teleportando para:", object.Name)
 
         -- Bypass anti-cheat
         local f = player.Character and player.Character:FindFirstChild("CharacterScripts") and player.Character.CharacterScripts:FindFirstChild("FlyingFixer")
@@ -962,19 +925,18 @@ local function teleportToObject(object)
 
         -- Dịch chuyển trực tiếp
         hrp.CFrame = object.CFrame
-        print("[DEBUG] Teleport concluído para:", object.Name)
 
         task.wait(2) -- Pequeno atraso após teleporte
         createDungeon() -- Kích hoạt remote tạo dungeon usando a função corrigida
     else
-        print("[LỖI] Alvo de teleporte inválido!")
+
     end
 end
 
 -- Function to continuously teleport to objects when enabled
 local function teleportLoop()
     while teleportingEnabled do
-        print("[DEBUG] Procurando objetos de dungeon...")
+
         local foundObject = false
         for _, object in ipairs(dungeonFolder:GetChildren()) do
             if object:IsA("Part") then
@@ -984,13 +946,11 @@ local function teleportLoop()
             end
         end
         if not foundObject then
-            print("[CẢNH BÁO] Nenhum objeto de dungeon válido encontrado!")
+
         end
         task.wait(0.5) -- Atraso antes de verificar novamente
     end
 end
-
-
 
 -- Add the toggle button to start/stop teleporting
 Tabs.dungeon:AddToggle("TeleportToDungeon", {
@@ -998,13 +958,12 @@ Tabs.dungeon:AddToggle("TeleportToDungeon", {
     Default = false,
     Callback = function(state)
         teleportingEnabled = state
-        print("[DEBUG] Teleporte ativado/desativado:", state)
+
         if state then
             task.spawn(teleportLoop) -- Bắt đầu vòng lặp dịch chuyển khi bật
         end
     end
 })
-
 
 local AutoDetectToggle = Tabs.dungeon:AddToggle("AutoDetectDungeon", {Title = "Auto Detect Dungeon", Default = true})
 
@@ -1051,13 +1010,13 @@ end
 local function detectDungeon()
     player.PlayerGui.Warn.ChildAdded:Connect(function(dungeon)
         if dungeon:IsA("Frame") and AutoDetectToggle.Value then
-            print("Dungeon detectada!")
+
             for _, child in ipairs(dungeon:GetChildren()) do
                 if child:IsA("TextLabel") then
                     for village, spawnName in pairs(villageSpawns) do
                         if string.find(string.lower(child.Text), string.lower(village)) then
                             teleportEnabled = false
-                            print("Vila detectada:", village)
+
                             SetSpawnAndReset(spawnName)
                             return
                         end
@@ -1103,7 +1062,7 @@ local AntiAfkToggle = Tabs.Player:AddToggle("AntiAfk", {
     Default = false,
     Callback = function(enabled)
         if enabled then
-            print("Anti AFK ativado")
+
             -- Đảm bảo không tạo nhiều kết nối
             if not antiAfkConnection then
                 antiAfkConnection = LocalPlayer.Idled:Connect(function()
@@ -1113,7 +1072,7 @@ local AntiAfkToggle = Tabs.Player:AddToggle("AntiAfk", {
                 end)
             end
         else
-            print("Anti AFK desativado")
+
             -- Ngắt kết nối sự kiện khi tắt
             if antiAfkConnection then
                 antiAfkConnection:Disconnect()
@@ -1211,7 +1170,7 @@ Tabs.Player:AddButton({
             MaximizePerformance()
             OptimizeInstances()
             CleanMemory()
-            print("FPS Booster: " .. (Optimizer.Enabled and "ON" or "OFF"))
+
         end
 
         game:GetService("UserInputService").InputBegan:Connect(function(input)
@@ -1230,8 +1189,6 @@ Tabs.Player:AddButton({
     end
 })
 
-
-
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -1248,7 +1205,6 @@ local targetCFrame = CFrame.new(
 local function tweenToPivot()
     hrp.CFrame = targetCFrame
 end
-
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -1344,8 +1300,6 @@ Tabs.tp:AddButton({
     end
 })
 
-
-
 local NoClipToggle = Tabs.Player:AddToggle("NoClipToggle", {
     Title = "Enable NoClip",
     Default = false
@@ -1374,8 +1328,6 @@ NoClipToggle:OnChanged(function(Value)
         end
     end
 end)
-
-
 
 Tabs.Player:AddButton({
     Title = "Server Hop",
@@ -1422,8 +1374,6 @@ Tabs.Player:AddButton({
     end
 })
 
-
-
     
 
         
@@ -1432,8 +1382,7 @@ Tabs.dungeon:AddToggle("AutoBuyDungeonTicket", {
     Default = false,
     Callback = function(state)
         buyTicketEnabled = state
-        print("[DEBUG] Auto Buy Dungeon Ticket toggled:", state)
-        
+
         if state then
             task.spawn(function()
                 while buyTicketEnabled do
@@ -1455,8 +1404,6 @@ Tabs.dungeon:AddToggle("AutoBuyDungeonTicket", {
         end
     end
 })
-
-
 
     local localPlayer = game:GetService("Players").LocalPlayer
 local playerCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
@@ -1586,7 +1533,6 @@ Tabs.Main:AddToggle("AutoFarmToggle", {
         end
     end
 })
-
 
 local AutoEnterDungeon = Tabs.dungeon:AddToggle("AutoEnterDungeon", { Title = "Auto Enter Guild Dungeon", Default = false })
 
@@ -1726,7 +1672,7 @@ task.spawn(function()
     end)
     
     if not success then
-        warn("Erro ao criar botão da UI Mobile: " .. tostring(errorMsg))
+
     end
 end)
 
@@ -1740,7 +1686,7 @@ local scriptSuccess, scriptError = pcall(function()
 end)
 
 if not scriptSuccess then
-    warn("Lỗi khi khởi động script: " .. tostring(scriptError))
+
     -- Thử cách khác để thông báo người dùng
     if game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui") then
         local screenGui = Instance.new("ScreenGui")
@@ -1867,7 +1813,6 @@ task.defer(function()
     end
 end)
 
-
 -- Hàm để mua weapon
 local function buyWeapon()
     if selectedShop and selectedWeapon and selectedWeapon ~= "" then
@@ -1884,9 +1829,9 @@ local function buyWeapon()
         }
         
         game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
-        print("Comprado:", selectedWeapon, "da loja:", selectedShop)
+
     else
-        print("Por favor, selecione uma loja e uma arma!")
+
     end
 end
 
@@ -1991,7 +1936,7 @@ local function getWeaponsByLevel(weaponType)
         -- Nếu không chọn loại vũ khí cụ thể hoặc vũ khí thuộc loại đã chọn
         if (not weaponType or weaponType == "" or weaponName == weaponType) and weaponLevel >= 1 and weaponLevel <= 7 then
             table.insert(weaponsByLevel[weaponLevel], weapon.Name)
-            print("Arma encontrada:", weaponName, "Level:", weaponLevel, "ID:", weapon.Name)
+
         end
     end
     
@@ -2038,8 +1983,7 @@ local function upgradeWeaponsByLevel(weaponType)
             }
             
             game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
-            print("Đang nâng cấp", #upgradeWeapons, "vũ khí", weaponName, "từ level", level, "lên level", level + 1)
-            
+
             Fluent:Notify({
                 Title = "Đang nâng cấp",
                 Content = "Đang nâng cấp " .. weaponName .. " từ level " .. level .. " lên level " .. (level + 1),
@@ -2175,7 +2119,7 @@ Tabs.shop:AddDropdown("RankDropdown", {
         end
         ConfigSystem.CurrentConfig.SelectedRanks = selections
         ConfigSystem.SaveConfig()
-        print("Selected Ranks:", table.concat(selectedRanks, ", "))
+
     end
 })
 
@@ -2201,8 +2145,7 @@ local function sellPetsByRank()
                     }
                 }
                 remote:FireServer(unpack(args))
-                print("Đã bán", #petsToSell, "pet với rank đã chọn")
-                
+
                 -- Đợi một khoảng thời gian ngắn để tránh spam
                 task.wait(0.3)
                 
@@ -2224,7 +2167,7 @@ local function sellPetsByRank()
             }
         }
         remote:FireServer(unpack(args))
-        print("Đã bán", #petsToSell, "pet còn lại với rank đã chọn")
+
     end
 end
 
@@ -2282,7 +2225,7 @@ Tabs.shop:AddToggle("AutoSellToggle", {
 -- Funções auxiliares compartilhadas
 -- ==========================
 local function createDungeon()
-    print("[DEBUG] Tentando criar dungeon...")
+
     local args = {
         [1] = {
             [1] = {
@@ -2293,7 +2236,7 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    print("✔ Dungeon criada.")
+
     task.wait(3)
 
     -- Iniciar a dungeon
@@ -2307,11 +2250,11 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
-    print("▶ Dungeon iniciada.")
+
 end
 
 local function leaveDungeon()
-    print("[AUTO-EXIT] Saindo da dungeon...")
+
     local args = {
         [1] = {
             [1] = { ["Event"] = "LeaveDungeon" },
@@ -2394,7 +2337,6 @@ local lastEnemyCheckINF = tick()
 local maxTimeWithoutEnemiesINF = 5
 
 local function monitorEnemiesINF()
-    print("[AUTO-FARM INF] Iniciando auto farm (sair da dungeon após 5s sem mobs).")
 
     while teleportINFEnabled do
         pcall(function()
@@ -2404,7 +2346,7 @@ local function monitorEnemiesINF()
 
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                print(string.format("[AUTO-EXIT INF] Saiu da dungeon às %02d:%02d (horário Castle)", hora.hour, hora.min))
+
                 task.wait(60) -- espera 1 min antes de verificar de novo
             else
                 if not workspace:FindFirstChild("__Main") then
@@ -2417,7 +2359,6 @@ local function monitorEnemiesINF()
 
                     if closestEnemy then
                         lastEnemyCheckINF = currentTime
-                        print("[AUTO-FARM INF] Movendo para inimigo:", closestEnemy.Name)
 
                         local success
                         success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)
@@ -2432,12 +2373,12 @@ local function monitorEnemiesINF()
                                 task.wait(0.1)
                                 attempts += 1
                             end
-                            print("[AUTO-FARM INF] Inimigo eliminado!")
+
                         end
                     else
                         local timeWithoutEnemies = currentTime - lastEnemyCheckINF
                         if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
-                            print("[AUTO-EXIT INF] Nenhum inimigo encontrado em 5s. Saindo da dungeon...")
+
                             leaveDungeon()
                             task.wait(10) -- espera 10s fora antes de tentar recriar
                         else
@@ -2455,7 +2396,7 @@ local function monitorEnemiesINF()
         currentTweenINF:Cancel()
         currentTweenINF = nil
     end
-    print("[AUTO-FARM INF] Auto farm desativado.")
+
 end
 
 -- ==========================
@@ -2471,7 +2412,6 @@ local lastEnemyCheckRecreate = tick()
 local maxTimeWithoutEnemiesRecreate = 5
 
 local function recreateDungeon()
-    print("[AUTO-RECREATE] Sem inimigos por muito tempo. Recriando dungeon...")
 
     if currentTweenRecreate then
         currentTweenRecreate:Cancel()
@@ -2484,7 +2424,6 @@ local function recreateDungeon()
 end
 
 local function monitorEnemiesRecreate()
-    print("[AUTO-FARM RECREATE] Iniciando auto farm com recriação automática (5s sem mobs).")
 
     while teleportRecreateEnabled do
         pcall(function()
@@ -2494,7 +2433,7 @@ local function monitorEnemiesRecreate()
 
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                print(string.format("[AUTO-EXIT RECREATE] Saiu da dungeon às %02d:%02d (horário bloqueado)", hora.hour, hora.min))
+
                 task.wait(60)
             else
                 if not workspace:FindFirstChild("__Main") then
@@ -2507,7 +2446,6 @@ local function monitorEnemiesRecreate()
 
                 if closestEnemy then
                     lastEnemyCheckRecreate = currentTime
-                    print("[AUTO-FARM RECREATE] Movendo para inimigo:", closestEnemy.Name)
 
                     local success
                     success, currentTweenRecreate = moveToEnemy(closestEnemy, currentTweenRecreate)
@@ -2522,7 +2460,7 @@ local function monitorEnemiesRecreate()
                             task.wait(0.1)
                             attempts += 1
                         end
-                        print("[AUTO-FARM RECREATE] Inimigo eliminado!")
+
                     end
                 else
                     local timeWithoutEnemies = currentTime - lastEnemyCheckRecreate
@@ -2547,7 +2485,7 @@ local function monitorEnemiesRecreate()
         currentTweenRecreate:Cancel()
         currentTweenRecreate = nil
     end
-    print("[AUTO-FARM RECREATE] Auto farm desativado.")
+
 end
 
 -- ==========================
@@ -2571,7 +2509,7 @@ Tabs.dungeon:AddToggle("DungeonINF", {
                 currentTweenINF:Cancel()
                 currentTweenINF = nil
             end
-            print("[AUTO-FARM INF] Desativado pelo usuário.")
+
         end
     end
 })
@@ -2593,11 +2531,10 @@ Tabs.dungeon:AddToggle("AutoFarmDungeon", {
                 currentTweenRecreate:Cancel()
                 currentTweenRecreate = nil
             end
-            print("[AUTO-FARM RECREATE] Desativado pelo usuário.")
+
         end
     end
 })
-
 
 -- ==========================
 -- Auto Castle Sistema Modificado e Corrigido (com Sistema de Velocidade)
@@ -2688,7 +2625,7 @@ Tabs.dungeon:AddInput("CastleEntryFloor", {
             entryFloor = floor
             ConfigSystem.CurrentConfig.CastleEntryFloor = floor
             ConfigSystem.SaveConfig()
-            warn("[Castle] Andar de entrada atualizado para:", floor)
+
         end
     end
 })
@@ -2705,7 +2642,7 @@ Tabs.dungeon:AddInput("CastleResetFloor", {
             resetFloor = floor
             ConfigSystem.CurrentConfig.CastleResetFloor = floor
             ConfigSystem.SaveConfig()
-            warn("[Castle] Andar de reset atualizado para:", floor)
+
         end
     end
 })
@@ -2728,15 +2665,15 @@ local function getCurrentCastleFloor()
     end
 
     if current then
-        warn("[Castle] Andar atual detectado:", current)
+
     else
-        warn("[Castle] Fora do castelo (nenhuma Room encontrada).")
+
     end
     return current
 end
 
 local function buyCastleTicket()
-    warn("[Castle] Comprando ticket com Gems...")
+
     local args = {
         [1] = {
             [1] = {
@@ -2754,7 +2691,7 @@ end
 
 local function joinCastle(floor)
     floor = floor or entryFloor
-    warn("[Castle] Entrando no andar " .. tostring(floor) .. "...")
+
     local joinArgs = {
         [1] = {
             [1] = {
@@ -2772,7 +2709,7 @@ local function joinCastle(floor)
 end
 
 local function createCastle()
-    warn("[Auto Castle] Criando castelo...")
+
     local args = {
         [1] = {
             [1] = {
@@ -2807,17 +2744,17 @@ local function applyCastleSpeed(level)
     pcall(function()
         game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
     end)
-    warn("[Castle Speed] Velocidade ajustada para: x" .. tostring(level))
+
 end
 
 local function castleSpeedLoop()
     task.spawn(function()
-        warn("[Castle Speed] Loop iniciado!")
+
         while castleSpeedEnabled do
             applyCastleSpeed(castleSpeedLevel)
             task.wait(10)
         end
-        warn("[Castle Speed] Loop encerrado.")
+
     end)
 end
 
@@ -2846,7 +2783,7 @@ end
 local function teleportToFirePortal()
     local portal, currentFloor = findFirePortal()
     if not portal then 
-        warn("[Castle INF] FirePortal não encontrado!")
+
         return false 
     end
     
@@ -2857,8 +2794,7 @@ local function teleportToFirePortal()
     local hrp = char.HumanoidRootPart
     hrp.CFrame = portal.CFrame * CFrame.new(0, 2, -2)
     hrp.Velocity = Vector3.new(0, 0, 0)
-    
-    warn("[Castle INF] Teleportado para portal do andar " .. currentFloor)
+
     return true, currentFloor
 end
 
@@ -2885,7 +2821,7 @@ local function activateFirePortal()
             pcall(function() fireproximityprompt(prompt) end)
             task.wait(0.1)
         end
-        warn("[Castle INF] Portal ativado! Subindo do andar " .. currentFloor)
+
         return true
     end
     return false
@@ -2922,11 +2858,11 @@ local function farmCastleMobs()
                             "\7"
                         })
                     end)
-                    warn("[Castle INF] Atacando mob:", mob.Name)
+
                     while castleInfEnabled and mob.Parent do
                         local currentHP = mob:GetAttribute("HP")
                         if not currentHP or currentHP <= 0 then
-                            warn("[Castle INF] Mob eliminado:", mob.Name)
+
                             break
                         end
                         task.wait(0.2)
@@ -2942,7 +2878,7 @@ end
 
 local function castleInfLoop()
     task.spawn(function()
-        warn("[Castle INF] Loop iniciado!")
+
         while castleInfEnabled do
             local foundMobs = farmCastleMobs()
             if not foundMobs then
@@ -2955,7 +2891,7 @@ local function castleInfLoop()
             end
             task.wait(0.5)
         end
-        warn("[Castle INF] Loop encerrado.")
+
     end)
 end
 
@@ -2965,7 +2901,7 @@ end
 
 local function autoCastleLoop()
     task.spawn(function()
-        warn("[Auto Castle] Loop iniciado!")
+
         while castleEnabled do
             local currentFloor = getCurrentCastleFloor()
 
@@ -2978,7 +2914,7 @@ local function autoCastleLoop()
                 task.wait(5)
             else
                 if currentFloor >= resetFloor then
-                    warn("[Auto Castle] Detectou andar " .. currentFloor .. " → Recriando...")
+
                     createCastle()
                     task.wait(1)
                     buyCastleTicket()
@@ -2997,13 +2933,13 @@ local function autoCastleLoop()
             end
             task.wait(0.5)
         end
-        warn("[Auto Castle] Loop encerrado.")
+
     end)
 end
 
 local function castleCreateOnlyLoop()
     task.spawn(function()
-        warn("[Auto Castelo] Loop iniciado (sem reset)!")
+
         while castleCreateOnlyEnabled do
             local currentFloor = getCurrentCastleFloor()
 
@@ -3025,7 +2961,7 @@ local function castleCreateOnlyLoop()
 
             task.wait(0.5)
         end
-        warn("[Auto Castelo] Loop encerrado.")
+
     end)
 end
 
@@ -3162,7 +3098,7 @@ Tabs.dungeon:AddToggle("AutoCasteloOnly", {
 if ConfigSystem.CurrentConfig.CastleInfToggle then
     castleInfEnabled = true
     castleInfLoop()
-    warn("[Auto-Boot] Castle INF reativado")
+
 end
 
 if ConfigSystem.CurrentConfig.CastleToggle then
@@ -3175,24 +3111,20 @@ if ConfigSystem.CurrentConfig.CastleToggle then
     task.wait(2)
     castleSessionActive = true
     autoCastleLoop()
-    warn("[Auto-Boot] Auto Castle reativado")
+
 end
 
 if ConfigSystem.CurrentConfig.CastleCreateOnlyToggle then
     castleCreateOnlyEnabled = true
     castleCreateOnlyLoop()
-    warn("[Auto-Boot] Auto Castelo reativado")
+
 end
 
 if ConfigSystem.CurrentConfig.CastleSpeedEnabled then
     castleSpeedEnabled = true
     castleSpeedLoop()
-    warn("[Auto-Boot] Castle Speed reativado com velocidade x" .. tostring(castleSpeedLevel))
+
 end
-
-warn("[Castle System] Sistema carregado")
-
-
 
 -- ==========================
 -- Configuração inicial
@@ -3556,23 +3488,19 @@ Tabs.desert:AddButton({
     Title = "Verificar Status (Debug)",
     Callback = function()
         local emMundo, tipo = estaNoMundoInfinito()
-        warn("=== DEBUG DESERTO INFINITO ===")
-        warn("[DEBUG] Sessão ativa:", desertSessionActive)
-        warn("[DEBUG] Modo configurado:", (dungeonMode == 1 and "Deserto") or "Castelo")
-        warn("[DEBUG] Em mundo infinito:", emMundo)
-        warn("[DEBUG] Tipo detectado:", tipo or "nenhum")
+
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local pos = player.Character.HumanoidRootPart.Position
-            warn(string.format("[DEBUG] Posição: X=%.1f, Y=%.1f, Z=%.1f", pos.X, pos.Y, pos.Z))
+
         end
         local main = workspace:FindFirstChild("__Main")
         if main then
             local world = main:FindFirstChild("__World")
             if world then
-                warn("[DEBUG] Nome do mundo atual:", world.Name)
+
             end
         end
-        warn("==============================")
+
     end
 })
 
@@ -3599,7 +3527,7 @@ local function atualizarAutoClick(state)
     ConfigSystem.SaveConfig()
     local player = game.Players.LocalPlayer
     player:SetAttribute("AutoClick", state)
-    warn("[AutoClick] Estado atualizado para:", state)
+
 end
 
 -- ==========================
