@@ -2574,10 +2574,61 @@ Tabs.dungeon:AddToggle("AutoFarmDungeon", {
 
 
 -- ==========================
--- AUTO CASTLE - VELOCIDADE (COM CONTROLE COMPLETO)
+-- Auto Castle Sistema Modificado e Corrigido (com Sistema de Velocidade)
 -- ==========================
 
--- Chaves no ConfigSystem
+local castleEnabled = false
+local castleInfEnabled = false
+local castleCreateOnlyEnabled = false
+local castleSessionActive = false
+local castleSpeedEnabled = false
+local castleSpeedLevel = 1
+
+-- =======================
+-- CONFIGS COM SALVAMENTO AUTOMÁTICO
+-- =======================
+
+-- Andar de entrada (padrão 125)
+if ConfigSystem.DefaultConfig.CastleEntryFloor == nil then
+    ConfigSystem.DefaultConfig.CastleEntryFloor = 125
+end
+if ConfigSystem.CurrentConfig.CastleEntryFloor == nil then
+    ConfigSystem.CurrentConfig.CastleEntryFloor = ConfigSystem.DefaultConfig.CastleEntryFloor
+end
+local entryFloor = ConfigSystem.CurrentConfig.CastleEntryFloor
+
+-- Andar de reset (padrão 200)
+if ConfigSystem.DefaultConfig.CastleResetFloor == nil then
+    ConfigSystem.DefaultConfig.CastleResetFloor = 200
+end
+if ConfigSystem.CurrentConfig.CastleResetFloor == nil then
+    ConfigSystem.CurrentConfig.CastleResetFloor = ConfigSystem.DefaultConfig.CastleResetFloor
+end
+local resetFloor = ConfigSystem.CurrentConfig.CastleResetFloor
+
+-- Toggles padrão
+if ConfigSystem.DefaultConfig.CastleInfToggle == nil then
+    ConfigSystem.DefaultConfig.CastleInfToggle = false
+end
+if ConfigSystem.CurrentConfig.CastleInfToggle == nil then
+    ConfigSystem.CurrentConfig.CastleInfToggle = ConfigSystem.DefaultConfig.CastleInfToggle
+end
+
+if ConfigSystem.DefaultConfig.CastleToggle == nil then
+    ConfigSystem.DefaultConfig.CastleToggle = false
+end
+if ConfigSystem.CurrentConfig.CastleToggle == nil then
+    ConfigSystem.CurrentConfig.CastleToggle = ConfigSystem.DefaultConfig.CastleToggle
+end
+
+if ConfigSystem.DefaultConfig.CastleCreateOnlyToggle == nil then
+    ConfigSystem.DefaultConfig.CastleCreateOnlyToggle = false
+end
+if ConfigSystem.CurrentConfig.CastleCreateOnlyToggle == nil then
+    ConfigSystem.CurrentConfig.CastleCreateOnlyToggle = ConfigSystem.DefaultConfig.CastleCreateOnlyToggle
+end
+
+-- Velocidade (novo)
 if ConfigSystem.DefaultConfig.CastleSpeedEnabled == nil then
     ConfigSystem.DefaultConfig.CastleSpeedEnabled = false
 end
@@ -2592,12 +2643,129 @@ if ConfigSystem.CurrentConfig.CastleSpeedLevel == nil then
     ConfigSystem.CurrentConfig.CastleSpeedLevel = ConfigSystem.DefaultConfig.CastleSpeedLevel
 end
 
--- Variáveis locais
-local castleSpeedEnabled = ConfigSystem.CurrentConfig.CastleSpeedEnabled
-local castleSpeedLevel = ConfigSystem.CurrentConfig.CastleSpeedLevel
-local castleSpeedThread = nil -- referência da thread ativa
+castleSpeedEnabled = ConfigSystem.CurrentConfig.CastleSpeedEnabled
+castleSpeedLevel = ConfigSystem.CurrentConfig.CastleSpeedLevel
 
--- Função que envia o comando de velocidade
+-- ==========================
+-- INPUTS DE CONFIGURAÇÃO
+-- ==========================
+
+Tabs.dungeon:AddInput("CastleEntryFloor", {
+    Title = "Castle Entry Floor",
+    Default = tostring(entryFloor),
+    Placeholder = "Andar de entrada (ex: 125)",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local floor = tonumber(value)
+        if floor and floor > 0 then
+            entryFloor = floor
+            ConfigSystem.CurrentConfig.CastleEntryFloor = floor
+            ConfigSystem.SaveConfig()
+            warn("[Castle] Andar de entrada atualizado para:", floor)
+        end
+    end
+})
+
+Tabs.dungeon:AddInput("CastleResetFloor", {
+    Title = "Castle Reset Detection Floor",
+    Default = tostring(resetFloor),
+    Placeholder = "Andar para detectar e resetar (ex: 200)",
+    Numeric = true,
+    Finished = true,
+    Callback = function(value)
+        local floor = tonumber(value)
+        if floor and floor > 0 then
+            resetFloor = floor
+            ConfigSystem.CurrentConfig.CastleResetFloor = floor
+            ConfigSystem.SaveConfig()
+            warn("[Castle] Andar de reset atualizado para:", floor)
+        end
+    end
+})
+
+-- ==========================
+-- FUNÇÕES CASTLE BÁSICAS
+-- ==========================
+
+local function getCurrentCastleFloor()
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return nil end
+    local world = main:FindFirstChild("__World")
+    if not world then return nil end
+
+    local current = nil
+    for i = 1, 300 do
+        if world:FindFirstChild("Room_" .. i) then
+            current = i
+        end
+    end
+
+    if current then
+        warn("[Castle] Andar atual detectado:", current)
+    else
+        warn("[Castle] Fora do castelo (nenhuma Room encontrada).")
+    end
+    return current
+end
+
+local function buyCastleTicket()
+    warn("[Castle] Comprando ticket com Gems...")
+    local args = {
+        [1] = {
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "CastleAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
+    end)
+end
+
+local function joinCastle(floor)
+    floor = floor or entryFloor
+    warn("[Castle] Entrando no andar " .. tostring(floor) .. "...")
+    local joinArgs = {
+        [1] = {
+            [1] = {
+                ["Check"] = true,
+                ["Floor"] = tostring(floor),
+                ["Event"] = "CastleAction",
+                ["Action"] = "Join"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(joinArgs)) 
+    end)
+end
+
+local function createCastle()
+    warn("[Auto Castle] Criando castelo...")
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "CastleAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\13"
+        }
+    }
+    pcall(function() 
+        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args)) 
+    end)
+    task.wait(3)
+end
+
+-- ==========================
+-- VELOCIDADE DO CASTLE (NOVO)
+-- ==========================
+
 local function applyCastleSpeed(level)
     level = tonumber(level) or 1
     local args = {
@@ -2616,14 +2784,8 @@ local function applyCastleSpeed(level)
     warn("[Castle Speed] Velocidade ajustada para: x" .. tostring(level))
 end
 
--- Loop com cancelamento seguro
-local function startCastleSpeed()
-    if castleSpeedThread then
-        task.cancel(castleSpeedThread)
-        castleSpeedThread = nil
-    end
-
-    castleSpeedThread = task.spawn(function()
+local function castleSpeedLoop()
+    task.spawn(function()
         warn("[Castle Speed] Loop iniciado!")
         while castleSpeedEnabled do
             applyCastleSpeed(castleSpeedLevel)
@@ -2633,17 +2795,216 @@ local function startCastleSpeed()
     end)
 end
 
-local function stopCastleSpeed()
-    castleSpeedEnabled = false
-    if castleSpeedThread then
-        task.cancel(castleSpeedThread)
-        castleSpeedThread = nil
-        warn("[Castle Speed] Thread cancelada.")
+-- ==========================
+-- CASTLE INF - FARM E PORTAL
+-- ==========================
+
+local function findFirePortal()
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return nil, nil end
+    local world = main:FindFirstChild("__World")
+    if not world then return nil, nil end
+    
+    for i = 1, 300 do
+        local room = world:FindFirstChild("Room_" .. i)
+        if room then
+            local portal = room:FindFirstChild("FirePortal")
+            if portal then
+                return portal, i
+            end
+        end
     end
+    return nil, nil
+end
+
+local function teleportToFirePortal()
+    local portal, currentFloor = findFirePortal()
+    if not portal then 
+        warn("[Castle INF] FirePortal não encontrado!")
+        return false 
+    end
+    
+    local player = game.Players.LocalPlayer
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    
+    local hrp = char.HumanoidRootPart
+    hrp.CFrame = portal.CFrame * CFrame.new(0, 2, -2)
+    hrp.Velocity = Vector3.new(0, 0, 0)
+    
+    warn("[Castle INF] Teleportado para portal do andar " .. currentFloor)
+    return true, currentFloor
+end
+
+local function activateFirePortal()
+    local portal, currentFloor = findFirePortal()
+    if not portal then return false end
+    
+    local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt then
+        for _, obj in ipairs(portal:GetDescendants()) do
+            if obj:IsA("ProximityPrompt") then
+                prompt = obj
+                break
+            end
+        end
+    end
+    
+    if not prompt and portal.Parent then
+        prompt = portal.Parent:FindFirstChildOfClass("ProximityPrompt")
+    end
+    
+    if prompt then
+        for _ = 1, 3 do
+            pcall(function() fireproximityprompt(prompt) end)
+            task.wait(0.1)
+        end
+        warn("[Castle INF] Portal ativado! Subindo do andar " .. currentFloor)
+        return true
+    end
+    return false
+end
+
+local function farmCastleMobs()
+    local mobsKilled = false
+    local enemiesFolder = workspace:FindFirstChild("__Main")
+    
+    if enemiesFolder then
+        enemiesFolder = enemiesFolder:FindFirstChild("__Enemies")
+        if enemiesFolder then
+            enemiesFolder = enemiesFolder:FindFirstChild("Server")
+        end
+    end
+    
+    if enemiesFolder then
+        for _, mob in pairs(enemiesFolder:GetChildren()) do
+            if not castleInfEnabled then break end
+            
+            local hp = mob:GetAttribute("HP")
+            if hp and hp > 0 and mob.Position then
+                local player = game.Players.LocalPlayer
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    player.Character.HumanoidRootPart.CFrame = mob.CFrame * CFrame.new(0, 3, 0)
+                    pcall(function()
+                        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer({
+                            {
+                                ["PetPos"] = {},
+                                ["AttackType"] = "All", 
+                                ["Event"] = "Attack",
+                                ["Enemy"] = mob.Name
+                            },
+                            "\7"
+                        })
+                    end)
+                    warn("[Castle INF] Atacando mob:", mob.Name)
+                    while castleInfEnabled and mob.Parent do
+                        local currentHP = mob:GetAttribute("HP")
+                        if not currentHP or currentHP <= 0 then
+                            warn("[Castle INF] Mob eliminado:", mob.Name)
+                            break
+                        end
+                        task.wait(0.2)
+                    end
+                    mobsKilled = true
+                end
+            end
+        end
+    end
+    
+    return mobsKilled
+end
+
+local function castleInfLoop()
+    task.spawn(function()
+        warn("[Castle INF] Loop iniciado!")
+        while castleInfEnabled do
+            local foundMobs = farmCastleMobs()
+            if not foundMobs then
+                local success = teleportToFirePortal()
+                if success then
+                    task.wait(1)
+                    activateFirePortal()
+                    task.wait(2)
+                end
+            end
+            task.wait(0.5)
+        end
+        warn("[Castle INF] Loop encerrado.")
+    end)
 end
 
 -- ==========================
--- INTERFACE NA ABA DUNGEON
+-- AUTO CASTLE PRINCIPAL
+-- ==========================
+
+local function autoCastleLoop()
+    task.spawn(function()
+        warn("[Auto Castle] Loop iniciado!")
+        while castleEnabled do
+            local currentFloor = getCurrentCastleFloor()
+
+            if not currentFloor then
+                createCastle()
+                task.wait(1)
+                buyCastleTicket()
+                task.wait(1)
+                joinCastle(entryFloor)
+                task.wait(5)
+            else
+                if currentFloor >= resetFloor then
+                    warn("[Auto Castle] Detectou andar " .. currentFloor .. " → Recriando...")
+                    createCastle()
+                    task.wait(1)
+                    buyCastleTicket()
+                    task.wait(1)
+                    joinCastle(entryFloor)
+                    Fluent:Notify({
+                        Title = "Castle Recreated",
+                        Content = "Andar " .. tostring(currentFloor) .. " - recriado.",
+                        Duration = 4
+                    })
+                    task.wait(5)
+                else
+                    farmCastleMobs()
+                    task.wait(1)
+                end
+            end
+            task.wait(0.5)
+        end
+        warn("[Auto Castle] Loop encerrado.")
+    end)
+end
+
+local function castleCreateOnlyLoop()
+    task.spawn(function()
+        warn("[Auto Castelo] Loop iniciado (sem reset)!")
+        while castleCreateOnlyEnabled do
+            local currentFloor = getCurrentCastleFloor()
+
+            if not currentFloor then
+                createCastle()
+                task.wait(1)
+                buyCastleTicket()
+                task.wait(1)
+                joinCastle(entryFloor)
+                task.wait(5)
+                Fluent:Notify({
+                    Title = "Auto Castelo",
+                    Content = "Castelo criado no andar " .. tostring(entryFloor),
+                    Duration = 3
+                })
+            else
+                task.wait(2)
+            end
+
+            task.wait(0.5)
+        end
+        warn("[Auto Castelo] Loop encerrado.")
+    end)
+end
+
+-- ==========================
+-- TOGGLES E INTERFACE
 -- ==========================
 
 Tabs.dungeon:AddDropdown("CastleSpeedLevel", {
@@ -2659,7 +3020,7 @@ Tabs.dungeon:AddDropdown("CastleSpeedLevel", {
             ConfigSystem.SaveConfig()
             Fluent:Notify({
                 Title = "Velocidade Atualizada",
-                Content = "Nova velocidade selecionada: x" .. tostring(level),
+                Content = "Nova velocidade: x" .. tostring(level),
                 Duration = 3
             })
         end
@@ -2668,7 +3029,7 @@ Tabs.dungeon:AddDropdown("CastleSpeedLevel", {
 
 Tabs.dungeon:AddToggle("CastleSpeedToggle", {
     Title = "Ativar Velocidade (x1–x4)",
-    Description = "Aplica a velocidade escolhida automaticamente durante o Castle",
+    Description = "Aplica automaticamente a velocidade escolhida",
     Default = ConfigSystem.CurrentConfig.CastleSpeedEnabled or false,
     Callback = function(state)
         castleSpeedEnabled = state
@@ -2681,27 +3042,129 @@ Tabs.dungeon:AddToggle("CastleSpeedToggle", {
                 Content = "Usando velocidade x" .. tostring(castleSpeedLevel),
                 Duration = 3
             })
-            startCastleSpeed()
+            castleSpeedLoop()
         else
             Fluent:Notify({
                 Title = "Velocidade Desativada",
-                Content = "Efeito de velocidade parado",
+                Content = "Parou de aplicar velocidade",
                 Duration = 3
             })
-            stopCastleSpeed()
+        end
+    end
+})
+
+Tabs.dungeon:AddToggle("CastleINF", {
+    Title = "Castle INF (Farm + Portal)",
+    Default = ConfigSystem.CurrentConfig.CastleInfToggle or false,
+    Callback = function(state)
+        castleInfEnabled = state
+        ConfigSystem.CurrentConfig.CastleInfToggle = state
+        ConfigSystem.SaveConfig()
+        
+        if state then
+            Fluent:Notify({Title="Castle INF Ativado",Content="Farm e subida automáticos",Duration=3})
+            castleInfLoop()
+        else
+            Fluent:Notify({Title="Castle INF Desativado",Content="Farm parado",Duration=3})
+        end
+    end
+})
+
+Tabs.dungeon:AddToggle("AutoCastle", {
+    Title = "Auto Castle (Create + Recreate)",
+    Default = ConfigSystem.CurrentConfig.CastleToggle or false,
+    Callback = function(state)
+        castleEnabled = state
+        ConfigSystem.CurrentConfig.CastleToggle = state
+        ConfigSystem.SaveConfig()
+
+        if state then
+            Fluent:Notify({
+                Title = "Auto Castle Ativado",
+                Content = "Criando e gerenciando castelo...",
+                Duration = 5
+            })
+            createCastle()
+            task.wait(1)
+            buyCastleTicket()
+            task.wait(1)
+            joinCastle(entryFloor)
+            task.wait(2)
+            castleSessionActive = true
+            autoCastleLoop()
+        else
+            castleSessionActive = false
+            Fluent:Notify({
+                Title = "Auto Castle Desativado",
+                Content = "Sistema parado",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.dungeon:AddToggle("AutoCasteloOnly", {
+    Title = "Auto Castelo (Criar Apenas)",
+    Description = "Cria e entra automaticamente quando fora do castelo (sem reset)",
+    Default = ConfigSystem.CurrentConfig.CastleCreateOnlyToggle or false,
+    Callback = function(state)
+        castleCreateOnlyEnabled = state
+        ConfigSystem.CurrentConfig.CastleCreateOnlyToggle = state
+        ConfigSystem.SaveConfig()
+        
+        if state then
+            Fluent:Notify({
+                Title = "Auto Castelo Ativado",
+                Content = "Criará castelo e entrará automaticamente",
+                Duration = 4
+            })
+            castleCreateOnlyLoop()
+        else
+            Fluent:Notify({
+                Title = "Auto Castelo Desativado",
+                Content = "Criação automática parada",
+                Duration = 3
+            })
         end
     end
 })
 
 -- ==========================
--- AUTO-BOOT (Reativação automática)
+-- AUTO-BOOT (Reativa configs)
 -- ==========================
+
+if ConfigSystem.CurrentConfig.CastleInfToggle then
+    castleInfEnabled = true
+    castleInfLoop()
+    warn("[Auto-Boot] Castle INF reativado")
+end
+
+if ConfigSystem.CurrentConfig.CastleToggle then
+    castleEnabled = true
+    createCastle()
+    task.wait(1)
+    buyCastleTicket()
+    task.wait(1)
+    joinCastle(entryFloor)
+    task.wait(2)
+    castleSessionActive = true
+    autoCastleLoop()
+    warn("[Auto-Boot] Auto Castle reativado")
+end
+
+if ConfigSystem.CurrentConfig.CastleCreateOnlyToggle then
+    castleCreateOnlyEnabled = true
+    castleCreateOnlyLoop()
+    warn("[Auto-Boot] Auto Castelo reativado")
+end
 
 if ConfigSystem.CurrentConfig.CastleSpeedEnabled then
     castleSpeedEnabled = true
-    startCastleSpeed()
-    warn("[Auto-Boot] Castle Speed reativado automaticamente com velocidade x" .. tostring(castleSpeedLevel))
+    castleSpeedLoop()
+    warn("[Auto-Boot] Castle Speed reativado com velocidade x" .. tostring(castleSpeedLevel))
 end
+
+warn("[Castle System] Sistema carregado")
 
 
 
