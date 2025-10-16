@@ -2928,6 +2928,34 @@ Tabs.dungeon:AddDropdown("CastleSpeedDropdown", {
     end
 })
 
+-- Toggle para ativar/desativar a speed do Castelo Infernal
+local castleSpeedEnabled = ConfigSystem.CurrentConfig.CastleSpeedEnabled or false
+
+Tabs.dungeon:AddToggle("EnableCastleSpeed", {
+    Title = "Ativar Speed do Castelo",
+    Default = castleSpeedEnabled,
+    Callback = function(state)
+        castleSpeedEnabled = state
+        ConfigSystem.CurrentConfig.CastleSpeedEnabled = state
+        ConfigSystem.SaveConfig()
+        if state then
+            -- Aplica a velocidade atualmente selecionada
+            local speed = tonumber(ConfigSystem.CurrentConfig.CastleSpeed or selectedCastleSpeed or "1")
+            local args = {
+                [1] = {
+                    [1] = {
+                        ["Event"] = "DungeonAction",
+                        ["Action"] = "Speed",
+                        ["Speed"] = speed
+                    },
+                    [2] = "\n"
+                }
+            }
+            game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+        end
+    end
+})
+
 
 -- ==========================
 -- AUTO-BOOT: REATIVAR TOGGLES SALVOS
