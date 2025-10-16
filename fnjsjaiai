@@ -2900,8 +2900,10 @@ Tabs.dungeon:AddToggle("AutoCasteloOnly", {
     end
 })
 
--- 🎯 NOVA OPÇÃO: SPEED DO CASTELO INFERNAL
+
+-- 🎯 NOVA OPÇÃO: SPEED DO CASTELO INFERNAL (com toggle de ativação)
 local selectedCastleSpeed = ConfigSystem.CurrentConfig.CastleSpeed or "1"
+local castleSpeedEnabled = ConfigSystem.CurrentConfig.CastleSpeedEnabled or false
 
 Tabs.dungeon:AddDropdown("CastleSpeedDropdown", {
     Title = "Speed do Castelo Infernal",
@@ -2913,23 +2915,22 @@ Tabs.dungeon:AddDropdown("CastleSpeedDropdown", {
         ConfigSystem.CurrentConfig.CastleSpeed = speed
         ConfigSystem.SaveConfig()
 
-        -- Aplica o código de speed diretamente
-        local args = {
-            [1] = {
+        if castleSpeedEnabled then
+            -- Aplica o código correto de velocidade do castelo
+            local args = {
                 [1] = {
-                    ["Event"] = "DungeonAction",
-                    ["Action"] = "Speed",
-                    ["Speed"] = tonumber(speed)
-                },
-                [2] = "\n"
+                    [1] = {
+                        ["Speed"] = tonumber(speed),
+                        ["Event"] = "CastleAction",
+                        ["Action"] = "SpeedUp"
+                    },
+                    [2] = "\13"
+                }
             }
-        }
-        game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+            game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+        end
     end
 })
-
--- Toggle para ativar/desativar a speed do Castelo Infernal
-local castleSpeedEnabled = ConfigSystem.CurrentConfig.CastleSpeedEnabled or false
 
 Tabs.dungeon:AddToggle("EnableCastleSpeed", {
     Title = "Ativar Speed do Castelo",
@@ -2938,20 +2939,21 @@ Tabs.dungeon:AddToggle("EnableCastleSpeed", {
         castleSpeedEnabled = state
         ConfigSystem.CurrentConfig.CastleSpeedEnabled = state
         ConfigSystem.SaveConfig()
+
         if state then
-            -- Aplica a velocidade atualmente selecionada
+            -- Aplica imediatamente a velocidade salva
             local speed = tonumber(ConfigSystem.CurrentConfig.CastleSpeed or selectedCastleSpeed or "1")
             local args = {
                 [1] = {
                     [1] = {
-                        ["Event"] = "DungeonAction",
-                        ["Action"] = "Speed",
-                        ["Speed"] = speed
+                        ["Speed"] = speed,
+                        ["Event"] = "CastleAction",
+                        ["Action"] = "SpeedUp"
                     },
-                    [2] = "\n"
+                    [2] = "\13"
                 }
             }
-            game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+            game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
         end
     end
 })
