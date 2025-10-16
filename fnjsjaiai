@@ -2900,6 +2900,35 @@ Tabs.dungeon:AddToggle("AutoCasteloOnly", {
     end
 })
 
+-- 🎯 NOVA OPÇÃO: SPEED DO CASTELO INFERNAL
+local selectedCastleSpeed = ConfigSystem.CurrentConfig.CastleSpeed or "1"
+
+Tabs.dungeon:AddDropdown("CastleSpeedDropdown", {
+    Title = "Speed do Castelo Infernal",
+    Values = {"1", "2", "4"},
+    Multi = false,
+    Default = selectedCastleSpeed,
+    Callback = function(speed)
+        selectedCastleSpeed = speed
+        ConfigSystem.CurrentConfig.CastleSpeed = speed
+        ConfigSystem.SaveConfig()
+
+        -- Aplica o código de speed diretamente
+        local args = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "DungeonAction",
+                    ["Action"] = "Speed",
+                    ["Speed"] = tonumber(speed)
+                },
+                [2] = "\n"
+            }
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+    end
+})
+
+
 -- ==========================
 -- AUTO-BOOT: REATIVAR TOGGLES SALVOS
 -- ==========================
@@ -2929,40 +2958,6 @@ if ConfigSystem.CurrentConfig.CastleCreateOnlyToggle then
     castleCreateOnlyLoop()
     end
 
--- ==========================
--- Botão de Speed - Castelo Infernal
--- ==========================
-
-local currentCastleSpeed = 1
-local speedValues = {1, 2, 4}
-
-Tabs.dungeon:AddButton({
-    Title = "Castle Speed Boost",
-    Description = "Alterna entre 1x, 2x e 4x de velocidade no Castelo Infernal",
-    Callback = function()
-        -- Alternar velocidade
-        if currentCastleSpeed == 1 then
-            currentCastleSpeed = 2
-        elseif currentCastleSpeed == 2 then
-            currentCastleSpeed = 4
-        else
-            currentCastleSpeed = 1
-        end
-
-        local args = {
-            [1] = {
-                [1] = {
-                    ["Speed"] = currentCastleSpeed,
-                    ["Event"] = "CastleAction",
-                    ["Action"] = "SpeedUp"
-                },
-                [2] = "\13"
-            }
-        }
-
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    end
-})
 
 
 
