@@ -3589,107 +3589,105 @@ Tabs.tp:AddButton({
 })
 
 
-
-
 -- ==========================
--- 🕸️ ABA HALLOWEEN (Infinite Labyrinth)
+-- 🕸️ HALLOWEEN TAB (safe attach): waits for Window/Fluent/Tabs
 -- ==========================
-
-do
-    local Fluent = Fluent
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-    local player = game.Players.LocalPlayer
-
-    -- Variáveis
-    local teleportPos = Vector3.new(587.60, 4325.71, -1871.29)
-    local DUNGEON_ID = 7368292297
-    local labyrinthSessionActive = false
-    local autoSpeedThread = nil
-
-    local function safeFire(args)
-        if remote then
-            pcall(function() remote:FireServer(unpack(args)) end)
+task.spawn(function()
+    local success, err = pcall(function()
+        -- wait until Window or Fluent exist (timeout after a while to avoid hanging)
+        local maxWait = 10 -- seconds
+        local waited = 0
+        while not Window and waited < maxWait do
+            task.wait(0.25)
+            waited = waited + 0.25
         end
-    end
 
-    local function sendCreate()
-        safeFire({[1]={{["Event"]="InfiniteLabyrinthAction",["Action"]="Create"}, ""}})
-    end
-
-    local function sendStart()
-        safeFire({[1]={{["Dungeon"]=DUNGEON_ID,["Event"]="InfiniteLabyrinthAction",["Action"]="Start"}, ""}})
-    end
-
-    local function sendSpeed(value)
-        safeFire({[1]={{["Speed"]=value,["Event"]="InfiniteLabyrinthAction",["Action"]="SpeedUp"}, ""}})
-    end
-
-    local function isInLabyrinth()
-        local main = workspace:FindFirstChild("__Main")
-        if main then
-            local world = main:FindFirstChild("__World")
-            if world and tostring(world.Name):lower():find("labyrinth") then
-                return true
-            end
-        end
-        return false
-    end
-
-    local function teleportToArena()
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            player.Character.HumanoidRootPart.CFrame = CFrame.new(teleportPos)
-        end
-    end
-
-    -- GUI
-    local Tab = Window:AddTab({ Title = "Halloween", Icon = "Ghost" })
-
-    Tab:AddToggle("LabyrinthToggle_Halloween", {
-        Title = "Ativar Evento Infinite Labyrinth",
-        Default = false,
-        Callback = function(value)
-            if value then
-                sendCreate()
-                task.wait(1)
-                sendStart()
-                Fluent:Notify({ Title = "Halloween", Content = "Evento iniciado!", Duration = 3 })
+        if not Window then
+            -- try to locate Window in global scope variations
+            if Fluent and Fluent.Window then
+                Window = Fluent.Window
             else
-                Fluent:Notify({ Title = "Halloween", Content = "Evento desativado.", Duration = 3 })
+                return -- cannot attach safely
             end
         end
-    })
 
-    Tab:AddToggle("Teleport_Halloween", {
-        Title = "Teleporte para o centro da arena",
-        Default = false,
-        Callback = function(value)
-            if value then
-                teleportToArena()
-                Fluent:Notify({ Title = "Halloween", Content = "Teleportado para a arena!", Duration = 3 })
-            end
-        end
-    })
+        -- Create tab safely
+        local ok, tabErr = pcall(function()
+            local Tab = Window:AddTab({ Title = "Halloween", Icon = "Ghost" })
 
-    Tab:AddDropdown("SpeedDropdown_Halloween", {
-        Title = "Velocidade",
-        Values = {"1x", "2x", "3x"},
-        Default = "2x",
-        Multi = false,
-        Callback = function(value)
-            local n = tonumber(value:sub(1,1))
-            if n then
-                sendSpeed(n)
-                Fluent:Notify({ Title = "Halloween", Content = "Velocidade definida: "..n.."x", Duration = 3 })
-            end
-        end
-    })
+            Tab:AddToggle("LabyrinthToggle_Halloween", {
+                Title = "Ativar Evento Infinite Labyrinth",
+                Default = ConfigSystem and (ConfigSystem.CurrentConfig and ConfigSystem.CurrentConfig.LabyrinthToggle) or false,
+                Callback = function(value)
+                    pcall(function()
+                        ConfigSystem.CurrentConfig.LabyrinthToggle = value
+                        if type(ConfigSystem.SaveConfig) == "function" then pcall(ConfigSystem.SaveConfig) end
+                        if value then
+                            local ReplicatedStorage = game:GetService('ReplicatedStorage')
+                            local remote = ReplicatedStorage:WaitForChild('BridgeNet2'):WaitForChild('dataRemoteEvent')
+                            local args = {[1]={{["Event"]="InfiniteLabyrinthAction",["Action"]="Create"}, "\14"}}
+                            pcall(function() remote:FireServer(unpack(args)) end)
+                            task.wait(1.2)
+                            local startArgs = {[1]={{["Dungeon"]=7368292297,["Event"]="InfiniteLabyrinthAction",["Action"]="Start"}, "\14"}}
+                            pcall(function() remote:FireServer(unpack(startArgs)) end)
+                            Fluent:Notify({ Title = "Halloween", Content = "Tentando iniciar evento...", Duration = 3 })
+                        else
+                            Fluent:Notify({ Title = "Halloween", Content = "Evento desativado.", Duration = 3 })
+                        end
+                    end)
+                end
+            })
 
-    Tab:AddButton({
-        Title = "Checar status (debug)",
-        Callback = function()
-            local inside = isInLabyrinth()
-            Fluent:Notify({ Title = "Debug", Content = inside and "DENTRO do Labirinto" or "FORA do Labirinto", Duration = 4 })
+            Tab:AddToggle("Teleport_Halloween", {
+                Title = "Teleporte para o centro da arena",
+                Default = false,
+                Callback = function(value)
+                    pcall(function()
+                        if value and game.Players.LocalPlayer and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            local teleportPos = Vector3.new(587.60, 4325.71, -1871.29)
+                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(teleportPos)
+                            Fluent:Notify({ Title = "Halloween", Content = "Teleportado para a arena!", Duration = 3 })
+                        end
+                    end)
+                end
+            })
+
+            Tab:AddDropdown("SpeedDropdown_Halloween", {
+                Title = "Velocidade",
+                Values = {"1x", "2x", "3x"},
+                Default = "2x",
+                Multi = false,
+                Callback = function(value)
+                    pcall(function()
+                        local n = tonumber(value:sub(1,1))
+                        if n then
+                            local ReplicatedStorage = game:GetService('ReplicatedStorage')
+                            local remote = ReplicatedStorage:WaitForChild('BridgeNet2'):WaitForChild('dataRemoteEvent')
+                            local args = {[1]={{["Speed"]=n,["Event"]="InfiniteLabyrinthAction",["Action"]="SpeedUp"}, "\14"}}
+                            pcall(function() remote:FireServer(unpack(args)) end)
+                            Fluent:Notify({ Title = "Halloween", Content = "Velocidade definida: "..n.."x", Duration = 3 })
+                        end
+                    end)
+                end
+            })
+
+            Tab:AddButton({
+                Title = "Checar status (debug)",
+                Callback = function()
+                    pcall(function()
+                        local inside = false
+                        local main = workspace:FindFirstChild("__Main")
+                        if main then
+                            local world = main:FindFirstChild("__World")
+                            if world and tostring(world.Name):lower():find("labyrinth") then inside = true end
+                        end
+                        Fluent:Notify({ Title = "Debug", Content = inside and "DENTRO do Labirinto" or "FORA do Labirinto", Duration = 4 })
+                    end)
+                end
+            })
+        end)
+        if not ok then
+            -- silent
         end
-    })
-end
+    end)
+end)
