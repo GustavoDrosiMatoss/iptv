@@ -478,6 +478,331 @@ local Tabs = {
 }
 
 
+
+-- ==========================
+-- Halowen (Infinite Labyrinth) - Integrado por ChatGPT
+-- ==========================
+do
+    -- Evitar sobrescrever variáveis globais importantes; usar prefixo local
+    local Lab = {}
+
+    -- Dependências já carregadas no script principal (Fluent, ConfigSystem, SaveManager, InterfaceManager, Window, Tabs)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+    local player = game.Players.LocalPlayer
+
+    -- ConfigSystem: adicionar defaults se necessário
+    ConfigSystem.DefaultConfig.LabyrinthToggle = ConfigSystem.DefaultConfig.LabyrinthToggle or false
+    ConfigSystem.DefaultConfig.LabyrinthTeleport = ConfigSystem.DefaultConfig.LabyrinthTeleport or false
+    ConfigSystem.DefaultConfig.LabyrinthSpeed = ConfigSystem.DefaultConfig.LabyrinthSpeed or 2
+    ConfigSystem.DefaultConfig.LabyrinthSpeedEnabled = ConfigSystem.DefaultConfig.LabyrinthSpeedEnabled or false
+
+    ConfigSystem.CurrentConfig.LabyrinthToggle = (ConfigSystem.CurrentConfig.LabyrinthToggle == nil) and ConfigSystem.DefaultConfig.LabyrinthToggle or ConfigSystem.CurrentConfig.LabyrinthToggle
+    ConfigSystem.CurrentConfig.LabyrinthTeleport = (ConfigSystem.CurrentConfig.LabyrinthTeleport == nil) and ConfigSystem.DefaultConfig.LabyrinthTeleport or ConfigSystem.CurrentConfig.LabyrinthTeleport
+    ConfigSystem.CurrentConfig.LabyrinthSpeed = (ConfigSystem.CurrentConfig.LabyrinthSpeed == nil) and ConfigSystem.DefaultConfig.LabyrinthSpeed or ConfigSystem.CurrentConfig.LabyrinthSpeed
+    ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled = (ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled == nil) and ConfigSystem.DefaultConfig.LabyrinthSpeedEnabled or ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled
+
+    local labyrinthEnabled = ConfigSystem.CurrentConfig.LabyrinthToggle
+    local teleportEnabled = ConfigSystem.CurrentConfig.LabyrinthTeleport
+    local speedEnabled = ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled
+    local speedValue = ConfigSystem.CurrentConfig.LabyrinthSpeed
+    local labyrinthSessionActive = false
+    local autoSpeedThread = nil
+
+    local teleportPos = Vector3.new(587.60, 4325.71, -1871.29)
+    local DUNGEON_ID = 7368292297
+
+    local function playerGuiLooksLikeLabyrinth()
+        local pg = player:FindFirstChild("PlayerGui")
+        if not pg then return false end
+        for _, gui in ipairs(pg:GetChildren()) do
+            local name = tostring(gui.Name):lower()
+            if name:find("labyrinth") or name:find("infinite") or name:find("desert") or name:find("castle") then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function isInLabyrinth()
+        local main = workspace:FindFirstChild("__Main")
+        if main then
+            local world = main:FindFirstChild("__World")
+            if world then
+                local wname = tostring(world.Name):lower()
+                if wname:find("labyrinth") or wname:find("infinite") then
+                    return true
+                end
+            end
+        end
+
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = player.Character.HumanoidRootPart.Position
+            if pos.Y and pos.Y > 4000 then
+                return true
+            end
+        end
+
+        if playerGuiLooksLikeLabyrinth() then
+            return true
+        end
+
+        return false
+    end
+
+    local function teleportToArena()
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            player.Character.HumanoidRootPart.CFrame = CFrame.new(teleportPos)
+        end
+    end
+
+    local function safeFire(args)
+        if remote then
+            pcall(function() remote:FireServer(unpack(args)) end)
+        end
+    end
+
+    local function sendCreate()
+        local argsCreate = {
+            [1] = {
+                [1] = {
+                    ["Event"] = "InfiniteLabyrinthAction",
+                    ["Action"] = "Create"
+                },
+                [2] = "\14"
+            }
+        }
+        safeFire(argsCreate)
+    end
+
+    local function sendStart()
+        local argsStart = {
+            [1] = {
+                [1] = {
+                    ["Dungeon"] = DUNGEON_ID,
+                    ["Event"] = "InfiniteLabyrinthAction",
+                    ["Action"] = "Start"
+                },
+                [2] = "\14"
+            }
+        }
+        safeFire(argsStart)
+    end
+
+    local function sendSpeed(value)
+        local argsSpeed = {
+            [1] = {
+                [1] = {
+                    ["Speed"] = value,
+                    ["Event"] = "InfiniteLabyrinthAction",
+                    ["Action"] = "SpeedUp"
+                },
+                [2] = "\14"
+            }
+        }
+        safeFire(argsSpeed)
+    end
+
+    local function monitorSession()
+        task.spawn(function()
+            local consecutiveNotInside = 0
+            while labyrinthSessionActive do
+                if not isInLabyrinth() then
+                    consecutiveNotInside = consecutiveNotInside + 1
+                else
+                    consecutiveNotInside = 0
+                end
+
+                if consecutiveNotInside >= 3 then
+                    labyrinthSessionActive = false
+                    break
+                end
+                task.wait(2)
+            end
+        end)
+    end
+
+    local function iniciarDesafio()
+        if labyrinthSessionActive then return end
+
+        if isInLabyrinth() then
+            labyrinthSessionActive = true
+            if speedEnabled then sendSpeed(speedValue) end
+            if teleportEnabled then teleportToArena() end
+            monitorSession()
+            return
+        end
+
+        labyrinthSessionActive = true
+        sendCreate()
+        task.wait(1.2)
+
+        local started = false
+        for i = 1, 3 do
+            sendStart()
+            task.wait(2.5)
+            if isInLabyrinth() then
+                started = true
+                break
+            end
+        end
+
+        if not started then
+            labyrinthSessionActive = false
+            return
+        end
+
+        if speedEnabled then sendSpeed(speedValue) end
+        if teleportEnabled then teleportToArena() end
+        monitorSession()
+    end
+
+    local function stopDesafio()
+        labyrinthSessionActive = false
+    end
+
+    local function startAutoSpeedLoop()
+        if autoSpeedThread then return end
+        autoSpeedThread = task.spawn(function()
+            while speedEnabled do
+                if isInLabyrinth() then
+                    sendSpeed(speedValue)
+                end
+                task.wait(10)
+            end
+            autoSpeedThread = nil
+        end)
+    end
+
+    local function stopAutoSpeedLoop()
+        speedEnabled = false
+        if autoSpeedThread then
+            autoSpeedThread = nil
+        end
+    end
+
+    -- Integração com Fluent UI: usar aba existente "desert" -> renomeada "Halowen"
+    -- Garantir que Tabs e Fluent existem
+    if Tabs and Tabs.desert then
+        local Tab = Tabs.desert
+
+        Tab:AddToggle("LabyrinthToggle", {
+            Title = "Ativar Evento Infinite Labyrinth",
+            Default = labyrinthEnabled,
+            Callback = function(value)
+                labyrinthEnabled = value
+                ConfigSystem.CurrentConfig.LabyrinthToggle = value
+                if type(ConfigSystem.SaveConfig) == "function" then
+                    pcall(ConfigSystem.SaveConfig)
+                end
+
+                if value then
+                    iniciarDesafio()
+                    Fluent:Notify({ Title = "Labyrinth", Content = "Tentando iniciar evento...", Duration = 3 })
+                else
+                    stopDesafio()
+                    Fluent:Notify({ Title = "Labyrinth", Content = "Evento desativado.", Duration = 3 })
+                end
+            end
+        })
+
+        Tab:AddToggle("LabyrinthTeleport", {
+            Title = "Teleporte para o centro da arena",
+            Default = teleportEnabled,
+            Callback = function(value)
+                teleportEnabled = value
+                ConfigSystem.CurrentConfig.LabyrinthTeleport = value
+                if type(ConfigSystem.SaveConfig) == "function" then
+                    pcall(ConfigSystem.SaveConfig)
+                end
+
+                if value then
+                    if isInLabyrinth() then teleportToArena() end
+                    Fluent:Notify({ Title = "Teleport", Content = "Teleporte ativado.", Duration = 3 })
+                else
+                    Fluent:Notify({ Title = "Teleport", Content = "Teleporte desativado.", Duration = 3 })
+                end
+            end
+        })
+
+        Tab:AddToggle("LabyrinthSpeedEnable", {
+            Title = "Ativar Modo Velocidade (reaplica a cada 10s)",
+            Default = speedEnabled,
+            Callback = function(value)
+                speedEnabled = value
+                ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled = value
+                if type(ConfigSystem.SaveConfig) == "function" then
+                    pcall(ConfigSystem.SaveConfig)
+                end
+
+                if value then
+                    if isInLabyrinth() then
+                        sendSpeed(speedValue)
+                    end
+                    startAutoSpeedLoop()
+                    Fluent:Notify({ Title = "Speed", Content = "Modo velocidade ativado ("..tostring(speedValue).."x).", Duration = 3 })
+                else
+                    stopAutoSpeedLoop()
+                    Fluent:Notify({ Title = "Speed", Content = "Modo velocidade desativado.", Duration = 3 })
+                end
+            end
+        })
+
+        Tab:AddDropdown("LabyrinthSpeedDropdown", {
+            Title = "Velocidade",
+            Values = {"1x","2x","3x"},
+            Default = tostring(speedValue) .. "x",
+            Multi = false,
+            Callback = function(value)
+                local n = tonumber(value:sub(1,1))
+                if n then
+                    speedValue = n
+                    ConfigSystem.CurrentConfig.LabyrinthSpeed = n
+                    if type(ConfigSystem.SaveConfig) == "function" then
+                        pcall(ConfigSystem.SaveConfig)
+                    end
+                    Fluent:Notify({ Title = "Speed", Content = "Velocidade salva: "..n.."x", Duration = 2 })
+                    if speedEnabled and isInLabyrinth() then
+                        sendSpeed(speedValue)
+                    end
+                end
+            end
+        })
+
+        Tab:AddButton({
+            Title = "Checar status (debug)",
+            Callback = function()
+                local inside = isInLabyrinth()
+                Fluent:Notify({ Title = "Debug", Content = inside and "DENTRO do Labirinto" or "FORA do Labirinto", Duration = 4 })
+            end
+        })
+
+        Tab:AddButton({
+            Title = "Resetar estado",
+            Callback = function()
+                labyrinthSessionActive = false
+                stopAutoSpeedLoop()
+                Fluent:Notify({ Title = "Reset", Content = "Estado reiniciado.", Duration = 3 })
+            end
+        })
+
+        -- Inicialização: aplica salvos
+        if labyrinthEnabled then
+            iniciarDesafio()
+        end
+        if teleportEnabled and isInLabyrinth() then
+            teleportToArena()
+        end
+        if speedEnabled then
+            if isInLabyrinth() then sendSpeed(speedValue) end
+            startAutoSpeedLoop()
+        end
+    end
+end
+
+
+
+
 -- Tạo mapping giữa các map và danh sách mob tương ứng
 local mobsByWorld = {
     ["SoloWorld"] = {"Soondoo", "Gonshee", "Daek", "Longin", "Anders", "Largalgan"},
@@ -2988,6 +3313,9 @@ if ConfigSystem.CurrentConfig.CastleCreateOnlyToggle then
     castleCreateOnlyLoop()
     end
 
+
+
+
 -- ==========================
 -- Configuração inicial
 -- ==========================
@@ -3009,7 +3337,7 @@ if ConfigSystem.DefaultConfig.DesertInfiniteTeleport == nil then
     ConfigSystem.DefaultConfig.DesertInfiniteTeleport = false
 end
 if ConfigSystem.DefaultConfig.DesertDungeonMode == nil then
-    ConfigSystem.DefaultConfig.DesertDungeonMode = 1 -- 1=Deserto, 2=Castelo, 3=Halloween
+    ConfigSystem.DefaultConfig.DesertDungeonMode = 1 -- 1 = Deserto, 2 = Castelo
 end
 
 -- Current config fallback
@@ -3029,17 +3357,13 @@ if ConfigSystem.CurrentConfig.DesertDungeonMode == nil then
     ConfigSystem.CurrentConfig.DesertDungeonMode = ConfigSystem.DefaultConfig.DesertDungeonMode
 end
 
--- Variáveis
+-- Variables
 local desertEnabled = ConfigSystem.CurrentConfig.DesertInfiniteToggle
 local speedValue = ConfigSystem.CurrentConfig.DesertInfiniteSpeed
 local autoSpeedEnabled = ConfigSystem.CurrentConfig.DesertAutoSpeed
 local teleportEnabled = ConfigSystem.CurrentConfig.DesertInfiniteTeleport
 local dungeonMode = ConfigSystem.CurrentConfig.DesertDungeonMode
-local DUNGEON_IDS = {
-    [1] = 5116548088, -- Deserto
-    [2] = 5116548088, -- Castelo
-    [3] = 7368292297  -- Halloween
-}
+local DUNGEON_ID = 5116548088
 local desertSessionActive = false
 local autoSpeedLoop = false
 
@@ -3057,11 +3381,26 @@ local function estaNoMundoInfinito()
             if world.Name == "InfiniteCastle" or world.Name == "CastleInfinite" then
                 return true, "castle"
             end
-            if world.Name == "InfiniteLabyrinth" or world.Name == "LabyrinthInfinite" then
-                return true, "halloween"
+        end
+    end
+
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local position = player.Character.HumanoidRootPart.Position
+        local altitude = position.Y
+        if altitude > 4000 then
+            return true, "unknown"
+        end
+    end
+
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        for _, gui in pairs(playerGui:GetChildren()) do
+            if gui.Name:find("Infinite") or gui.Name:find("Desert") or gui.Name:find("Castle") then
+                return true, "gui"
             end
         end
     end
+
     return false, nil
 end
 
@@ -3071,23 +3410,25 @@ local function estaNoDeserto()
 end
 
 -- ==========================
--- TELEPORTES
+-- TELEPORT DINÂMICO CORRIGIDO
 -- ==========================
 local desertCenter = Vector3.new(474.10, 4383.76, -1875.94)
 local castleCenter = Vector3.new(446.69, 4384.64, -1897.36)
-local halloweenCenter = Vector3.new(587.60, 4325.71, -1871.29)
 
 local function getTeleportPosition()
     local emMundo, tipo = estaNoMundoInfinito()
+
     if emMundo then
-        if tipo == "desert" then return CFrame.new(desertCenter) end
-        if tipo == "castle" then return CFrame.new(castleCenter) end
-        if tipo == "halloween" then return CFrame.new(halloweenCenter) end
+        if tipo == "desert" then
+            return CFrame.new(desertCenter)
+        elseif tipo == "castle" then
+            return CFrame.new(castleCenter)
+        end
     end
+
+    -- fallback baseado no modo configurado
     if dungeonMode == 2 then
         return CFrame.new(castleCenter)
-    elseif dungeonMode == 3 then
-        return CFrame.new(halloweenCenter)
     else
         return CFrame.new(desertCenter)
     end
@@ -3123,30 +3464,32 @@ end
 -- VELOCIDADE
 -- ==========================
 local function aplicarVelocidade(valor)
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
+        return 
+    end
 
     local noMundo, tipo = estaNoMundoInfinito()
     if not noMundo then return end
 
-    local eventMap = {
-        desert = "InfiniteModeAction",
-        castle = "InfiniteCastleAction",
-        halloween = "InfiniteLabyrinthAction"
-    }
-
-    local eventName = eventMap[tipo] or "InfiniteModeAction"
+    local speedEvent = "InfiniteModeAction"
+    if tipo == "castle" or dungeonMode == 2 then
+        speedEvent = "InfiniteCastleAction"
+    end
 
     local argsSpeed = {
         [1] = {
             [1] = {
                 ["Speed"] = valor,
-                ["Event"] = eventName,
+                ["Event"] = speedEvent,
                 ["Action"] = "SpeedUp"
             },
-            [2] = "\14"
+            [2] = "\13"
         }
     }
-    if remote then remote:FireServer(unpack(argsSpeed)) end
+
+    if remote then 
+        remote:FireServer(unpack(argsSpeed))
+    end
 end
 
 local function iniciarAutoVelocidade()
@@ -3169,7 +3512,7 @@ local function pararAutoVelocidade()
 end
 
 -- ==========================
--- CONTROLE DE SESSÃO
+-- SESSÃO / CONTROLE
 -- ==========================
 local function monitorarSaidaDeserto()
     task.spawn(function()
@@ -3211,43 +3554,44 @@ local function iniciarDesertoInfinito()
 
     desertSessionActive = true
     task.spawn(function()
-        local eventNames = {
-            [1] = "InfiniteModeAction",
-            [2] = "InfiniteCastleAction",
-            [3] = "InfiniteLabyrinthAction"
-        }
-        local eventName = eventNames[dungeonMode]
-        local dungeonId = DUNGEON_IDS[dungeonMode]
+        local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
 
-        -- Criar
         local argsCreate = {
             [1] = {
                 [1] = {
                     ["Event"] = eventName,
                     ["Action"] = "Create"
                 },
-                [2] = "\14"
+                [2] = "\13"
             }
         }
         if remote then remote:FireServer(unpack(argsCreate)) end
         task.wait(3)
 
-        -- Iniciar
+        local startSuccess = false
         for tentativa = 1, 3 do
             local argsStart = {
                 [1] = {
                     [1] = {
-                        ["Dungeon"] = dungeonId,
+                        ["Dungeon"] = DUNGEON_ID,
                         ["Event"] = eventName,
                         ["Action"] = "Start"
                     },
-                    [2] = "\14"
+                    [2] = "\13"
                 }
             }
             if remote then remote:FireServer(unpack(argsStart)) end
             task.wait(4)
             local aindaNoMundo, _ = estaNoMundoInfinito()
-            if aindaNoMundo then break end
+            if aindaNoMundo then
+                startSuccess = true
+                break
+            end
+        end
+
+        if not startSuccess then
+            resetarEstadoSessao()
+            return
         end
 
         task.wait(2)
@@ -3262,25 +3606,17 @@ end
 -- ==========================
 Tabs.desert:AddDropdown("DesertDungeonMode", {
     Title = "Selecionar Modo",
-    Values = { "Deserto Infinito", "Castelo Infinito", "Halloween Infinito" },
-    Default = (dungeonMode == 1 and "Deserto Infinito")
-        or (dungeonMode == 2 and "Castelo Infinito")
-        or "Halloween Infinito",
+    Values = { "Deserto Infinito", "Castelo Infinito" },
+    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
     Callback = function(value)
-        if value == "Deserto Infinito" then
-            dungeonMode = 1
-        elseif value == "Castelo Infinito" then
-            dungeonMode = 2
-        else
-            dungeonMode = 3
-        end
+        dungeonMode = (value == "Deserto Infinito") and 1 or 2
         ConfigSystem.CurrentConfig.DesertDungeonMode = dungeonMode
         ConfigSystem.SaveConfig()
     end
 })
 
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
-    Title = "Ativar Modo Infinito (Deserto/Castelo/Halloween)",
+    Title = "Ativar Deserto/Castelo Infinito",
     Default = desertEnabled,
     Callback = function(state)
         desertEnabled = state
@@ -3323,7 +3659,7 @@ Tabs.desert:AddToggle("DesertAutoSpeed", {
 })
 
 Tabs.desert:AddToggle("DesertInfiniteTeleport", {
-    Title = "Teleportar para o meio (Deserto/Castelo/Halloween)",
+    Title = "Teleportar para o meio (Deserto/Castelo)",
     Default = teleportEnabled,
     Callback = function(state)
         teleportEnabled = state
@@ -3342,13 +3678,17 @@ Tabs.desert:AddButton({
     Title = "Verificar Status (Debug)",
     Callback = function()
         local emMundo, tipo = estaNoMundoInfinito()
-        print("Em mundo infinito:", emMundo, "Tipo:", tipo)
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            print("Posição:", player.Character.HumanoidRootPart.Position)
+                                                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = player.Character.HumanoidRootPart.Position
+                    end
+        local main = workspace:FindFirstChild("__Main")
+        if main then
+            local world = main:FindFirstChild("__World")
+            if world then
+                            end
         end
-    end
+            end
 })
-
 
 -- ==========================
 -- AUTO CLICK (usando atributo AutoClick) COM SALVAMENTO
