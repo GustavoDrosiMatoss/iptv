@@ -3146,7 +3146,7 @@ local function aplicarVelocidade(valor)
                 ["Event"] = eventName,
                 ["Action"] = "SpeedUp"
             },
-            [2] = "\13"
+            [2] = "\14"
         }
     }
     if remote then remote:FireServer(unpack(argsSpeed)) end
@@ -3229,7 +3229,7 @@ local function iniciarDesertoInfinito()
                     ["Event"] = eventName,
                     ["Action"] = "Create"
                 },
-                [2] = "\13"
+                [2] = "\14"
             }
         }
         if remote then remote:FireServer(unpack(argsCreate)) end
@@ -3244,7 +3244,7 @@ local function iniciarDesertoInfinito()
                         ["Event"] = eventName,
                         ["Action"] = "Start"
                     },
-                    [2] = "\13"
+                    [2] = "\14"
                 }
             }
             if remote then remote:FireServer(unpack(argsStart)) end
