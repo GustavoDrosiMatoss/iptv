@@ -485,56 +485,106 @@ local Tabs = {
 -- Cria aba Hallowin igual às outras
 Tabs.hallowin = Window:AddTab({ Title = "Hallowin", Icon = "" })
 
--- Função criar Hallowin
-local function createHallowin()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "InfiniteLabyrinthAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    task.wait(1)
-    -- Tenta iniciar usando o dungeon ID fornecido
-    local startArgs = {
-        [1] = {
-            [1] = {
-                ["Dungeon"] = 7368292297,
-                ["Event"] = "InfiniteLabyrinthAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
+-- Serviços
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local BridgeNet2 = ReplicatedStorage:WaitForChild("BridgeNet2")
+local DataRemoteEvent = BridgeNet2:WaitForChild("dataRemoteEvent")
+
+-- Constantes
+local EVENT_NAME = "InfiniteLabyrinthAction"
+local DUNGEON_ID = 7368292297
+local CHANNEL = "\14"
+
+local player = Players.LocalPlayer
+
+-- Função para verificar se está dentro da dungeon
+local function isInsideDungeon()
+    local char = player.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    -- Exemplo: dungeon fica em Y > 4000
+    return hrp.Position.Y > 4000
 end
 
--- Função teleportar para o meio
+-- Função criar e iniciar dungeon
+local function createAndStartDungeon()
+    -- Create
+    local createPayload = {
+        {
+            { Event = EVENT_NAME, Action = "Create" },
+            CHANNEL
+        }
+    }
+    DataRemoteEvent:FireServer(createPayload)
+
+    task.wait(0.75)
+
+    -- Start
+    local startPayload = {
+        {
+            { Dungeon = DUNGEON_ID, Event = EVENT_NAME, Action = "Start" },
+            CHANNEL
+        }
+    }
+    DataRemoteEvent:FireServer(startPayload)
+end
+
+-- Teleportar para o meio da dungeon
 local function teleportToHallowin()
-    local player = game.Players.LocalPlayer
-    if not player then return end
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     hrp.CFrame = CFrame.new(587.60, 4325.71, -1871.29)
 end
 
--- Botões Hallowin
-Tabs.hallowin:AddButton({
-    Title = "Criar Hallowin",
-    Description = "Cria e inicia o evento Hallowin",
-    Callback = function()
-        pcall(createHallowin)
+-- Controle do auto modo
+local autoEnabled = false
+local autoThread
+
+local function autoLoop()
+    while autoEnabled do
+        if not isInsideDungeon() then
+            pcall(createAndStartDungeon)
+        else
+            -- Se já estiver dentro, teleporta para o meio
+            pcall(teleportToHallowin)
+        end
+        task.wait(5) -- intervalo entre tentativas
+    end
+end
+
+-- UI
+Tabs.hallowin:AddToggle({
+    Title = "Auto Entrar Dungeon",
+    Description = "Cria/Inicia a dungeon automaticamente e teleporta para o meio",
+    Default = false,
+    Callback = function(state)
+        autoEnabled = state
+        if autoEnabled and (not autoThread or coroutine.status(autoThread) == "dead") then
+            autoThread = coroutine.create(autoLoop)
+            coroutine.resume(autoThread)
+        end
     end
 })
 
+-- Botão manual de teleporte
 Tabs.hallowin:AddButton({
     Title = "Teleportar para o meio",
     Description = "Teleporta para o centro do evento Hallowin",
     Callback = function()
         pcall(teleportToHallowin)
+    end
+})
+
+-- Botão manual de criar/iniciar
+Tabs.hallowin:AddButton({
+    Title = "Criar e iniciar Hallowin (manual)",
+    Description = "Executa uma vez a criação e início do evento",
+    Callback = function()
+        pcall(createAndStartDungeon)
     end
 })
 -- Tạo mapping giữa các map và danh sách mob tương ứng
