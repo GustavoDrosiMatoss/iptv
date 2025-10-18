@@ -1,3 +1,6 @@
+if not game or not game.GetService then
+        return
+end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -472,8 +475,6 @@ local Tabs = {
     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
-    Hallowen = Window:AddTab({ Title = "Hallowen", Icon = "ghost" }),
-
 }
 
 
@@ -3011,7 +3012,7 @@ if ConfigSystem.DefaultConfig.DesertInfiniteTeleport == nil then
     ConfigSystem.DefaultConfig.DesertInfiniteTeleport = false
 end
 if ConfigSystem.DefaultConfig.DesertDungeonMode == nil then
-    ConfigSystem.DefaultConfig.DesertDungeonMode = 1 -- 1 = Deserto, 2 = Castelo
+    ConfigSystem.DefaultConfig.DesertDungeonMode = 1 -- 1=Deserto, 2=Castelo, 3=Halloween
 end
 
 -- Current config fallback
@@ -3037,7 +3038,11 @@ local speedValue = ConfigSystem.CurrentConfig.DesertInfiniteSpeed
 local autoSpeedEnabled = ConfigSystem.CurrentConfig.DesertAutoSpeed
 local teleportEnabled = ConfigSystem.CurrentConfig.DesertInfiniteTeleport
 local dungeonMode = ConfigSystem.CurrentConfig.DesertDungeonMode
-local DUNGEON_ID = 5116548088
+local DUNGEON_IDS = {
+    [1] = 5116548088, -- Deserto
+    [2] = 5116548088, -- Castelo (mesmo ID base)
+    [3] = 7368292297  -- Halloween
+}
 local desertSessionActive = false
 local autoSpeedLoop = false
 
@@ -3055,26 +3060,11 @@ local function estaNoMundoInfinito()
             if world.Name == "InfiniteCastle" or world.Name == "CastleInfinite" then
                 return true, "castle"
             end
-        end
-    end
-
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        local position = player.Character.HumanoidRootPart.Position
-        local altitude = position.Y
-        if altitude > 4000 then
-            return true, "unknown"
-        end
-    end
-
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, gui in pairs(playerGui:GetChildren()) do
-            if gui.Name:find("Infinite") or gui.Name:find("Desert") or gui.Name:find("Castle") then
-                return true, "gui"
+            if world.Name == "InfiniteLabyrinth" or world.Name == "LabyrinthInfinite" then
+                return true, "halloween"
             end
         end
     end
-
     return false, nil
 end
 
@@ -3084,25 +3074,23 @@ local function estaNoDeserto()
 end
 
 -- ==========================
--- TELEPORT DINÂMICO CORRIGIDO
+-- TELEPORTES
 -- ==========================
 local desertCenter = Vector3.new(474.10, 4383.76, -1875.94)
 local castleCenter = Vector3.new(446.69, 4384.64, -1897.36)
+local halloweenCenter = Vector3.new(587.60, 4325.71, -1871.29)
 
 local function getTeleportPosition()
     local emMundo, tipo = estaNoMundoInfinito()
-
     if emMundo then
-        if tipo == "desert" then
-            return CFrame.new(desertCenter)
-        elseif tipo == "castle" then
-            return CFrame.new(castleCenter)
-        end
+        if tipo == "desert" then return CFrame.new(desertCenter) end
+        if tipo == "castle" then return CFrame.new(castleCenter) end
+        if tipo == "halloween" then return CFrame.new(halloweenCenter) end
     end
-
-    -- fallback baseado no modo configurado
     if dungeonMode == 2 then
         return CFrame.new(castleCenter)
+    elseif dungeonMode == 3 then
+        return CFrame.new(halloweenCenter)
     else
         return CFrame.new(desertCenter)
     end
@@ -3138,32 +3126,30 @@ end
 -- VELOCIDADE
 -- ==========================
 local function aplicarVelocidade(valor)
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then 
-        return 
-    end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
 
     local noMundo, tipo = estaNoMundoInfinito()
     if not noMundo then return end
 
-    local speedEvent = "InfiniteModeAction"
-    if tipo == "castle" or dungeonMode == 2 then
-        speedEvent = "InfiniteCastleAction"
-    end
+    local eventMap = {
+        desert = "InfiniteModeAction",
+        castle = "InfiniteCastleAction",
+        halloween = "InfiniteLabyrinthAction"
+    }
+
+    local eventName = eventMap[tipo] or "InfiniteModeAction"
 
     local argsSpeed = {
         [1] = {
             [1] = {
                 ["Speed"] = valor,
-                ["Event"] = speedEvent,
+                ["Event"] = eventName,
                 ["Action"] = "SpeedUp"
             },
             [2] = "\13"
         }
     }
-
-    if remote then 
-        remote:FireServer(unpack(argsSpeed))
-    end
+    if remote then remote:FireServer(unpack(argsSpeed)) end
 end
 
 local function iniciarAutoVelocidade()
@@ -3186,7 +3172,7 @@ local function pararAutoVelocidade()
 end
 
 -- ==========================
--- SESSÃO / CONTROLE
+-- CONTROLE DE SESSÃO
 -- ==========================
 local function monitorarSaidaDeserto()
     task.spawn(function()
@@ -3228,8 +3214,15 @@ local function iniciarDesertoInfinito()
 
     desertSessionActive = true
     task.spawn(function()
-        local eventName = (dungeonMode == 1) and "InfiniteModeAction" or "InfiniteCastleAction"
+        local eventNames = {
+            [1] = "InfiniteModeAction",
+            [2] = "InfiniteCastleAction",
+            [3] = "InfiniteLabyrinthAction"
+        }
+        local eventName = eventNames[dungeonMode]
+        local dungeonId = DUNGEON_IDS[dungeonMode]
 
+        -- Criar
         local argsCreate = {
             [1] = {
                 [1] = {
@@ -3242,12 +3235,12 @@ local function iniciarDesertoInfinito()
         if remote then remote:FireServer(unpack(argsCreate)) end
         task.wait(3)
 
-        local startSuccess = false
+        -- Iniciar
         for tentativa = 1, 3 do
             local argsStart = {
                 [1] = {
                     [1] = {
-                        ["Dungeon"] = DUNGEON_ID,
+                        ["Dungeon"] = dungeonId,
                         ["Event"] = eventName,
                         ["Action"] = "Start"
                     },
@@ -3257,15 +3250,7 @@ local function iniciarDesertoInfinito()
             if remote then remote:FireServer(unpack(argsStart)) end
             task.wait(4)
             local aindaNoMundo, _ = estaNoMundoInfinito()
-            if aindaNoMundo then
-                startSuccess = true
-                break
-            end
-        end
-
-        if not startSuccess then
-            resetarEstadoSessao()
-            return
+            if aindaNoMundo then break end
         end
 
         task.wait(2)
@@ -3280,17 +3265,19 @@ end
 -- ==========================
 Tabs.desert:AddDropdown("DesertDungeonMode", {
     Title = "Selecionar Modo",
-    Values = { "Deserto Infinito", "Castelo Infinito" },
-    Default = (dungeonMode == 1 and "Deserto Infinito") or "Castelo Infinito",
+    Values = { "Deserto Infinito", "Castelo Infinito", "Halloween Infinito" },
+    Default = (dungeonMode == 1 and "Deserto Infinito") or (dungeonMode == 2 and "Castelo Infinito") or "Halloween Infinito",
     Callback = function(value)
-        dungeonMode = (value == "Deserto Infinito") and 1 or 2
+        if value == "Deserto Infinito" then dungeonMode = 1
+        elseif value == "Castelo Infinito" then dungeonMode = 2
+        else dungeonMode = 3 end
         ConfigSystem.CurrentConfig.DesertDungeonMode = dungeonMode
         ConfigSystem.SaveConfig()
     end
 })
 
 Tabs.desert:AddToggle("DesertInfiniteToggle", {
-    Title = "Ativar Deserto/Castelo Infinito",
+    Title = "Ativar Modo Infinito (Deserto/Castelo/Halloween)",
     Default = desertEnabled,
     Callback = function(state)
         desertEnabled = state
@@ -3333,7 +3320,7 @@ Tabs.desert:AddToggle("DesertAutoSpeed", {
 })
 
 Tabs.desert:AddToggle("DesertInfiniteTeleport", {
-    Title = "Teleportar para o meio (Deserto/Castelo)",
+    Title = "Teleportar para o meio (Deserto/Castelo/Halloween)",
     Default = teleportEnabled,
     Callback = function(state)
         teleportEnabled = state
@@ -3352,16 +3339,11 @@ Tabs.desert:AddButton({
     Title = "Verificar Status (Debug)",
     Callback = function()
         local emMundo, tipo = estaNoMundoInfinito()
-                                                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local pos = player.Character.HumanoidRootPart.Position
-                    end
-        local main = workspace:FindFirstChild("__Main")
-        if main then
-            local world = main:FindFirstChild("__World")
-            if world then
-                            end
+        print("Em mundo infinito:", emMundo, "Tipo:", tipo)
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            print("Posição:", player.Character.HumanoidRootPart.Position)
         end
-            end
+    end
 })
 
 -- ==========================
@@ -3584,157 +3566,5 @@ Tabs.tp:AddButton({
     Description = "Teleportar para Jeju Event",
     Callback = function()
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
-    end
-})
--- Serviços
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-
-local BridgeNet2 = ReplicatedStorage:WaitForChild("BridgeNet2")
-local DataRemoteEvent = BridgeNet2:WaitForChild("dataRemoteEvent")
-
--- Evita "Remote event invocation discarded" (listener vazio para qualquer retorno do servidor)
-if not DataRemoteEvent._AllanHubListener then
-    DataRemoteEvent._AllanHubListener = true
-    DataRemoteEvent.OnClientEvent:Connect(function(...)
-        -- Opcional: print("dataRemoteEvent ->", ...)
-        -- Mantém um listener para não descartar eventos enviados do servidor
-    end)
-end
-
--- Constantes
-local EVENT_NAME = "InfiniteLabyrinthAction"
-local DUNGEON_ID = 7368292297
-local CHANNEL = "\14"
-
--- Nome esperado da dungeon no workspace (__Main/__Dungeon)
--- Ajuste este nome para exatamente o que aparece quando a criação é feita.
-local EXPECTED_DUNGEON_NAME = "InfiniteLabyrinth"
-
-local player = Players.LocalPlayer
-
--- Espera segura de estruturas do mundo (evita nil no handler do jogo)
-local function waitWorldRoots(timeout)
-    local t0 = tick()
-    while not workspace:FindFirstChild("__Main") do
-        task.wait(0.1)
-        if timeout and (tick() - t0) > timeout then return false end
-    end
-    local main = workspace:FindFirstChild("__Main")
-    while not main:FindFirstChild("__Dungeon") do
-        task.wait(0.1)
-        if timeout and (tick() - t0) > timeout then return false end
-    end
-    return true
-end
-
--- Verifica pelo nome da criação no __Dungeon
-local function isInsideDungeon()
-    local main = workspace:FindFirstChild("__Main")
-    if not main then return false end
-    local dungeonFolder = main:FindFirstChild("__Dungeon")
-    if not dungeonFolder then return false end
-
-    -- Checa pelo Name
-    if dungeonFolder.Name and string.lower(dungeonFolder.Name) == string.lower(EXPECTED_DUNGEON_NAME) then
-        return true
-    end
-    -- Ou pelo atributo/valor opcional
-    local attrName = dungeonFolder:GetAttribute("DungeonName")
-    if attrName and string.lower(attrName) == string.lower(EXPECTED_DUNGEON_NAME) then
-        return true
-    end
-    local strVal = dungeonFolder:FindFirstChild("DungeonName")
-    if strVal and strVal:IsA("StringValue") and string.lower(strVal.Value) == string.lower(EXPECTED_DUNGEON_NAME) then
-        return true
-    end
-
-    return false
-end
-
--- Create + Start com proteções
-local function createAndStartDungeon()
-    -- Garantir que temos o remote
-    if not DataRemoteEvent then return end
-
-    -- Create
-    local createPayload = {
-        {
-            { Event = EVENT_NAME, Action = "Create" },
-            CHANNEL
-        }
-    }
-    DataRemoteEvent:FireServer(createPayload)
-
-    -- Aguarda structures começarem a existir antes de tentar Start
-    waitWorldRoots(3)
-    task.wait(0.75)
-
-    -- Start
-    local startPayload = {
-        {
-            { Dungeon = DUNGEON_ID, Event = EVENT_NAME, Action = "Start" },
-            CHANNEL
-        }
-    }
-    DataRemoteEvent:FireServer(startPayload)
-end
-
--- Teleportar para o meio da dungeon
-local function teleportToHallowin()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart")
-    hrp.CFrame = CFrame.new(587.60, 4325.71, -1871.29)
-end
-
--- Loop automático
-local autoEnabled = false
-local autoThread
-
-local function autoLoop()
-    while autoEnabled do
-        -- Evita tentar startar antes da estrutura do mundo estar pronta
-        waitWorldRoots(5)
-
-        if not isInsideDungeon() then
-            pcall(createAndStartDungeon)
-        else
-            pcall(teleportToHallowin)
-        end
-        task.wait(5)
-    end
-end
-
--- =========================
--- ABA HALLOWEN
--- =========================
-local Hallowen = Window:AddTab({ Title = "Hallowen", Icon = "ghost" })
-
-Hallowen:AddToggle({
-    Title = "Auto Entrar Dungeon",
-    Description = "Cria/Inicia a dungeon automaticamente e teleporta para o meio",
-    Default = false,
-    Callback = function(state)
-        autoEnabled = state
-        if autoEnabled and (not autoThread or coroutine.status(autoThread) == "dead") then
-            autoThread = coroutine.create(autoLoop)
-            coroutine.resume(autoThread)
-        end
-    end
-})
-
-Hallowen:AddButton({
-    Title = "Teleportar para o meio",
-    Description = "Teleporta para o centro do evento Hallowin",
-    Callback = function()
-        pcall(teleportToHallowin)
-    end
-})
-
-Hallowen:AddButton({
-    Title = "Criar e iniciar Hallowin (manual)",
-    Description = "Executa uma vez a criação e início do evento",
-    Callback = function()
-        pcall(createAndStartDungeon)
     end
 })
