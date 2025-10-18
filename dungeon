@@ -1,4 +1,88 @@
 -- ==========================
+-- Sistema de Configuração Persistente
+-- ==========================
+local HttpService = game:GetService("HttpService")
+
+-- Nome do arquivo de configuração
+local CONFIG_FILE = "AllanHub_LabyrinthConfig.json"
+
+-- ==========================
+-- ConfigSystem Aprimorado
+-- ==========================
+getgenv().ConfigSystem = getgenv().ConfigSystem or {}
+
+-- Configurações padrão
+ConfigSystem.DefaultConfig = {
+    LabyrinthToggle = false,
+    LabyrinthTeleport = false,
+    LabyrinthSpeed = 2,
+    LabyrinthSpeedEnabled = false
+}
+
+-- Função para carregar configurações do arquivo
+function ConfigSystem.LoadConfig()
+    local success, result = pcall(function()
+        if not isfile or not readfile then
+            return nil
+        end
+        
+        if isfile(CONFIG_FILE) then
+            local data = readfile(CONFIG_FILE)
+            return HttpService:JSONDecode(data)
+        end
+        return nil
+    end)
+    
+    if success and result then
+        print("[ConfigSystem] Configurações carregadas do arquivo")
+        return result
+    else
+        print("[ConfigSystem] Usando configurações padrão")
+        return ConfigSystem.DefaultConfig
+    end
+end
+
+-- Função para salvar configurações no arquivo
+function ConfigSystem.SaveConfig()
+    local success = pcall(function()
+        if not writefile then
+            warn("[ConfigSystem] writefile não disponível")
+            return
+        end
+        
+        local data = HttpService:JSONEncode(ConfigSystem.CurrentConfig)
+        writefile(CONFIG_FILE, data)
+        print("[ConfigSystem] Configurações salvas com sucesso")
+    end)
+    
+    if not success then
+        warn("[ConfigSystem] Erro ao salvar configurações")
+    end
+end
+
+-- Função para resetar configurações
+function ConfigSystem.ResetConfig()
+    ConfigSystem.CurrentConfig = {}
+    for k, v in pairs(ConfigSystem.DefaultConfig) do
+        ConfigSystem.CurrentConfig[k] = v
+    end
+    ConfigSystem.SaveConfig()
+    print("[ConfigSystem] Configurações resetadas")
+end
+
+-- Função para atualizar uma configuração específica
+function ConfigSystem.SetConfig(key, value)
+    if ConfigSystem.CurrentConfig[key] ~= value then
+        ConfigSystem.CurrentConfig[key] = value
+        ConfigSystem.SaveConfig()
+        print("[ConfigSystem] Configuração atualizada:", key, "=", value)
+    end
+end
+
+-- Carregar configurações ao iniciar
+ConfigSystem.CurrentConfig = ConfigSystem.LoadConfig()
+
+-- ==========================
 -- Dependência Fluent UI
 -- ==========================
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
@@ -11,33 +95,7 @@ local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRe
 local player = game.Players.LocalPlayer
 
 -- ==========================
--- ConfigSystem (fallbacks)
--- ==========================
-getgenv().ConfigSystem = getgenv().ConfigSystem or {}
-ConfigSystem.DefaultConfig = ConfigSystem.DefaultConfig or {}
-ConfigSystem.CurrentConfig = ConfigSystem.CurrentConfig or {}
-
--- Defaults
-if ConfigSystem.DefaultConfig.LabyrinthToggle == nil then ConfigSystem.DefaultConfig.LabyrinthToggle = false end
-if ConfigSystem.DefaultConfig.LabyrinthTeleport == nil then ConfigSystem.DefaultConfig.LabyrinthTeleport = false end
-if ConfigSystem.DefaultConfig.LabyrinthSpeed == nil then ConfigSystem.DefaultConfig.LabyrinthSpeed = 2 end
-if ConfigSystem.DefaultConfig.LabyrinthSpeedEnabled == nil then ConfigSystem.DefaultConfig.LabyrinthSpeedEnabled = false end
-
--- Current fallback
-if ConfigSystem.CurrentConfig.LabyrinthToggle == nil then ConfigSystem.CurrentConfig.LabyrinthToggle = ConfigSystem.DefaultConfig.LabyrinthToggle end
-if ConfigSystem.CurrentConfig.LabyrinthTeleport == nil then ConfigSystem.CurrentConfig.LabyrinthTeleport = ConfigSystem.DefaultConfig.LabyrinthTeleport end
-if ConfigSystem.CurrentConfig.LabyrinthSpeed == nil then ConfigSystem.CurrentConfig.LabyrinthSpeed = ConfigSystem.DefaultConfig.LabyrinthSpeed end
-if ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled == nil then ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled = ConfigSystem.DefaultConfig.LabyrinthSpeedEnabled end
-
--- Helpers de SaveConfig
-local function SaveConfig()
-    if type(ConfigSystem.SaveConfig) == "function" then
-        pcall(ConfigSystem.SaveConfig)
-    end
-end
-
--- ==========================
--- Estado local
+-- Estado local (carregado da config)
 -- ==========================
 local labyrinthEnabled = ConfigSystem.CurrentConfig.LabyrinthToggle
 local teleportEnabled = ConfigSystem.CurrentConfig.LabyrinthTeleport
@@ -156,7 +214,6 @@ end
 -- Controle de sessão / prevenção de recriação
 -- ==========================
 local function monitorSession()
-    -- Monitora saída do labirinto e atualiza estado
     task.spawn(function()
         local consecutiveNotInside = 0
         while labyrinthSessionActive do
@@ -167,7 +224,6 @@ local function monitorSession()
             end
 
             if consecutiveNotInside >= 3 then
-                -- Acha que saiu
                 labyrinthSessionActive = false
                 break
             end
@@ -179,10 +235,8 @@ end
 local function iniciarDesafio()
     if labyrinthSessionActive then return end
 
-    -- Se já estiver dentro, não recria
     if isInLabyrinth() then
         labyrinthSessionActive = true
-        -- reaplica speed/teleporte caso necessário
         if speedEnabled then sendSpeed(speedValue) end
         if teleportEnabled then teleportToArena() end
         monitorSession()
@@ -190,7 +244,6 @@ local function iniciarDesafio()
     end
 
     labyrinthSessionActive = true
-    -- Tenta criar e iniciar com checagens
     sendCreate()
     task.wait(1.2)
 
@@ -205,12 +258,10 @@ local function iniciarDesafio()
     end
 
     if not started then
-        -- falhou, reseta estado
         labyrinthSessionActive = false
         return
     end
 
-    -- Sucesso: aplica speed/teleporte se necessário
     if speedEnabled then sendSpeed(speedValue) end
     if teleportEnabled then teleportToArena() end
     monitorSession()
@@ -227,7 +278,6 @@ local function startAutoSpeedLoop()
     if autoSpeedThread then return end
     autoSpeedThread = task.spawn(function()
         while speedEnabled do
-            -- reaplica apenas se estiver dentro do Labyrinth
             if isInLabyrinth() then
                 sendSpeed(speedValue)
             end
@@ -240,7 +290,6 @@ end
 local function stopAutoSpeedLoop()
     speedEnabled = false
     if autoSpeedThread then
-        -- não há cancel task seguro em todos os ambientes; sinalizamos variável
         autoSpeedThread = nil
     end
 end
@@ -250,31 +299,43 @@ end
 -- ==========================
 local Window = Fluent:CreateWindow({
     Title = "Allan Hub - Infinite Labyrinth",
-    SubTitle = "By Allan",
+    SubTitle = "By Allan | Config Persistente",
     TabWidth = 160,
-    Size = UDim2.fromOffset(520, 360),
+    Size = UDim2.fromOffset(520, 380),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.End
 })
 
 local Tab = Window:AddTab({ Title = "Dungeon", Icon = "Sword" })
+local ConfigTab = Window:AddTab({ Title = "Configurações", Icon = "Settings" })
 
--- Evento toggle
+-- ==========================
+-- TAB DUNGEON
+-- ==========================
+
+-- Toggle principal
 Tab:AddToggle("LabyrinthToggle", {
     Title = "Ativar Evento Infinite Labyrinth",
     Default = labyrinthEnabled,
     Callback = function(value)
         labyrinthEnabled = value
-        ConfigSystem.CurrentConfig.LabyrinthToggle = value
-        SaveConfig()
+        ConfigSystem.SetConfig("LabyrinthToggle", value)
 
         if value then
             iniciarDesafio()
-            Fluent:Notify({ Title = "Labyrinth", Content = "Tentando iniciar evento...", Duration = 3 })
+            Fluent:Notify({ 
+                Title = "Labyrinth", 
+                Content = "Evento ativado e salvo!", 
+                Duration = 3 
+            })
         else
             stopDesafio()
-            Fluent:Notify({ Title = "Labyrinth", Content = "Evento desativado.", Duration = 3 })
+            Fluent:Notify({ 
+                Title = "Labyrinth", 
+                Content = "Evento desativado e salvo.", 
+                Duration = 3 
+            })
         end
     end
 })
@@ -285,14 +346,21 @@ Tab:AddToggle("LabyrinthTeleport", {
     Default = teleportEnabled,
     Callback = function(value)
         teleportEnabled = value
-        ConfigSystem.CurrentConfig.LabyrinthTeleport = value
-        SaveConfig()
+        ConfigSystem.SetConfig("LabyrinthTeleport", value)
 
         if value then
             if isInLabyrinth() then teleportToArena() end
-            Fluent:Notify({ Title = "Teleport", Content = "Teleporte ativado.", Duration = 3 })
+            Fluent:Notify({ 
+                Title = "Teleport", 
+                Content = "Teleporte ativado e salvo!", 
+                Duration = 3 
+            })
         else
-            Fluent:Notify({ Title = "Teleport", Content = "Teleporte desativado.", Duration = 3 })
+            Fluent:Notify({ 
+                Title = "Teleport", 
+                Content = "Teleporte desativado e salvo.", 
+                Duration = 3 
+            })
         end
     end
 })
@@ -303,19 +371,25 @@ Tab:AddToggle("LabyrinthSpeedEnable", {
     Default = speedEnabled,
     Callback = function(value)
         speedEnabled = value
-        ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled = value
-        SaveConfig()
+        ConfigSystem.SetConfig("LabyrinthSpeedEnabled", value)
 
         if value then
-            -- aplica imediamente se estiver dentro
             if isInLabyrinth() then
                 sendSpeed(speedValue)
             end
             startAutoSpeedLoop()
-            Fluent:Notify({ Title = "Speed", Content = "Modo velocidade ativado ("..tostring(speedValue).."x).", Duration = 3 })
+            Fluent:Notify({ 
+                Title = "Speed", 
+                Content = "Velocidade ativada ("..speedValue.."x) e salva!", 
+                Duration = 3 
+            })
         else
             stopAutoSpeedLoop()
-            Fluent:Notify({ Title = "Speed", Content = "Modo velocidade desativado.", Duration = 3 })
+            Fluent:Notify({ 
+                Title = "Speed", 
+                Content = "Velocidade desativada e salva.", 
+                Duration = 3 
+            })
         end
     end
 })
@@ -330,9 +404,12 @@ Tab:AddDropdown("LabyrinthSpeedDropdown", {
         local n = tonumber(value:sub(1,1))
         if n then
             speedValue = n
-            ConfigSystem.CurrentConfig.LabyrinthSpeed = n
-            SaveConfig()
-            Fluent:Notify({ Title = "Speed", Content = "Velocidade salva: "..n.."x", Duration = 2 })
+            ConfigSystem.SetConfig("LabyrinthSpeed", n)
+            Fluent:Notify({ 
+                Title = "Speed", 
+                Content = "Velocidade "..n.."x salva!", 
+                Duration = 2 
+            })
             if speedEnabled and isInLabyrinth() then
                 sendSpeed(speedValue)
             end
@@ -345,18 +422,105 @@ Tab:AddButton({
     Title = "Checar status (debug)",
     Callback = function()
         local inside = isInLabyrinth()
-        Fluent:Notify({ Title = "Debug", Content = inside and "DENTRO do Labirinto" or "FORA do Labirinto", Duration = 4 })
+        Fluent:Notify({ 
+            Title = "Debug", 
+            Content = inside and "✅ DENTRO do Labirinto" or "❌ FORA do Labirinto", 
+            Duration = 4 
+        })
     end
 })
 
 -- Reset state button
 Tab:AddButton({
-    Title = "Resetar estado",
+    Title = "Resetar estado da sessão",
     Callback = function()
         labyrinthSessionActive = false
         stopAutoSpeedLoop()
-        Fluent:Notify({ Title = "Reset", Content = "Estado reiniciado.", Duration = 3 })
+        Fluent:Notify({ 
+            Title = "Reset", 
+            Content = "Estado da sessão reiniciado.", 
+            Duration = 3 
+        })
     end
+})
+
+-- ==========================
+-- TAB CONFIGURAÇÕES
+-- ==========================
+
+ConfigTab:AddParagraph({
+    Title = "Sistema de Salvamento",
+    Content = "Suas configurações são salvas automaticamente em um arquivo. Ao recarregar o script, tudo será restaurado!"
+})
+
+ConfigTab:AddButton({
+    Title = "🔄 Recarregar Configurações",
+    Description = "Recarrega as configs do arquivo",
+    Callback = function()
+        local loaded = ConfigSystem.LoadConfig()
+        for k, v in pairs(loaded) do
+            ConfigSystem.CurrentConfig[k] = v
+        end
+        
+        -- Atualiza variáveis locais
+        labyrinthEnabled = ConfigSystem.CurrentConfig.LabyrinthToggle
+        teleportEnabled = ConfigSystem.CurrentConfig.LabyrinthTeleport
+        speedEnabled = ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled
+        speedValue = ConfigSystem.CurrentConfig.LabyrinthSpeed
+        
+        Fluent:Notify({ 
+            Title = "Config", 
+            Content = "Configurações recarregadas!", 
+            Duration = 3 
+        })
+    end
+})
+
+ConfigTab:AddButton({
+    Title = "🗑️ Resetar para Padrão",
+    Description = "Restaura todas as configurações padrão",
+    Callback = function()
+        ConfigSystem.ResetConfig()
+        
+        -- Atualiza variáveis locais
+        labyrinthEnabled = false
+        teleportEnabled = false
+        speedEnabled = false
+        speedValue = 2
+        
+        stopDesafio()
+        stopAutoSpeedLoop()
+        
+        Fluent:Notify({ 
+            Title = "Config", 
+            Content = "Configurações resetadas! Recarregue o script.", 
+            Duration = 4 
+        })
+    end
+})
+
+ConfigTab:AddButton({
+    Title = "📋 Ver Configurações Atuais",
+    Description = "Mostra no console as configs salvas",
+    Callback = function()
+        print("=== CONFIGURAÇÕES ATUAIS ===")
+        for k, v in pairs(ConfigSystem.CurrentConfig) do
+            print(k, "=", v)
+        end
+        print("============================")
+        
+        Fluent:Notify({ 
+            Title = "Config", 
+            Content = "Verifique o console (F9)", 
+            Duration = 3 
+        })
+    end
+})
+
+-- Informação sobre o arquivo
+ConfigTab:AddParagraph({
+    Title = "Informação Técnica",
+    Content = "Arquivo: " .. CONFIG_FILE .. "\nLocalização: workspace folder do executor"
 })
 
 Window:SelectTab(1)
@@ -364,17 +528,26 @@ Window:SelectTab(1)
 -- ==========================
 -- Inicialização (aplica salvados)
 -- ==========================
--- Se já estava habilitado ao carregar, tenta iniciar/reativar sem recriar se já dentro
+-- Aguarda um pouco para garantir que tudo está carregado
+task.wait(0.5)
+
 if labyrinthEnabled then
     iniciarDesafio()
 end
+
 if teleportEnabled and isInLabyrinth() then
     teleportToArena()
 end
+
 if speedEnabled then
-    -- reaplica speed se já dentro e inicia loop
-    if isInLabyrinth() then sendSpeed(speedValue) end
+    if isInLabyrinth() then 
+        sendSpeed(speedValue) 
+    end
     startAutoSpeedLoop()
 end
 
-Fluent:Notify({ Title = "Allan Hub", Content = "Configurações carregadas.", Duration = 3 })
+Fluent:Notify({ 
+    Title = "Allan Hub", 
+    Content = "✅ Configurações carregadas com sucesso!", 
+    Duration = 4 
+})
