@@ -485,33 +485,20 @@ local Tabs = {
 -- Cria aba Hallowin igual às outras
 Tabs.hallowin = Window:AddTab({ Title = "Hallowin", Icon = "" })
 
--- Serviços
+-- Referências seguras
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local BridgeNet2 = ReplicatedStorage:WaitForChild("BridgeNet2")
 local DataRemoteEvent = BridgeNet2:WaitForChild("dataRemoteEvent")
 
--- Constantes
+-- Constantes do evento/dungeon
 local EVENT_NAME = "InfiniteLabyrinthAction"
 local DUNGEON_ID = 7368292297
-local CHANNEL = "\14"
+local CHANNEL = "\14" -- use sem barra dupla
 
-local player = Players.LocalPlayer
-
--- Função para verificar se está dentro da dungeon
-local function isInsideDungeon()
-    local char = player.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    -- Exemplo: dungeon fica em Y > 4000
-    return hrp.Position.Y > 4000
-end
-
--- Função criar e iniciar dungeon
-local function createAndStartDungeon()
+-- Função criar Hallowin (Create -> Start)
+local function createAndStartHallowin()
     -- Create
     local createPayload = {
         {
@@ -519,11 +506,13 @@ local function createAndStartDungeon()
             CHANNEL
         }
     }
+    -- Envie a tabela inteira (sem unpack)
     DataRemoteEvent:FireServer(createPayload)
 
+    -- Pequena espera para o lado do servidor processar
     task.wait(0.75)
 
-    -- Start
+    -- Start com Dungeon ID
     local startPayload = {
         {
             { Dungeon = DUNGEON_ID, Event = EVENT_NAME, Action = "Start" },
@@ -533,44 +522,30 @@ local function createAndStartDungeon()
     DataRemoteEvent:FireServer(startPayload)
 end
 
--- Teleportar para o meio da dungeon
+-- Teleportar para o meio
 local function teleportToHallowin()
+    local player = Players.LocalPlayer
+    if not player then return end
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     hrp.CFrame = CFrame.new(587.60, 4325.71, -1871.29)
 end
 
--- Controle do auto modo
-local autoEnabled = false
-local autoThread
+-- Estado do auto modo
+local autoHallowinEnabled = false
+local autoThread = nil
 
+-- Loop do auto modo
 local function autoLoop()
-    while autoEnabled do
-        if not isInsideDungeon() then
-            pcall(createAndStartDungeon)
-        else
-            -- Se já estiver dentro, teleporta para o meio
-            pcall(teleportToHallowin)
-        end
-        task.wait(5) -- intervalo entre tentativas
+    while autoHallowinEnabled do
+        -- Tenta criar e iniciar
+        pcall(createAndStartHallowin)
+        -- Intervalo entre tentativas para evitar spam
+        task.wait(3)
     end
 end
 
--- UI
-Tabs.hallowin:AddToggle({
-    Title = "Auto Entrar Dungeon",
-    Description = "Cria/Inicia a dungeon automaticamente e teleporta para o meio",
-    Default = false,
-    Callback = function(state)
-        autoEnabled = state
-        if autoEnabled and (not autoThread or coroutine.status(autoThread) == "dead") then
-            autoThread = coroutine.create(autoLoop)
-            coroutine.resume(autoThread)
-        end
-    end
-})
-
--- Botão manual de teleporte
+-- Botões / Toggle Hallowin
 Tabs.hallowin:AddButton({
     Title = "Teleportar para o meio",
     Description = "Teleporta para o centro do evento Hallowin",
@@ -579,12 +554,53 @@ Tabs.hallowin:AddButton({
     end
 })
 
--- Botão manual de criar/iniciar
+-- Se seu sistema de UI tiver AddToggle, prefira usar isso:
+--[[
+Tabs.hallowin:AddToggle({
+    Title = "Auto Hallowin (Criar e iniciar)",
+    Description = "Mantém o evento sendo criado/iniciado automaticamente",
+    Default = false,
+    Callback = function(state)
+        autoHallowinEnabled = state
+        if autoHallowinEnabled and (not autoThread or coroutine.status(autoThread) == "dead") then
+            autoThread = coroutine.create(autoLoop)
+            coroutine.resume(autoThread)
+        end
+    end
+})
+]]
+
+-- Caso sua UI não tenha AddToggle, podemos emular com um botão que liga/desliga:
+Tabs.hallowin:AddButton({
+    Title = "Auto Hallowin: Desligado",
+    Description = "Clique para alternar o modo automático de criar/iniciar",
+    Callback = function(self) -- alguns frameworks passam o botão; se não passar, ignore 'self'
+        autoHallowinEnabled = not autoHallowinEnabled
+
+        -- Atualiza o título (se o seu framework suportar setTitle; se não, remova esta parte)
+        local newTitle = autoHallowinEnabled and "Auto Hallowin: Ligado" or "Auto Hallowin: Desligado"
+        if self and type(self.SetTitle) == "function" then
+            self:SetTitle(newTitle)
+        end
+
+        if autoHallowinEnabled then
+            if not autoThread or coroutine.status(autoThread) == "dead" then
+                autoThread = coroutine.create(autoLoop)
+                coroutine.resume(autoThread)
+            end
+        else
+            -- Desliga o loop na próxima checagem
+            -- (o while vai sair automaticamente quando autoHallowinEnabled = false)
+        end
+    end
+})
+
+-- Se você quiser manter também um botão manual (além do auto), aqui está:
 Tabs.hallowin:AddButton({
     Title = "Criar e iniciar Hallowin (manual)",
     Description = "Executa uma vez a criação e início do evento",
     Callback = function()
-        pcall(createAndStartDungeon)
+        pcall(createAndStartHallowin)
     end
 })
 -- Tạo mapping giữa các map và danh sách mob tương ứng
@@ -2268,7 +2284,7 @@ local function createDungeon()
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Create"
             },
-            [2] = "\12"
+            [2] = "\14"
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
@@ -2281,7 +2297,7 @@ local function createDungeon()
                 ["Event"] = "DungeonAction",
                 ["Action"] = "Start"
             },
-            [2] = "\12"
+            [2] = "\14"
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
@@ -2291,7 +2307,7 @@ local function leaveDungeon()
         local args = {
         [1] = {
             [1] = { ["Event"] = "LeaveDungeon" },
-            [2] = "\12"
+            [2] = "\14"
         }
     }
     pcall(function()
@@ -2680,7 +2696,7 @@ local function buyCastleTicket()
                 ["Event"] = "CastleAction",
                 ["Action"] = "BuyTicket"
             },
-            [2] = "\13"
+            [2] = "\14"
         }
     }
     pcall(function() 
@@ -2699,7 +2715,7 @@ local function joinCastle(floor)
                 ["Event"] = "CastleAction",
                 ["Action"] = "Join"
             },
-            [2] = "\13"
+            [2] = "\14"
         }
     }
     pcall(function() 
@@ -2715,7 +2731,7 @@ local function createCastle()
                 ["Event"] = "CastleAction",
                 ["Action"] = "Create"
             },
-            [2] = "\13"
+            [2] = "\14"
         }
     }
     pcall(function() 
