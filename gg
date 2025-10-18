@@ -3596,35 +3596,70 @@ local Players = game:GetService("Players")
 local BridgeNet2 = ReplicatedStorage:WaitForChild("BridgeNet2")
 local DataRemoteEvent = BridgeNet2:WaitForChild("dataRemoteEvent")
 
+-- Evita "Remote event invocation discarded" (listener vazio para qualquer retorno do servidor)
+if not DataRemoteEvent._AllanHubListener then
+    DataRemoteEvent._AllanHubListener = true
+    DataRemoteEvent.OnClientEvent:Connect(function(...)
+        -- Opcional: print("dataRemoteEvent ->", ...)
+        -- Mantém um listener para não descartar eventos enviados do servidor
+    end)
+end
+
 -- Constantes
 local EVENT_NAME = "InfiniteLabyrinthAction"
 local DUNGEON_ID = 7368292297
 local CHANNEL = "\14"
 
--- Nome esperado da dungeon (o mesmo que aparece no Create)
-local EXPECTED_DUNGEON_NAME = "InfiniteLabyrinth" -- ajuste conforme o nome real que aparece no workspace.__Main.__Dungeon
+-- Nome esperado da dungeon no workspace (__Main/__Dungeon)
+-- Ajuste este nome para exatamente o que aparece quando a criação é feita.
+local EXPECTED_DUNGEON_NAME = "InfiniteLabyrinth"
 
 local player = Players.LocalPlayer
 
--- Função para verificar se está dentro da dungeon correta
-local function isInsideDungeon()
-    local dungeonFolder = workspace:FindFirstChild("__Main"):FindFirstChild("__Dungeon")
-    if dungeonFolder then
-        -- Verifica pelo nome da pasta
-        if string.lower(dungeonFolder.Name) == string.lower(EXPECTED_DUNGEON_NAME) then
-            return true
-        end
-        -- Caso o jogo use atributo em vez do Name
-        local attr = dungeonFolder:GetAttribute("DungeonName")
-        if attr and string.lower(attr) == string.lower(EXPECTED_DUNGEON_NAME) then
-            return true
-        end
+-- Espera segura de estruturas do mundo (evita nil no handler do jogo)
+local function waitWorldRoots(timeout)
+    local t0 = tick()
+    while not workspace:FindFirstChild("__Main") do
+        task.wait(0.1)
+        if timeout and (tick() - t0) > timeout then return false end
     end
+    local main = workspace:FindFirstChild("__Main")
+    while not main:FindFirstChild("__Dungeon") do
+        task.wait(0.1)
+        if timeout and (tick() - t0) > timeout then return false end
+    end
+    return true
+end
+
+-- Verifica pelo nome da criação no __Dungeon
+local function isInsideDungeon()
+    local main = workspace:FindFirstChild("__Main")
+    if not main then return false end
+    local dungeonFolder = main:FindFirstChild("__Dungeon")
+    if not dungeonFolder then return false end
+
+    -- Checa pelo Name
+    if dungeonFolder.Name and string.lower(dungeonFolder.Name) == string.lower(EXPECTED_DUNGEON_NAME) then
+        return true
+    end
+    -- Ou pelo atributo/valor opcional
+    local attrName = dungeonFolder:GetAttribute("DungeonName")
+    if attrName and string.lower(attrName) == string.lower(EXPECTED_DUNGEON_NAME) then
+        return true
+    end
+    local strVal = dungeonFolder:FindFirstChild("DungeonName")
+    if strVal and strVal:IsA("StringValue") and string.lower(strVal.Value) == string.lower(EXPECTED_DUNGEON_NAME) then
+        return true
+    end
+
     return false
 end
 
--- Função criar e iniciar dungeon
+-- Create + Start com proteções
 local function createAndStartDungeon()
+    -- Garantir que temos o remote
+    if not DataRemoteEvent then return end
+
     -- Create
     local createPayload = {
         {
@@ -3634,6 +3669,8 @@ local function createAndStartDungeon()
     }
     DataRemoteEvent:FireServer(createPayload)
 
+    -- Aguarda structures começarem a existir antes de tentar Start
+    waitWorldRoots(3)
     task.wait(0.75)
 
     -- Start
@@ -3653,19 +3690,21 @@ local function teleportToHallowin()
     hrp.CFrame = CFrame.new(587.60, 4325.71, -1871.29)
 end
 
--- Controle do auto modo
+-- Loop automático
 local autoEnabled = false
 local autoThread
 
 local function autoLoop()
     while autoEnabled do
+        -- Evita tentar startar antes da estrutura do mundo estar pronta
+        waitWorldRoots(5)
+
         if not isInsideDungeon() then
             pcall(createAndStartDungeon)
         else
-            -- Se já estiver dentro, teleporta para o meio
             pcall(teleportToHallowin)
         end
-        task.wait(5) -- intervalo entre tentativas
+        task.wait(5)
     end
 end
 
@@ -3674,7 +3713,6 @@ end
 -- =========================
 local Hallowen = Window:AddTab({ Title = "Hallowen", Icon = "ghost" })
 
--- Toggle automático
 Hallowen:AddToggle({
     Title = "Auto Entrar Dungeon",
     Description = "Cria/Inicia a dungeon automaticamente e teleporta para o meio",
@@ -3688,7 +3726,6 @@ Hallowen:AddToggle({
     end
 })
 
--- Botão manual de teleporte
 Hallowen:AddButton({
     Title = "Teleportar para o meio",
     Description = "Teleporta para o centro do evento Hallowin",
@@ -3697,7 +3734,6 @@ Hallowen:AddButton({
     end
 })
 
--- Botão manual de criar/iniciar
 Hallowen:AddButton({
     Title = "Criar e iniciar Hallowin (manual)",
     Description = "Executa uma vez a criação e início do evento",
