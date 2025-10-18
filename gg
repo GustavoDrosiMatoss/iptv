@@ -3590,42 +3590,31 @@ Tabs.tp:AddButton({
 
 
 
-
 -- ==========================
--- 🎃 ABA HALLOWEEN (usa as mesmas funções do Labyrinth)
+-- ABA HALLOWEEN (INFINITE LABYRINTH)
 -- ==========================
 do
-    -- Tornar funções originais acessíveis globalmente
-    getgenv().iniciarDesafio = iniciarDesafio
-    getgenv().stopDesafio = stopDesafio
-    getgenv().teleportToArena = teleportToArena
-    getgenv().isInLabyrinth = isInLabyrinth
-    getgenv().sendSpeed = sendSpeed
-    getgenv().startAutoSpeedLoop = startAutoSpeedLoop
-    getgenv().stopAutoSpeedLoop = stopAutoSpeedLoop
-    getgenv().SaveConfig = SaveConfig
+    local Tab = Window:AddTab({ Title = "Halloween", Icon = "Sword" })
 
-    local Tab = Window:AddTab({ Title = "Halloween", Icon = "Ghost" })
-
-    -- Toggle principal
-    Tab:AddToggle("LabyrinthToggle_Halloween", {
-        Title = "Ativar Evento Infinite Labyrinth (Halloween)",
+    -- Evento toggle
+    Tab:AddToggle("LabyrinthToggle", {
+        Title = "Ativar Evento Infinite Labyrinth",
         Default = ConfigSystem.CurrentConfig.LabyrinthToggle,
         Callback = function(value)
             ConfigSystem.CurrentConfig.LabyrinthToggle = value
             SaveConfig()
             if value then
                 iniciarDesafio()
-                Fluent:Notify({ Title = "Halloween", Content = "Tentando iniciar evento...", Duration = 3 })
+                Fluent:Notify({ Title = "Labyrinth", Content = "Tentando iniciar evento...", Duration = 3 })
             else
-                stopDesafio()
-                Fluent:Notify({ Title = "Halloween", Content = "Evento desativado.", Duration = 3 })
+                labyrinthSessionActive = false
+                Fluent:Notify({ Title = "Labyrinth", Content = "Evento desativado.", Duration = 3 })
             end
         end
     })
 
     -- Teleporte toggle
-    Tab:AddToggle("LabyrinthTeleport_Halloween", {
+    Tab:AddToggle("LabyrinthTeleport", {
         Title = "Teleporte para o centro da arena",
         Default = ConfigSystem.CurrentConfig.LabyrinthTeleport,
         Callback = function(value)
@@ -3633,70 +3622,66 @@ do
             SaveConfig()
             if value then
                 if isInLabyrinth() then teleportToArena() end
-                Fluent:Notify({ Title = "Halloween", Content = "Teleporte ativado.", Duration = 3 })
+                Fluent:Notify({ Title = "Teleport", Content = "Teleporte ativado.", Duration = 3 })
             else
-                Fluent:Notify({ Title = "Halloween", Content = "Teleporte desativado.", Duration = 3 })
+                Fluent:Notify({ Title = "Teleport", Content = "Teleporte desativado.", Duration = 3 })
             end
         end
     })
 
     -- Speed enable toggle
-    Tab:AddToggle("LabyrinthSpeedEnable_Halloween", {
+    Tab:AddToggle("LabyrinthSpeedEnable", {
         Title = "Ativar Modo Velocidade (reaplica a cada 10s)",
         Default = ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled,
         Callback = function(value)
             ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled = value
             SaveConfig()
             if value then
-                if isInLabyrinth() then sendSpeed(ConfigSystem.CurrentConfig.LabyrinthSpeed or 2) end
+                if isInLabyrinth() then sendSpeed(ConfigSystem.CurrentConfig.LabyrinthSpeed) end
                 startAutoSpeedLoop()
-                Fluent:Notify({ Title = "Halloween", Content = "Modo velocidade ativado.", Duration = 3 })
+                Fluent:Notify({ Title = "Speed", Content = "Modo velocidade ativado.", Duration = 3 })
             else
                 stopAutoSpeedLoop()
-                Fluent:Notify({ Title = "Halloween", Content = "Modo velocidade desativado.", Duration = 3 })
+                Fluent:Notify({ Title = "Speed", Content = "Modo velocidade desativado.", Duration = 3 })
             end
         end
     })
 
     -- Dropdown velocidade
-    Tab:AddDropdown("LabyrinthSpeedDropdown_Halloween", {
+    Tab:AddDropdown("LabyrinthSpeedDropdown", {
         Title = "Velocidade",
-        Values = {"1x","2x","3x"},
-        Default = tostring(ConfigSystem.CurrentConfig.LabyrinthSpeed or 2).."x",
+        Values = {"1x", "2x", "3x"},
+        Default = tostring(ConfigSystem.CurrentConfig.LabyrinthSpeed) .. "x",
         Multi = false,
         Callback = function(value)
             local n = tonumber(value:sub(1,1))
             if n then
                 ConfigSystem.CurrentConfig.LabyrinthSpeed = n
                 SaveConfig()
-                Fluent:Notify({ Title = "Halloween", Content = "Velocidade salva: "..n.."x", Duration = 2 })
                 if ConfigSystem.CurrentConfig.LabyrinthSpeedEnabled and isInLabyrinth() then
                     sendSpeed(n)
                 end
+                Fluent:Notify({ Title = "Speed", Content = "Velocidade salva: " .. n .. "x", Duration = 2 })
             end
         end
     })
 
-    -- Debug
+    -- Debug button
     Tab:AddButton({
         Title = "Checar status (debug)",
         Callback = function()
             local inside = isInLabyrinth()
-            Fluent:Notify({
-                Title = "Halloween",
-                Content = inside and "DENTRO do Labirinto" or "FORA do Labirinto",
-                Duration = 4
-            })
+            Fluent:Notify({ Title = "Debug", Content = inside and "DENTRO do Labirinto" or "FORA do Labirinto", Duration = 4 })
         end
     })
 
-    -- Reset
+    -- Reset state button
     Tab:AddButton({
-        Title = "Resetar estado (Halloween)",
+        Title = "Resetar estado",
         Callback = function()
             labyrinthSessionActive = false
             stopAutoSpeedLoop()
-            Fluent:Notify({ Title = "Halloween", Content = "Estado reiniciado.", Duration = 3 })
+            Fluent:Notify({ Title = "Reset", Content = "Estado reiniciado.", Duration = 3 })
         end
     })
 end
