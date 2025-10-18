@@ -3593,13 +3593,14 @@ Tabs.tp:AddButton({
 
 
 -- ==========================
--- Halloween (Infinite Labyrinth) - Integrado por ChatGPT
+-- Halloween (Infinite Labyrinth) - Versão Corrigida para Delta
 -- ==========================
 do
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local remote = ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
     local player = game.Players.LocalPlayer
 
+    -- Configuração padrão
     ConfigSystem.DefaultConfig.LabyrinthToggle = ConfigSystem.DefaultConfig.LabyrinthToggle or false
     ConfigSystem.DefaultConfig.LabyrinthTeleport = ConfigSystem.DefaultConfig.LabyrinthTeleport or false
     ConfigSystem.DefaultConfig.LabyrinthSpeed = ConfigSystem.DefaultConfig.LabyrinthSpeed or 2
@@ -3769,7 +3770,6 @@ do
         end
     end
 
-    -- UI Integration (Fluent)
     if Tabs and Tabs.Halloween then
         local Tab = Tabs.Halloween
 
