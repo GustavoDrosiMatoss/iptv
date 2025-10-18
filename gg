@@ -466,72 +466,7 @@ local Window = Fluent:CreateWindow({
     Theme = "Luffy",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
-local 
-    hallowin = Window:AddTab({ Title = "Hallowin", Icon = "" }),
-}
-
--- ==========================
--- ABA HALLOWIN
--- ==========================
-
--- Função criar Hallowin
-local function createHallowin()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "InfiniteLabyrinthAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    task.wait(3)
-    -- Após criar, já inicia automaticamente
-    local startArgs = {
-        [1] = {
-            [1] = {
-                ["Dungeon"] = 7368292297,
-                ["Event"] = "InfiniteLabyrinthAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
-end
-
--- Função teleportar para o meio
-local function teleportToHallowin()
-    local hrp = game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
-    hrp.CFrame = CFrame.new(587.60, 4325.71, -1871.29)
-end
-
--- Botão para criar e iniciar Hallowin
-Tabs.hallowin:AddButton({
-    Title = "Criar Hallowin",
-    Description = "Cria e inicia o evento Hallowin",
-    Callback = function()
-        createHallowin()
-    end
-})
-
--- Botão para teleportar para o meio
-Tabs.hallowin:AddButton({
-    Title = "Teleportar para o meio",
-    Description = "Teleporta para o centro do evento Hallowin",
-    Callback = function()
-        teleportToHallowin()
-    end
-})
-
--- ==========================
--- FIM ABA HALLOWIN
--- ==========================
-
--- Recriação da tabela Tabs (continuação)
-Tabs = {
-
+local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
     dungeon = Window:AddTab({ Title = "Dungeon ", Icon = "" }),
     desert = Window:AddTab({ Title = "Deserto Infinito", Icon = "" }),
@@ -543,6 +478,65 @@ Tabs = {
 }
 
 
+
+-- ==========================
+-- ABA HALLOWIN
+-- ==========================
+-- Cria aba Hallowin igual às outras
+Tabs.hallowin = Window:AddTab({ Title = "Hallowin", Icon = "" })
+
+-- Função criar Hallowin
+local function createHallowin()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Event"] = "InfiniteLabyrinthAction",
+                ["Action"] = "Create"
+            },
+            [2] = "\\14"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    task.wait(1)
+    -- Tenta iniciar usando o dungeon ID fornecido
+    local startArgs = {
+        [1] = {
+            [1] = {
+                ["Dungeon"] = 7368292297,
+                ["Event"] = "InfiniteLabyrinthAction",
+                ["Action"] = "Start"
+            },
+            [2] = "\\14"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(startArgs))
+end
+
+-- Função teleportar para o meio
+local function teleportToHallowin()
+    local player = game.Players.LocalPlayer
+    if not player then return end
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    hrp.CFrame = CFrame.new(587.60, 4325.71, -1871.29)
+end
+
+-- Botões Hallowin
+Tabs.hallowin:AddButton({
+    Title = "Criar Hallowin",
+    Description = "Cria e inicia o evento Hallowin",
+    Callback = function()
+        pcall(createHallowin)
+    end
+})
+
+Tabs.hallowin:AddButton({
+    Title = "Teleportar para o meio",
+    Description = "Teleporta para o centro do evento Hallowin",
+    Callback = function()
+        pcall(teleportToHallowin)
+    end
+})
 -- Tạo mapping giữa các map và danh sách mob tương ứng
 local mobsByWorld = {
     ["SoloWorld"] = {"Soondoo", "Gonshee", "Daek", "Longin", "Anders", "Largalgan"},
