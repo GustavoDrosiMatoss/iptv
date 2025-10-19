@@ -2266,117 +2266,120 @@ end
 -- Funções auxiliares compartilhadas
 -- ==========================
 local function createDungeon()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Create"
-            },
-            [2] = "\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    task.wait(1.5)
+local args = {
+[1] = {
+[1] = {
+["Event"] = "DungeonAction",
+["Action"] = "Create"
+},
+[2] = "\14"
+}
+}
+game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+task.wait(3)
 
-    -- Iniciar a dungeon
-    local iniciarArgs = {
-        [1] = {
-            [1] = {
-                ["Event"] = "DungeonAction",
-                ["Action"] = "Start"
-            },
-            [2] = "\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
+-- Iniciar a dungeon  
+local iniciarArgs = {  
+    [1] = {  
+        [1] = {  
+            ["Event"] = "DungeonAction",  
+            ["Action"] = "Start"  
+        },  
+        [2] = "\14"  
+    }  
+}  
+game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
+
 end
 
 local function buyDungeonTicket()
-    local args = {
-        [1] = {
-            [1] = {
-                ["Type"] = "Gems",
-                ["Event"] = "DungeonAction",
-                ["Action"] = "BuyTicket"
-            },
-            [2] = "\14"
-        }
-    }
-    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    task.wait(1.5)
+local args = {
+[1] = {
+[1] = {
+["Type"] = "Gems",
+["Event"] = "DungeonAction",
+["Action"] = "BuyTicket"
+},
+[2] = "\14"
+}
+}
+game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+task.wait(2)
 end
 
 local function leaveDungeon()
-    local args = {
-        [1] = {
-            [1] = { ["Event"] = "LeaveDungeon" },
-            [2] = "\14"
-        }
-    }
-    pcall(function()
-        game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-    end)
+local args = {
+[1] = {
+[1] = { ["Event"] = "LeaveDungeon" },
+[2] = "\14"
+}
+}
+pcall(function()
+game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+end)
 end
 
 local function getDistance(pos1, pos2)
-    return (pos1 - pos2).Magnitude
+return (pos1 - pos2).Magnitude
 end
 
 local function getClosestEnemy()
-    local enemiesFolder = workspace.__Main.__Enemies.Server
-    local closestEnemy = nil
-    local closestDistance = math.huge
-    local player = game.Players.LocalPlayer
-    local playerCharacter = player.Character
+local enemiesFolder = workspace.__Main.__Enemies.Server
+local closestEnemy = nil
+local closestDistance = math.huge
+local player = game.Players.LocalPlayer
+local playerCharacter = player.Character
 
-    if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") then 
-        return nil 
-    end
-    local playerPosition = playerCharacter.HumanoidRootPart.Position
+if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") then   
+    return nil   
+end  
+local playerPosition = playerCharacter.HumanoidRootPart.Position  
 
-    for _, enemy in pairs(enemiesFolder:GetChildren()) do
-        local hp = enemy:GetAttribute("HP")
-        if hp and hp > 0 and enemy.Position then
-            local distance = getDistance(playerPosition, enemy.Position)
-            if distance < closestDistance then
-                closestDistance = distance
-                closestEnemy = enemy
-            end
-        end
-    end
+for _, enemy in pairs(enemiesFolder:GetChildren()) do  
+    local hp = enemy:GetAttribute("HP")  
+    if hp and hp > 0 and enemy.Position then  
+        local distance = getDistance(playerPosition, enemy.Position)  
+        if distance < closestDistance then  
+            closestDistance = distance  
+            closestEnemy = enemy  
+        end  
+    end  
+end  
 
-    return closestEnemy
+return closestEnemy
+
 end
 
 local function moveToEnemy(enemy, currentTween)
-    local tweenService = game:GetService("TweenService")
-    local player = game.Players.LocalPlayer
-    local playerCharacter = player.Character
-    if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") or not enemy.Position then
-        return false, currentTween
-    end
+local tweenService = game:GetService("TweenService")
+local player = game.Players.LocalPlayer
+local playerCharacter = player.Character
+if not playerCharacter or not playerCharacter:FindFirstChild("HumanoidRootPart") or not enemy.Position then
+return false, currentTween
+end
 
-    if currentTween then
-        currentTween:Cancel()
-    end
+if currentTween then  
+    currentTween:Cancel()  
+end  
 
-    playerCharacter.PrimaryPart = playerCharacter.HumanoidRootPart
-    playerCharacter.HumanoidRootPart.Anchored = false
+playerCharacter.PrimaryPart = playerCharacter.HumanoidRootPart  
+playerCharacter.HumanoidRootPart.Anchored = false  
 
-    local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-    currentTween = tweenService:Create(playerCharacter.PrimaryPart, tweenInfo, {CFrame = enemy.CFrame})
-    currentTween:Play()
+local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)  
+currentTween = tweenService:Create(playerCharacter.PrimaryPart, tweenInfo, {CFrame = enemy.CFrame})  
+currentTween:Play()  
 
-    task.spawn(function()
-        currentTween.Completed:Wait()
-        currentTween = nil
-    end)
+task.spawn(function()  
+    currentTween.Completed:Wait()  
+    currentTween = nil  
+end)  
 
-    return true, currentTween
+return true, currentTween
+
 end
 
 -- ==========================
--- SISTEMA 1: Auto Farm Dungeon INF (mantém horário, recriação mais rápida)
+-- SISTEMA 1: Auto Farm Dungeon INF (agora com recriação automática)
 -- ==========================
 ConfigSystem.DefaultConfig.AutoFarmDungeonINF = ConfigSystem.DefaultConfig.AutoFarmDungeonINF or false
 ConfigSystem.CurrentConfig.AutoFarmDungeonINF = ConfigSystem.CurrentConfig.AutoFarmDungeonINF or ConfigSystem.DefaultConfig.AutoFarmDungeonINF
@@ -2384,68 +2387,72 @@ ConfigSystem.CurrentConfig.AutoFarmDungeonINF = ConfigSystem.CurrentConfig.AutoF
 local teleportINFEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonINF
 local currentTweenINF = nil
 local lastEnemyCheckINF = tick()
-local maxTimeWithoutEnemiesINF = 4
+local maxTimeWithoutEnemiesINF = 5
 
 local function monitorEnemiesINF()
-    while teleportINFEnabled do
-        pcall(function()
-            local hora = os.date("*t")
-            local minuto = hora.min
+while teleportINFEnabled do
+pcall(function()
+local hora = os.date("*t")
+local minuto = hora.min
 
-            -- Mantém controle de horário do Castle Infernal
-            if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
-                leaveDungeon()
-                task.wait(60)
-            else
-                if not workspace:FindFirstChild("__Main") then
-                    createDungeon()
-                    task.wait(2)
-                else
-                    local closestEnemy = getClosestEnemy()
-                    local currentTime = tick()
+-- Sai durante horário do Castle Infernal  
+        if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then  
+            leaveDungeon()  
+            task.wait(60)  
+        else  
+            if not workspace:FindFirstChild("__Main") then  
+                -- Cria e inicia se estiver fora  
+                createDungeon()  
+                task.wait(5)  
+            else  
+                local closestEnemy = getClosestEnemy()  
+                local currentTime = tick()  
 
-                    if closestEnemy then
-                        lastEnemyCheckINF = currentTime
+                if closestEnemy then  
+                    lastEnemyCheckINF = currentTime  
 
-                        local success
-                        success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)
+                    local success  
+                    success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)  
 
-                        if success then
-                            local attempts = 0
-                            while teleportINFEnabled 
-                                  and closestEnemy.Parent 
-                                  and closestEnemy:GetAttribute("HP") 
-                                  and closestEnemy:GetAttribute("HP") > 0 
-                                  and attempts < 100 do
-                                task.wait(0.05)
-                                attempts += 1
-                            end
-                        end
-                    else
-                        local timeWithoutEnemies = currentTime - lastEnemyCheckINF
+                    if success then  
+                        local attempts = 0  
+                        while teleportINFEnabled   
+                              and closestEnemy.Parent   
+                              and closestEnemy:GetAttribute("HP")   
+                              and closestEnemy:GetAttribute("HP") > 0   
+                              and attempts < 100 do  
+                            task.wait(0.1)  
+                            attempts += 1  
+                        end  
+                    end  
+                else  
+                    local timeWithoutEnemies = currentTime - lastEnemyCheckINF  
 
-                        if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
-                            buyDungeonTicket()
-                            createDungeon()
-                            task.wait(2)
-                        else
-                            task.wait(0.5)
-                        end
-                    end
-                end
-            end
-        end)
-        task.wait(0.05)
-    end
+                    if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then  
+                        -- ⚙️ Nenhum inimigo → Comprar ticket e recriar dungeon  
+                        buyDungeonTicket()  
+                        createDungeon()  
+                        task.wait(5)  
+                    else  
+                        task.wait(1)  
+                    end  
+                end  
+            end  
+        end  
+    end)  
 
-    if currentTweenINF then
-        currentTweenINF:Cancel()
-        currentTweenINF = nil
-    end
+    task.wait(0.1)  
+end  
+
+if currentTweenINF then  
+    currentTweenINF:Cancel()  
+    currentTweenINF = nil  
+end
+
 end
 
 -- ==========================
--- SISTEMA 2: Auto Farm Dungeon (sem horário, recriação mais rápida)
+-- SISTEMA 2: Auto Farm Dungeon (Recriação normal)
 -- ==========================
 ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate = ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate or false
 ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate or ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate
@@ -2453,105 +2460,118 @@ ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = ConfigSystem.CurrentConfig.
 local teleportRecreateEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate
 local currentTweenRecreate = nil
 local lastEnemyCheckRecreate = tick()
-local maxTimeWithoutEnemiesRecreate = 4
+local maxTimeWithoutEnemiesRecreate = 5
 
 local function recreateDungeon()
-    if currentTweenRecreate then
-        currentTweenRecreate:Cancel()
-        currentTweenRecreate = nil
-    end
-    createDungeon()
-    lastEnemyCheckRecreate = tick()
-    task.wait(2)
+if currentTweenRecreate then
+currentTweenRecreate:Cancel()
+currentTweenRecreate = nil
+end
+
+createDungeon()  
+lastEnemyCheckRecreate = tick()  
+task.wait(5)
+
 end
 
 local function monitorEnemiesRecreate()
-    while teleportRecreateEnabled do
-        pcall(function()
-            -- ⚙️ Sem verificação de horário aqui
-            if not workspace:FindFirstChild("__Main") then
-                createDungeon()
-                task.wait(2)
-            end
+while teleportRecreateEnabled do
+pcall(function()
+local hora = os.date("*t")
+local minuto = hora.min
 
-            local closestEnemy = getClosestEnemy()
-            local currentTime = tick()
+if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then  
+            leaveDungeon()  
+            task.wait(60)  
+        else  
+            if not workspace:FindFirstChild("__Main") then  
+                createDungeon()  
+                task.wait(5)  
+            end  
 
-            if closestEnemy then
-                lastEnemyCheckRecreate = currentTime
-                local success
-                success, currentTweenRecreate = moveToEnemy(closestEnemy, currentTweenRecreate)
+            local closestEnemy = getClosestEnemy()  
+            local currentTime = tick()  
 
-                if success then
-                    local attempts = 0
-                    while teleportRecreateEnabled 
-                          and closestEnemy.Parent 
-                          and closestEnemy:GetAttribute("HP") 
-                          and closestEnemy:GetAttribute("HP") > 0 
-                          and attempts < 100 do
-                        task.wait(0.05)
-                        attempts += 1
-                    end
-                end
-            else
-                local timeWithoutEnemies = currentTime - lastEnemyCheckRecreate
-                if timeWithoutEnemies >= maxTimeWithoutEnemiesRecreate then
-                    recreateDungeon()
-                else
-                    task.wait(0.5)
-                end
-            end
-        end)
-        task.wait(0.05)
-    end
+            if closestEnemy then  
+                lastEnemyCheckRecreate = currentTime  
+                local success  
+                success, currentTweenRecreate = moveToEnemy(closestEnemy, currentTweenRecreate)  
 
-    if currentTweenRecreate then
-        currentTweenRecreate:Cancel()
-        currentTweenRecreate = nil
-    end
+                if success then  
+                    local attempts = 0  
+                    while teleportRecreateEnabled   
+                          and closestEnemy.Parent   
+                          and closestEnemy:GetAttribute("HP")   
+                          and closestEnemy:GetAttribute("HP") > 0   
+                          and attempts < 100 do  
+                        task.wait(0.1)  
+                        attempts += 1  
+                    end  
+                end  
+            else  
+                local timeWithoutEnemies = currentTime - lastEnemyCheckRecreate  
+                if timeWithoutEnemies >= maxTimeWithoutEnemiesRecreate then  
+                    recreateDungeon()  
+                else  
+                    task.wait(1)  
+                end  
+            end  
+        end  
+    end)  
+    task.wait(0.1)  
+end  
+
+if currentTweenRecreate then  
+    currentTweenRecreate:Cancel()  
+    currentTweenRecreate = nil  
+end
+
 end
 
 -- ==========================
 -- Toggles
 -- ==========================
-Tabs.dungeon:AddToggle("DungeonINF", {
-    Title = "Dungeon INF",
-    Default = ConfigSystem.CurrentConfig.AutoFarmDungeonINF,
-    Flag = "AutoFarmDungeonINF",
-    Callback = function(state)
-        teleportINFEnabled = state
-        ConfigSystem.CurrentConfig.AutoFarmDungeonINF = state
-        ConfigSystem.SaveConfig()
 
-        if state then
-            task.spawn(monitorEnemiesINF)
-        else
-            if currentTweenINF then
-                currentTweenINF:Cancel()
-                currentTweenINF = nil
-            end
-        end
-    end
+Tabs.dungeon:AddToggle("DungeonINF", {
+Title = "Dungeon INF",
+Default = ConfigSystem.CurrentConfig.AutoFarmDungeonINF,
+Flag = "AutoFarmDungeonINF",
+Callback = function(state)
+teleportINFEnabled = state
+ConfigSystem.CurrentConfig.AutoFarmDungeonINF = state
+ConfigSystem.SaveConfig()
+
+if state then  
+        task.spawn(monitorEnemiesINF)  
+    else  
+        if currentTweenINF then  
+            currentTweenINF:Cancel()  
+            currentTweenINF = nil  
+        end  
+    end  
+end
+
 })
 
 Tabs.dungeon:AddToggle("AutoFarmDungeon", {
-    Title = "Auto Farm Dungeon",
-    Default = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate,
-    Flag = "AutoFarmDungeonRecreate",
-    Callback = function(state)
-        teleportRecreateEnabled = state
-        ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = state
-        ConfigSystem.SaveConfig()
+Title = "Auto Farm Dungeon",
+Default = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate,
+Flag = "AutoFarmDungeonRecreate",
+Callback = function(state)
+teleportRecreateEnabled = state
+ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = state
+ConfigSystem.SaveConfig()
 
-        if state then
-            task.spawn(monitorEnemiesRecreate)
-        else
-            if currentTweenRecreate then
-                currentTweenRecreate:Cancel()
-                currentTweenRecreate = nil
-            end
-        end
-    end
+if state then  
+        task.spawn(monitorEnemiesRecreate)  
+    else  
+        if currentTweenRecreate then  
+            currentTweenRecreate:Cancel()  
+            currentTweenRecreate = nil  
+        end  
+    end  
+end
+
 })
 
 
