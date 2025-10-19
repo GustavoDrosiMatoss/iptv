@@ -2149,8 +2149,6 @@ Tabs.shop:AddToggle("AutoSellToggle", {
         end
     end
 })
-
-
 -- ==========================
 -- Funções auxiliares compartilhadas
 -- ==========================
@@ -2454,7 +2452,7 @@ Tabs.dungeon:AddToggle("AutoFarmDungeon", {
         end
     end
 })
-})
+    
 
 
 -- ==========================
@@ -3593,5 +3591,3 @@ Tabs.tp:AddButton({
         teleportInstant(CFrame.new(3986.01, 59.15, 3247.99)) -- <<< substitui pela coordenada correta
     end
 })
-
-
