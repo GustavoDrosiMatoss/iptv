@@ -3792,11 +3792,9 @@ task.spawn(function()
 end)
 
 -- ==========================
--- INTERFACE - ABA HALLOWEEN 🎃
+-- INTERFACE - USANDO Tabs.Halloween
 -- ==========================
-local HalloweenTab = Window:AddTab({ Title = "Halloween", Icon = "Ghost" })
-
-HalloweenTab:AddToggle("LabyrinthToggle", {
+Tabs.Halloween:AddToggle("LabyrinthToggle", {
     Title = "Ativar Infinite Labyrinth",
     Default = labyrinthEnabled,
     Callback = function(v)
@@ -3810,7 +3808,7 @@ HalloweenTab:AddToggle("LabyrinthToggle", {
     end
 })
 
-HalloweenTab:AddToggle("LabyrinthTeleport", {
+Tabs.Halloween:AddToggle("LabyrinthTeleport", {
     Title = "Teleporte Automático",
     Default = teleportEnabled,
     Callback = function(v)
@@ -3819,7 +3817,7 @@ HalloweenTab:AddToggle("LabyrinthTeleport", {
     end
 })
 
-HalloweenTab:AddToggle("LabyrinthSpeedEnabled", {
+Tabs.Halloween:AddToggle("LabyrinthSpeedEnabled", {
     Title = "Modo Velocidade (reaplica a cada 10s)",
     Default = speedEnabled,
     Callback = function(v)
@@ -3834,7 +3832,7 @@ HalloweenTab:AddToggle("LabyrinthSpeedEnabled", {
     end
 })
 
-HalloweenTab:AddDropdown("LabyrinthSpeed", {
+Tabs.Halloween:AddDropdown("LabyrinthSpeed", {
     Title = "Velocidade",
     Values = {"1x","2x","3x"},
     Default = tostring(speedValue).."x",
@@ -3849,7 +3847,7 @@ HalloweenTab:AddDropdown("LabyrinthSpeed", {
     end
 })
 
-HalloweenTab:AddButton({
+Tabs.Halloween:AddButton({
     Title = "Checar Status",
     Callback = function()
         if isInLabyrinth() then
@@ -3859,3 +3857,4 @@ HalloweenTab:AddButton({
         end
     end
 })
+
