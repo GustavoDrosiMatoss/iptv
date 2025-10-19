@@ -2153,7 +2153,7 @@ Tabs.shop:AddToggle("AutoSellToggle", {
 -- Funções auxiliares compartilhadas
 -- ==========================
 local function createDungeon()
-        local args = {
+    local args = {
         [1] = {
             [1] = {
                 ["Event"] = "DungeonAction",
@@ -2163,7 +2163,7 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
-        task.wait(3)
+    task.wait(3)
 
     -- Iniciar a dungeon
     local iniciarArgs = {
@@ -2176,10 +2176,25 @@ local function createDungeon()
         }
     }
     game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(iniciarArgs))
-    end
+end
+
+local function buyDungeonTicket()
+    local args = {
+        [1] = {
+            [1] = {
+                ["Type"] = "Gems",
+                ["Event"] = "DungeonAction",
+                ["Action"] = "BuyTicket"
+            },
+            [2] = "\14"
+        }
+    }
+    game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent:FireServer(unpack(args))
+    task.wait(2)
+end
 
 local function leaveDungeon()
-        local args = {
+    local args = {
         [1] = {
             [1] = { ["Event"] = "LeaveDungeon" },
             [2] = "\14"
@@ -2237,7 +2252,6 @@ local function moveToEnemy(enemy, currentTween)
 
     local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     currentTween = tweenService:Create(playerCharacter.PrimaryPart, tweenInfo, {CFrame = enemy.CFrame})
-
     currentTween:Play()
 
     task.spawn(function()
@@ -2249,31 +2263,29 @@ local function moveToEnemy(enemy, currentTween)
 end
 
 -- ==========================
--- SISTEMA 1: Auto Farm Dungeon INF
+-- SISTEMA 1: Auto Farm Dungeon INF (agora com recriação automática)
 -- ==========================
 ConfigSystem.DefaultConfig.AutoFarmDungeonINF = ConfigSystem.DefaultConfig.AutoFarmDungeonINF or false
 ConfigSystem.CurrentConfig.AutoFarmDungeonINF = ConfigSystem.CurrentConfig.AutoFarmDungeonINF or ConfigSystem.DefaultConfig.AutoFarmDungeonINF
 
--- Variáveis específicas do sistema INF
 local teleportINFEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonINF
 local currentTweenINF = nil
 local lastEnemyCheckINF = tick()
 local maxTimeWithoutEnemiesINF = 5
 
 local function monitorEnemiesINF()
-    
     while teleportINFEnabled do
         pcall(function()
-            -- ⏰ Checa horário do Castle Infernal
             local hora = os.date("*t")
             local minuto = hora.min
 
+            -- Sai durante horário do Castle Infernal
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                                task.wait(60) -- espera 1 min antes de verificar de novo
+                task.wait(60)
             else
                 if not workspace:FindFirstChild("__Main") then
-                    -- não está dentro da dungeon -> cria e inicia
+                    -- Cria e inicia se estiver fora
                     createDungeon()
                     task.wait(5)
                 else
@@ -2282,10 +2294,10 @@ local function monitorEnemiesINF()
 
                     if closestEnemy then
                         lastEnemyCheckINF = currentTime
-                        
+
                         local success
                         success, currentTweenINF = moveToEnemy(closestEnemy, currentTweenINF)
-                        
+
                         if success then
                             local attempts = 0
                             while teleportINFEnabled 
@@ -2296,12 +2308,15 @@ local function monitorEnemiesINF()
                                 task.wait(0.1)
                                 attempts += 1
                             end
-                                                    end
+                        end
                     else
                         local timeWithoutEnemies = currentTime - lastEnemyCheckINF
+
                         if timeWithoutEnemies >= maxTimeWithoutEnemiesINF then
-                                                        leaveDungeon()
-                            task.wait(10) -- espera 10s fora antes de tentar recriar
+                            -- ⚙️ Nenhum inimigo → Comprar ticket e recriar dungeon
+                            buyDungeonTicket()
+                            createDungeon()
+                            task.wait(5)
                         else
                             task.wait(1)
                         end
@@ -2317,22 +2332,20 @@ local function monitorEnemiesINF()
         currentTweenINF:Cancel()
         currentTweenINF = nil
     end
-    end
+end
 
 -- ==========================
--- SISTEMA 2: Auto Farm Dungeon (Recriação)
+-- SISTEMA 2: Auto Farm Dungeon (Recriação normal)
 -- ==========================
 ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate = ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate or false
 ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate or ConfigSystem.DefaultConfig.AutoFarmDungeonRecreate
 
--- Variáveis específicas do sistema Recreate
 local teleportRecreateEnabled = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate
 local currentTweenRecreate = nil
 local lastEnemyCheckRecreate = tick()
 local maxTimeWithoutEnemiesRecreate = 5
 
 local function recreateDungeon()
-    
     if currentTweenRecreate then
         currentTweenRecreate:Cancel()
         currentTweenRecreate = nil
@@ -2344,16 +2357,14 @@ local function recreateDungeon()
 end
 
 local function monitorEnemiesRecreate()
-    
     while teleportRecreateEnabled do
         pcall(function()
-            -- ⏰ Checa horário
             local hora = os.date("*t")
             local minuto = hora.min
 
             if (minuto >= 15 and minuto < 30) or (minuto >= 45 and minuto < 55) then
                 leaveDungeon()
-                                task.wait(60)
+                task.wait(60)
             else
                 if not workspace:FindFirstChild("__Main") then
                     createDungeon()
@@ -2365,10 +2376,9 @@ local function monitorEnemiesRecreate()
 
                 if closestEnemy then
                     lastEnemyCheckRecreate = currentTime
-                    
                     local success
                     success, currentTweenRecreate = moveToEnemy(closestEnemy, currentTweenRecreate)
-                    
+
                     if success then
                         local attempts = 0
                         while teleportRecreateEnabled 
@@ -2379,21 +2389,17 @@ local function monitorEnemiesRecreate()
                             task.wait(0.1)
                             attempts += 1
                         end
-                                            end
+                    end
                 else
                     local timeWithoutEnemies = currentTime - lastEnemyCheckRecreate
                     if timeWithoutEnemies >= maxTimeWithoutEnemiesRecreate then
                         recreateDungeon()
                     else
-                        local remainingTime = maxTimeWithoutEnemiesRecreate - timeWithoutEnemies
-                        if math.floor(remainingTime) % 5 == 0 then
-                                                    end
+                        task.wait(1)
                     end
-                    task.wait(1)
                 end
             end
         end)
-
         task.wait(0.1)
     end
 
@@ -2401,13 +2407,12 @@ local function monitorEnemiesRecreate()
         currentTweenRecreate:Cancel()
         currentTweenRecreate = nil
     end
-    end
+end
 
 -- ==========================
--- Toggles separados
+-- Toggles
 -- ==========================
 
--- Toggle para Dungeon INF
 Tabs.dungeon:AddToggle("DungeonINF", {
     Title = "Dungeon INF",
     Default = ConfigSystem.CurrentConfig.AutoFarmDungeonINF,
@@ -2424,11 +2429,10 @@ Tabs.dungeon:AddToggle("DungeonINF", {
                 currentTweenINF:Cancel()
                 currentTweenINF = nil
             end
-                    end
+        end
     end
 })
 
--- Toggle para Auto Farm Dungeon (com recriação)
 Tabs.dungeon:AddToggle("AutoFarmDungeon", {
     Title = "Auto Farm Dungeon",
     Default = ConfigSystem.CurrentConfig.AutoFarmDungeonRecreate,
@@ -2445,10 +2449,10 @@ Tabs.dungeon:AddToggle("AutoFarmDungeon", {
                 currentTweenRecreate:Cancel()
                 currentTweenRecreate = nil
             end
-                    end
+        end
     end
 })
-
+    
 
 
 -- ==========================
