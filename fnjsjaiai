@@ -475,7 +475,6 @@ local Tabs = {
     shop = Window:AddTab({ Title = "Shop", Icon = "" }),
     Player = Window:AddTab({ Title = "Player", Icon = "" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
-Tabs.Halloween = Window:AddTab({ Title = "Halloween", Icon = "Ghost" }),
 }
 
 
@@ -3589,6 +3588,7 @@ Tabs.tp:AddButton({
     end
 })
 
+Tabs.Halloween = Window:AddTab({ Title = "Halloween", Icon = "Ghost" }),
 -- ==========================
 -- 🎃 HALLOWEEN - INFINITE LABYRINTH SYSTEM
 -- ==========================
